@@ -25,44 +25,65 @@ COPY packages/eslint-config/package.json ./packages/eslint-config/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy Prisma schema and generate client
-COPY apps/sfi-api/prisma ./apps/sfi-api/prisma/
-WORKDIR /app/apps/sfi-api
-RUN pnpm db:generate
-
-# Copy source code
-WORKDIR /app
+# Copy all source code
 COPY packages/shared ./packages/shared/
 COPY packages/tsconfig ./packages/tsconfig/
-COPY apps/sfi-api/src ./apps/sfi-api/src/
-COPY apps/sfi-api/tsconfig.json apps/sfi-api/tsconfig.build.json apps/sfi-api/nest-cli.json ./apps/sfi-api/
+COPY apps/sfi-api ./apps/sfi-api/
 
-# Build the application
-WORKDIR /app/apps/sfi-api
+# Build shared package first
+WORKDIR /app/packages/shared
 RUN pnpm build
+
+# Generate Prisma client and build the API
+WORKDIR /app/apps/sfi-api
+RUN pnpm db:generate
+RUN pnpm build
+
+# Verify build output
+RUN echo "=== Build verification ===" && \
+    ls -la dist/ && \
+    echo "=== main.js check ===" && \
+    ls -la dist/main.js
 
 # Production stage
 FROM node:20-alpine AS production
 
-# Install pnpm and dumb-init
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install dumb-init
 RUN apk add --no-cache dumb-init openssl
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001 -G nodejs
 
-# Set working directory
-WORKDIR /app
+# Set working directory to match build structure
+WORKDIR /app/apps/sfi-api
 
-# Copy built application from builder stage
+# Copy workspace root package.json
+COPY --from=builder --chown=nestjs:nodejs /app/package.json /app/pnpm-workspace.yaml /app/
+
+# Copy app package.json
+COPY --from=builder --chown=nestjs:nodejs /app/apps/sfi-api/package.json ./package.json
+
+# Copy built application
 COPY --from=builder --chown=nestjs:nodejs /app/apps/sfi-api/dist ./dist
 COPY --from=builder --chown=nestjs:nodejs /app/apps/sfi-api/prisma ./prisma
-COPY --from=builder --chown=nestjs:nodejs /app/apps/sfi-api/package.json ./
 
-# Copy node_modules (production only would be ideal, but pnpm workspace needs full)
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/apps/sfi-api/node_modules ./apps/sfi-api/node_modules
+# Copy shared package with proper structure
+COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/package.json /app/packages/shared/
+COPY --from=builder --chown=nestjs:nodejs /app/packages/shared/dist /app/packages/shared/dist
+
+# Copy all node_modules from builder (maintains workspace links)
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules /app/node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/apps/sfi-api/node_modules ./node_modules
+
+# Verify production structure
+RUN echo "=== Production verification ===" && \
+    pwd && \
+    ls -la && \
+    echo "=== dist folder ===" && \
+    ls -la dist/ && \
+    echo "=== main.js ===" && \
+    ls -la dist/main.js
 
 # Set environment
 ENV NODE_ENV=production

@@ -19,7 +19,8 @@
     "@sfi-fea/shared": "workspace:*",
     "next": "^15.1.3",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
     "@sfi-fea/eslint-config": "workspace:*",

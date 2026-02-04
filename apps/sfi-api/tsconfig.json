@@ -1,7 +1,6 @@
 {
   "extends": "@sfi-fea/tsconfig/nestjs.json",
   "compilerOptions": {
-    "rootDir": ".",
     "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
