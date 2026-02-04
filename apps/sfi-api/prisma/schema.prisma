@@ -1,0 +1,362 @@
+// ===========================================
+// SFI-FEA Prisma Schema
+// ===========================================
+// Database: PostgreSQL
+// ERD Version: 1.0
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================
+// Enums
+// ===========================================
+
+enum Currency {
+  USD
+  EUR
+  GBP
+  JPY
+  CHF
+  CAD
+  AUD
+}
+
+enum ParticipantRole {
+  PRODUCER
+  DISTRIBUTOR
+  INVESTOR
+  TALENT
+  STUDIO
+  LICENSOR
+  LICENSEE
+  COLLECTION_AGENT
+}
+
+enum RunType {
+  NORMAL
+  CORRECTION
+}
+
+enum SettlementPhase {
+  GROSS_RECEIPTS
+  DISTRIBUTION_FEES
+  RECOUPMENT
+  NET_PROFITS
+}
+
+enum DealStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum DocumentType {
+  CONTRACT
+  AMENDMENT
+  REVENUE_REPORT
+  SETTLEMENT_REPORT
+  AUDIT_REPORT
+  PROOF_RECORD
+  OTHER
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum RevenueBatchStatus {
+  PENDING
+  VALIDATED
+  PROCESSED
+  REJECTED
+}
+
+// ===========================================
+// 1) Core Deal & Parties
+// ===========================================
+
+model Deal {
+  id              String    @id @default(uuid())
+  name            String    @db.VarChar(255)
+  description     String?   @db.Text
+  status          DealStatus @default(DRAFT)
+  effectiveDate   DateTime  @map("effective_date")
+  terminationDate DateTime? @map("termination_date")
+  metadata        Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  participants    Participant[]
+  ruleSnapshots   RuleSnapshot[]
+  revenueBatches  RevenueBatch[]
+  settlementRuns  SettlementRun[]
+  ledgerJournals  LedgerJournal[]
+  documents       Document[]
+
+  @@map("deals")
+}
+
+model Participant {
+  id         String          @id @default(uuid())
+  dealId     String          @map("deal_id")
+  name       String          @db.VarChar(255)
+  role       ParticipantRole
+  externalId String?         @map("external_id") @db.VarChar(100)
+  email      String?         @db.VarChar(255)
+  metadata   Json?
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  deal                     Deal                       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  ruleSnapshotParticipants RuleSnapshotParticipant[]
+  settlementAllocations    SettlementAllocation[]
+  ledgerPostings           LedgerPosting[]
+
+  @@index([dealId])
+  @@map("participants")
+}
+
+// ===========================================
+// 2) Rules & Snapshotting
+// ===========================================
+
+model RuleSnapshot {
+  id            String    @id @default(uuid())
+  dealId        String    @map("deal_id")
+  version       Int       @default(1)
+  effectiveFrom DateTime  @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  rules         Json      // Stores the rule configuration
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  deal                     Deal                      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  ruleSnapshotParticipants RuleSnapshotParticipant[]
+  settlementRuns           SettlementRun[]
+
+  @@index([dealId])
+  @@map("rule_snapshots")
+}
+
+model RuleSnapshotParticipant {
+  id              String @id @default(uuid())
+  ruleSnapshotId  String @map("rule_snapshot_id")
+  participantId   String @map("participant_id")
+  participantData Json?  @map("participant_data") // Snapshot of participant-specific rules
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  ruleSnapshot RuleSnapshot @relation(fields: [ruleSnapshotId], references: [id], onDelete: Cascade)
+  participant  Participant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([ruleSnapshotId, participantId])
+  @@index([ruleSnapshotId])
+  @@index([participantId])
+  @@map("rule_snapshot_participants")
+}
+
+// ===========================================
+// 3) Revenue Intake
+// ===========================================
+
+model RevenueBatch {
+  id          String             @id @default(uuid())
+  dealId      String             @map("deal_id")
+  batchNumber String             @unique @map("batch_number") @db.VarChar(50)
+  periodStart DateTime           @map("period_start")
+  periodEnd   DateTime           @map("period_end")
+  totalAmount Decimal            @map("total_amount") @db.Decimal(18, 2)
+  currency    Currency
+  status      RevenueBatchStatus @default(PENDING)
+  source      String?            @db.VarChar(255)
+  metadata    Json?
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  deal                    Deal                     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  settlementRevenueLinks  SettlementRevenueLink[]
+  documents               Document[]
+
+  @@index([dealId])
+  @@index([status])
+  @@map("revenue_batches")
+}
+
+// ===========================================
+// 4) Settlement Execution
+// ===========================================
+
+model SettlementRun {
+  id                       String   @id @default(uuid())
+  dealId                   String   @map("deal_id")
+  ruleSnapshotId           String   @map("rule_snapshot_id")
+  runType                  RunType  @default(NORMAL) @map("run_type")
+  originalSettlementRunId  String?  @map("original_settlement_run_id")
+  executedAt               DateTime @map("executed_at")
+  totalAllocated           Decimal  @map("total_allocated") @db.Decimal(18, 2)
+  currency                 Currency
+  metadata                 Json?
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  deal                    Deal                     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  ruleSnapshot            RuleSnapshot             @relation(fields: [ruleSnapshotId], references: [id])
+  originalSettlementRun   SettlementRun?           @relation("CorrectionChain", fields: [originalSettlementRunId], references: [id])
+  correctionRuns          SettlementRun[]          @relation("CorrectionChain")
+  settlementRevenueLinks  SettlementRevenueLink[]
+  settlementAllocations   SettlementAllocation[]
+  ledgerJournals          LedgerJournal[]
+  proofRecords            ProofRecord[]
+  documents               Document[]
+
+  @@index([dealId])
+  @@index([ruleSnapshotId])
+  @@index([runType])
+  @@map("settlement_runs")
+}
+
+model SettlementRevenueLink {
+  id              String @id @default(uuid())
+  settlementRunId String @map("settlement_run_id")
+  revenueBatchId  String @map("revenue_batch_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  settlementRun SettlementRun @relation(fields: [settlementRunId], references: [id], onDelete: Cascade)
+  revenueBatch  RevenueBatch  @relation(fields: [revenueBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([settlementRunId, revenueBatchId])
+  @@index([settlementRunId])
+  @@index([revenueBatchId])
+  @@map("settlement_revenue_links")
+}
+
+model SettlementAllocation {
+  id              String          @id @default(uuid())
+  settlementRunId String          @map("settlement_run_id")
+  participantId   String          @map("participant_id")
+  amount          Decimal         @db.Decimal(18, 2)
+  currency        Currency
+  phase           SettlementPhase
+  metadata        Json?
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  settlementRun SettlementRun @relation(fields: [settlementRunId], references: [id], onDelete: Cascade)
+  participant   Participant   @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([settlementRunId])
+  @@index([participantId])
+  @@index([phase])
+  @@map("settlement_allocations")
+}
+
+// ===========================================
+// 5) Accounting (Ledger) & Audit Proof
+// ===========================================
+
+model LedgerJournal {
+  id              String   @id @default(uuid())
+  settlementRunId String   @map("settlement_run_id")
+  dealId          String   @map("deal_id")
+  journalNumber   String   @unique @map("journal_number") @db.VarChar(50)
+  description     String?  @db.Text
+  postedAt        DateTime @map("posted_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  settlementRun  SettlementRun   @relation(fields: [settlementRunId], references: [id], onDelete: Cascade)
+  deal           Deal            @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  ledgerPostings LedgerPosting[]
+
+  @@index([settlementRunId])
+  @@index([dealId])
+  @@map("ledger_journals")
+}
+
+model LedgerPosting {
+  id              String            @id @default(uuid())
+  ledgerJournalId String            @map("ledger_journal_id")
+  participantId   String?           @map("participant_id") // Nullable for system accounts
+  accountType     LedgerAccountType @map("account_type")
+  accountCode     String            @map("account_code") @db.VarChar(50)
+  debitAmount     Decimal           @default(0) @map("debit_amount") @db.Decimal(18, 2)
+  creditAmount    Decimal           @default(0) @map("credit_amount") @db.Decimal(18, 2)
+  currency        Currency
+  description     String?           @db.Text
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  // Relations
+  ledgerJournal LedgerJournal @relation(fields: [ledgerJournalId], references: [id], onDelete: Cascade)
+  participant   Participant?  @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+  @@index([ledgerJournalId])
+  @@index([participantId])
+  @@index([accountType])
+  @@map("ledger_postings")
+}
+
+model ProofRecord {
+  id              String   @id @default(uuid())
+  settlementRunId String   @map("settlement_run_id")
+  proofHash       String   @map("proof_hash") @db.VarChar(128)
+  algorithm       String   @db.VarChar(50) // e.g., "SHA-256"
+  timestamp       DateTime
+  data            Json     // The data that was hashed
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  settlementRun SettlementRun @relation(fields: [settlementRunId], references: [id], onDelete: Cascade)
+
+  @@index([settlementRunId])
+  @@index([proofHash])
+  @@map("proof_records")
+}
+
+// ===========================================
+// 6) Documents / Evidence Storage
+// ===========================================
+
+model Document {
+  id              String       @id @default(uuid())
+  dealId          String?      @map("deal_id")
+  revenueBatchId  String?      @map("revenue_batch_id")
+  settlementRunId String?      @map("settlement_run_id")
+  docType         DocumentType @map("doc_type")
+  fileName        String       @map("file_name") @db.VarChar(255)
+  storageUrl      String       @map("storage_url") @db.VarChar(1000)
+  checksum        String       @db.VarChar(128) // SHA-256 hash of file
+  uploadedAt      DateTime     @map("uploaded_at")
+  metadata        Json?
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  deal          Deal?          @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  revenueBatch  RevenueBatch?  @relation(fields: [revenueBatchId], references: [id], onDelete: SetNull)
+  settlementRun SettlementRun? @relation(fields: [settlementRunId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([revenueBatchId])
+  @@index([settlementRunId])
+  @@index([docType])
+  @@map("documents")
+}
