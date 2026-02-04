@@ -52,6 +52,7 @@
   "devDependencies": {
     "@sfi-fea/eslint-config": "workspace:*",
     "@sfi-fea/tsconfig": "workspace:*",
+    "@types/node": "^22.10.2",
     "eslint": "^8.57.1",
     "tsup": "^8.3.5",
     "typescript": "^5.7.2"

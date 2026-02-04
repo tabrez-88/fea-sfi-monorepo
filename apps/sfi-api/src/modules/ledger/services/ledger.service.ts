@@ -39,7 +39,6 @@ export class LedgerService {
 
     // TODO: Query journals for this deal with pagination
 
-    const now = new Date().toISOString();
     return {
       dealId,
       journals: [

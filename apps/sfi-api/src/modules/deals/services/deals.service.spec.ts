@@ -1,12 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../../../prisma/prisma.service';
+
 import { DealsService } from './deals.service';
 
 describe('DealsService', () => {
   let service: DealsService;
-  let prisma: PrismaService;
+  let _prisma: PrismaService;
 
   const mockPrismaService = {
     deal: {
@@ -29,7 +30,7 @@ describe('DealsService', () => {
     }).compile();
 
     service = module.get<DealsService>(DealsService);
-    prisma = module.get<PrismaService>(PrismaService);
+    _prisma = module.get<PrismaService>(PrismaService);
   });
 
   afterEach(() => {

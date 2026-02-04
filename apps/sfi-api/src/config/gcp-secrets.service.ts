@@ -1,5 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 
 /**
  * Secret keys that will be loaded from GCP Secret Manager.

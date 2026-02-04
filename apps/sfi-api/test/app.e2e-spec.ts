@@ -1,6 +1,6 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import { Test, TestingModule } from '@nestjs/testing';
+import supertest from 'supertest';
 
 import { AppModule } from '../src/app.module';
 
@@ -23,10 +23,10 @@ describe('AppController (e2e)', () => {
 
   describe('Health', () => {
     it('/api/v1/health (GET)', () => {
-      return request(app.getHttpServer())
+      return supertest(app.getHttpServer())
         .get('/api/v1/health')
         .expect(200)
-        .expect((res) => {
+        .expect((res: supertest.Response) => {
           expect(res.body).toHaveProperty('status', 'ok');
           expect(res.body).toHaveProperty('timestamp');
           expect(res.body).toHaveProperty('services');
@@ -34,19 +34,19 @@ describe('AppController (e2e)', () => {
     });
 
     it('/api/v1/health/ready (GET)', () => {
-      return request(app.getHttpServer())
+      return supertest(app.getHttpServer())
         .get('/api/v1/health/ready')
         .expect(200)
-        .expect((res) => {
+        .expect((res: supertest.Response) => {
           expect(res.body).toHaveProperty('ready', true);
         });
     });
 
     it('/api/v1/health/live (GET)', () => {
-      return request(app.getHttpServer())
+      return supertest(app.getHttpServer())
         .get('/api/v1/health/live')
         .expect(200)
-        .expect((res) => {
+        .expect((res: supertest.Response) => {
           expect(res.body).toHaveProperty('live', true);
         });
     });

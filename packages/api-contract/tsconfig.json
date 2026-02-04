@@ -2,7 +2,9 @@
   "extends": "@sfi-fea/tsconfig/library.json",
   "compilerOptions": {
     "rootDir": "./src",
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "incremental": false,
+    "composite": false
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

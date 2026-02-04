@@ -131,7 +131,6 @@ export class SettlementService {
     // TODO: Query run with revenue batches, allocations, proof, ledger refs
     // TODO: Throw NotFoundException if not found
 
-    const now = new Date().toISOString();
     return {
       id,
       dealId: '550e8400-e29b-41d4-a716-446655440000',

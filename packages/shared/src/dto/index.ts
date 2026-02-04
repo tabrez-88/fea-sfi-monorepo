@@ -3,17 +3,17 @@
  * Using class-validator for validation decorators
  */
 
+import { Type } from 'class-transformer';
 import {
-  IsString,
-  IsOptional,
-  IsEnum,
   IsDate,
   IsEmail,
+  IsEnum,
+  IsOptional,
+  IsString,
   IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 
 import { DealStatus, ParticipantRole } from '../enums';
 
