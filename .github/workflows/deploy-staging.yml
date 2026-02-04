@@ -1,0 +1,127 @@
+# ===========================================
+# Deploy to Staging - Cloud Run
+# ===========================================
+# Triggers on push to staging branch
+# Builds and deploys changed services to GCP Cloud Run
+
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GCP_NUMBERED_PROJECT_ID: ${{ secrets.GCP_NUMBERED_PROJECT_ID }}
+  GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+  GCP_ARTIFACT_REGISTRY_REPO: ${{ secrets.GCP_ARTIFACT_REGISTRY_REPO }}
+  GCP_ARTIFACT_REGISTRY_LOCATION: ${{ secrets.GCP_ARTIFACT_REGISTRY_LOCATION }}
+  GCP_REGION: asia-southeast2
+  # Service names
+  SFI_API_SERVICE_NAME: sfi-api-staging
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      sfi-api: ${{ steps.changes.outputs.sfi-api }}
+      fea-frontend: ${{ steps.changes.outputs.fea-frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            sfi-api:
+              - 'apps/sfi-api/**'
+              - 'packages/shared/**'
+              - 'pnpm-lock.yaml'
+            fea-frontend:
+              - 'apps/fea/**'
+              - 'packages/shared/**'
+              - 'pnpm-lock.yaml'
+
+  deploy-sfi-api:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.sfi-api == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_ARTIFACT_REGISTRY_LOCATION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG="${{ env.GCP_ARTIFACT_REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_ARTIFACT_REGISTRY_REPO }}/${{ env.SFI_API_SERVICE_NAME }}:${{ github.sha }}"
+          IMAGE_LATEST="${{ env.GCP_ARTIFACT_REGISTRY_LOCATION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_ARTIFACT_REGISTRY_REPO }}/${{ env.SFI_API_SERVICE_NAME }}:staging-latest"
+
+          echo "Building image: ${IMAGE_TAG}"
+          docker build \
+            -t ${IMAGE_TAG} \
+            -t ${IMAGE_LATEST} \
+            -f apps/sfi-api/Dockerfile \
+            .
+
+          echo "Pushing images..."
+          docker push ${IMAGE_TAG}
+          docker push ${IMAGE_LATEST}
+
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SFI_API_SERVICE_NAME }} \
+            --image=${{ env.IMAGE_TAG }} \
+            --region=${{ env.GCP_REGION }} \
+            --service-account=${{ env.GCP_SERVICE_ACCOUNT }} \
+            --port=3001 \
+            --allow-unauthenticated \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --min-instances=0 \
+            --max-instances=10 \
+            --memory=512Mi \
+            --cpu=1 \
+            --timeout=300 \
+            --set-env-vars="NODE_ENV=staging,GCP_PROJECT_ID=${{ env.GCP_NUMBERED_PROJECT_ID }}"
+
+      - name: Get service URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SFI_API_SERVICE_NAME }} \
+            --region=${{ env.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "Deployed to: ${SERVICE_URL}"
+          echo "Health check: ${SERVICE_URL}/api/v1/health"
+          echo "API Docs: ${SERVICE_URL}/docs"
+
+  # Placeholder for frontend deployment
+  # deploy-fea-frontend:
+  #   runs-on: ubuntu-latest
+  #   needs: [detect-changes, deploy-sfi-api]
+  #   if: needs.detect-changes.outputs.fea-frontend == 'true'
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #     # ... frontend deployment steps

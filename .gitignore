@@ -16,6 +16,8 @@ out
 .env.local
 .env.*.local
 !.env.example
+!.env.staging
+!.env.production
 
 # IDE
 .idea
@@ -50,3 +52,4 @@ Thumbs.db
 
 # Claude
 settings.local.json
+.claude

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+coverage
+.turbo
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files (secrets loaded from GCP)
+.env
+.env.*
+!.env.example
+
+# Test files
+*.spec.ts
+*.test.ts
+test/
+__tests__/
+
+# Documentation
+*.md
+docs/
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore

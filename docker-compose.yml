@@ -1,0 +1,53 @@
+# ===========================================
+# SFI-FEA Docker Compose
+# For local staging environment testing
+# ===========================================
+
+services:
+  # Backend API service
+  sfi-api:
+    build:
+      context: .
+      dockerfile: apps/sfi-api/Dockerfile
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=staging
+      - PORT=3001
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      # Tell the GCP SDK to use the mounted credentials file
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/adc.json
+    volumes:
+      # Mount GCP Application Default Credentials from host
+      # Windows: %APPDATA%/gcloud/application_default_credentials.json
+      # Linux/macOS: ~/.config/gcloud/application_default_credentials.json
+      - ${APPDATA}/gcloud/application_default_credentials.json:/gcp/adc.json:ro
+    networks:
+      - sfi-network
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3001/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend (placeholder for future)
+  # fea-frontend:
+  #   build:
+  #     context: .
+  #     dockerfile: apps/fea/Dockerfile
+  #   ports:
+  #     - '3000:3000'
+  #   environment:
+  #     - NODE_ENV=staging
+  #     - NEXT_PUBLIC_API_URL=http://sfi-api:3001
+  #   depends_on:
+  #     - sfi-api
+  #   networks:
+  #     - sfi-network
+  #   restart: unless-stopped
+
+networks:
+  sfi-network:
+    driver: bridge

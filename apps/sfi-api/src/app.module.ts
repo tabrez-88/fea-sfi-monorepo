@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
 
 import { CommonModule } from './common/common.module';
+import { ConfigModule } from './config';
 import { DealsModule } from './modules/deals/deals.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
@@ -13,11 +13,8 @@ import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
-    // Configuration
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
-    }),
+    // Configuration (includes GCP Secret Manager for staging/production)
+    ConfigModule,
 
     // Infrastructure
     PrismaModule,
@@ -27,7 +24,7 @@ import { PrismaModule } from './prisma/prisma.module';
     DealsModule,
     ParticipantsModule,
 
-    // Placeholder Modules (no endpoints yet)
+    // Feature Modules
     RulesModule,
     RevenueModule,
     SettlementModule,
