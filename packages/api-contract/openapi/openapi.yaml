@@ -1,0 +1,344 @@
+openapi: 3.1.0
+info:
+  title: SFI-FEA Settlement API
+  description: |
+    Settlement and Financial Infrastructure API for managing deals, participants,
+    revenue batches, settlement runs, and financial ledger operations.
+  version: 1.0.0
+  contact:
+    name: SFI-FEA Team
+
+servers:
+  - url: http://localhost:3001/api/v1
+    description: Local development server
+  - url: https://api.sfi-fea.example.com/api/v1
+    description: Production server (placeholder)
+
+tags:
+  - name: Deals
+    description: Deal management operations
+  - name: Participants
+    description: Participant management within deals
+  - name: Revenue
+    description: Revenue batch operations (TODO)
+  - name: Settlement
+    description: Settlement run operations (TODO)
+  - name: Ledger
+    description: Ledger and accounting operations (TODO)
+
+paths:
+  /deals:
+    get:
+      tags:
+        - Deals
+      summary: List all deals
+      operationId: listDeals
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealListResponse'
+    post:
+      tags:
+        - Deals
+      summary: Create a new deal
+      operationId: createDeal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDealRequest'
+      responses:
+        '201':
+          description: Deal created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealResponse'
+
+  /deals/{dealId}:
+    get:
+      tags:
+        - Deals
+      summary: Get a deal by ID
+      operationId: getDeal
+      parameters:
+        - $ref: '#/components/parameters/DealIdParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /deals/{dealId}/participants:
+    get:
+      tags:
+        - Participants
+      summary: List participants for a deal
+      operationId: listDealParticipants
+      parameters:
+        - $ref: '#/components/parameters/DealIdParam'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantListResponse'
+    post:
+      tags:
+        - Participants
+      summary: Add a participant to a deal
+      operationId: createDealParticipant
+      parameters:
+        - $ref: '#/components/parameters/DealIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateParticipantRequest'
+      responses:
+        '201':
+          description: Participant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParticipantResponse'
+
+components:
+  parameters:
+    DealIdParam:
+      name: dealId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+        minimum: 1
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+
+  schemas:
+    Deal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/DealStatus'
+        effectiveDate:
+          type: string
+          format: date-time
+        terminationDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - status
+        - effectiveDate
+        - createdAt
+        - updatedAt
+
+    DealStatus:
+      type: string
+      enum:
+        - DRAFT
+        - ACTIVE
+        - SUSPENDED
+        - CLOSED
+
+    Participant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        dealId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/ParticipantRole'
+        externalId:
+          type: string
+        email:
+          type: string
+          format: email
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - dealId
+        - name
+        - role
+        - createdAt
+        - updatedAt
+
+    ParticipantRole:
+      type: string
+      enum:
+        - PRODUCER
+        - DISTRIBUTOR
+        - INVESTOR
+        - TALENT
+        - STUDIO
+        - LICENSOR
+        - LICENSEE
+        - COLLECTION_AGENT
+
+    CreateDealRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        status:
+          $ref: '#/components/schemas/DealStatus'
+        effectiveDate:
+          type: string
+          format: date-time
+        terminationDate:
+          type: string
+          format: date-time
+      required:
+        - name
+        - effectiveDate
+
+    CreateParticipantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        role:
+          $ref: '#/components/schemas/ParticipantRole'
+        externalId:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+      required:
+        - name
+        - role
+
+    DealResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Deal'
+
+    DealListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Deal'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    ParticipantResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Participant'
+
+    ParticipantListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Participant'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          default: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

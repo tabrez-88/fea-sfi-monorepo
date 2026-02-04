@@ -1,0 +1,36 @@
+{
+  "name": "@sfi-fea/api-contract",
+  "version": "0.0.1",
+  "private": true,
+  "description": "API contract definitions and client generation for SFI-FEA",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openapi"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo",
+    "generate:client": "echo 'TODO: Implement OpenAPI client generation'",
+    "validate:spec": "echo 'TODO: Implement OpenAPI spec validation'"
+  },
+  "devDependencies": {
+    "@sfi-fea/eslint-config": "workspace:*",
+    "@sfi-fea/tsconfig": "workspace:*",
+    "eslint": "^8.57.1",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2"
+  }
+}

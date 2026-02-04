@@ -1,0 +1,28 @@
+{
+  "name": "@sfi-fea/eslint-config",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared ESLint configurations for SFI-FEA monorepo",
+  "license": "UNLICENSED",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "base.js",
+    "nextjs.js",
+    "nestjs.js"
+  ],
+  "dependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.18.2",
+    "@typescript-eslint/parser": "^8.18.2",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.31.0"
+  },
+  "peerDependencies": {
+    "eslint": ">=8.0.0",
+    "typescript": ">=5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "typescript": "^5.7.2"
+  }
+}
