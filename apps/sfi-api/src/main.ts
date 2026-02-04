@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app.module';
+import { loadGcpSecrets } from './config';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -11,9 +12,12 @@ async function bootstrap() {
 
   logger.log(`Starting SFI-FEA API in ${nodeEnv} mode...`);
 
-  // For staging/production, GCP secrets are loaded via GcpSecretsService onModuleInit
+  // Load secrets from GCP Secret Manager BEFORE creating the app
+  // This ensures DATABASE_URL is available when Prisma initializes
   if (nodeEnv === 'staging' || nodeEnv === 'production') {
-    logger.log('GCP Secret Manager will be used for configuration');
+    logger.log('Loading secrets from GCP Secret Manager...');
+    await loadGcpSecrets();
+    logger.log('Secrets loaded successfully');
   }
 
   const app = await NestFactory.create(AppModule, {

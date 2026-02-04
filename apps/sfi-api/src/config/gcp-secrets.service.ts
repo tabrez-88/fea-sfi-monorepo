@@ -1,5 +1,5 @@
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 /**
  * Secret keys that will be loaded from GCP Secret Manager.
@@ -20,71 +20,97 @@ const SECRET_KEYS = [
   // Add more secrets as needed
 ] as const;
 
-@Injectable()
-export class GcpSecretsService implements OnModuleInit {
-  private readonly logger = new Logger(GcpSecretsService.name);
-  private client: SecretManagerServiceClient | null = null;
-  private secretsLoaded = false;
+/**
+ * Load secrets from GCP Secret Manager before NestJS app initialization.
+ * This MUST be called before NestFactory.create() to ensure DATABASE_URL
+ * is available when Prisma initializes.
+ */
+export async function loadGcpSecrets(): Promise<void> {
+  const nodeEnv = process.env.NODE_ENV?.toLowerCase();
 
-  async onModuleInit() {
-    const nodeEnv = process.env.NODE_ENV?.toLowerCase();
-
-    // Only load secrets in staging or production
-    if (nodeEnv !== 'staging' && nodeEnv !== 'production') {
-      this.logger.log(
-        `Skipping GCP secret loading for environment: ${nodeEnv}`,
-      );
-      return;
-    }
-
-    await this.loadSecrets();
+  // Only load secrets in staging or production
+  if (nodeEnv !== 'staging' && nodeEnv !== 'production') {
+    console.log(`[GcpSecrets] Skipping secret loading for environment: ${nodeEnv}`);
+    return;
   }
 
-  private async loadSecrets(): Promise<void> {
-    if (this.secretsLoaded) {
-      return;
-    }
+  const projectId = process.env.GCP_PROJECT_ID;
+  if (!projectId) {
+    throw new Error(
+      'GCP_PROJECT_ID environment variable is required for staging/production',
+    );
+  }
 
-    const projectId = process.env.GCP_PROJECT_ID;
-    if (!projectId) {
-      throw new Error(
-        'GCP_PROJECT_ID environment variable is required for staging/production',
-      );
-    }
+  console.log('[GcpSecrets] Loading secrets from Google Cloud Secret Manager...');
+  const client = new SecretManagerServiceClient();
 
-    this.logger.log('Loading secrets from Google Cloud Secret Manager...');
-    this.client = new SecretManagerServiceClient();
+  const envSuffix = nodeEnv.toUpperCase();
 
-    const nodeEnv = process.env.NODE_ENV?.toUpperCase();
-    const secretPromises = SECRET_KEYS.map(async (genericSecretName) => {
-      const secretNameInGCP = `${genericSecretName}_${nodeEnv}`;
+  for (const genericSecretName of SECRET_KEYS) {
+    const secretNameInGCP = `${genericSecretName}_${envSuffix}`;
 
-      try {
-        const secretValue = await this.accessSecretVersion(
-          projectId,
-          secretNameInGCP,
-        );
+    try {
+      const name = `projects/${projectId}/secrets/${secretNameInGCP}/versions/latest`;
+      const [version] = await client.accessSecretVersion({ name });
+      const payload = version.payload?.data?.toString();
 
-        if (secretValue !== null) {
-          process.env[genericSecretName] = secretValue;
-          this.logger.debug(`Loaded secret: ${genericSecretName}`);
-        }
-      } catch (error) {
+      if (payload) {
+        process.env[genericSecretName] = payload;
+        console.log(`[GcpSecrets] Loaded secret: ${genericSecretName}`);
+      } else {
+        console.warn(`[GcpSecrets] Secret ${secretNameInGCP} has no payload.`);
+      }
+    } catch (error: unknown) {
+      const gcpError = error as { code?: number };
+      // Error code 5 = NOT_FOUND
+      if (gcpError.code === 5) {
         // If we already have the env var, use it as fallback
         if (process.env[genericSecretName]) {
-          this.logger.warn(
-            `Failed to load ${secretNameInGCP} from GCP. Using existing env variable.`,
+          console.warn(
+            `[GcpSecrets] Secret ${secretNameInGCP} not found in GCP. Using existing env variable.`,
           );
         } else {
-          this.logger.error(`Failed to load required secret: ${secretNameInGCP}`);
+          console.warn(`[GcpSecrets] Secret not found: ${secretNameInGCP}. Skipping.`);
+        }
+      } else {
+        // For other errors, if we have a fallback, use it
+        if (process.env[genericSecretName]) {
+          console.warn(
+            `[GcpSecrets] Failed to load ${secretNameInGCP} from GCP. Using existing env variable.`,
+          );
+        } else {
+          console.error(`[GcpSecrets] Failed to load required secret: ${secretNameInGCP}`);
           throw error;
         }
       }
-    });
+    }
+  }
 
-    await Promise.all(secretPromises);
-    this.secretsLoaded = true;
-    this.logger.log(`Secrets for ${nodeEnv} loaded successfully.`);
+  console.log(`[GcpSecrets] Secrets for ${envSuffix} loaded successfully.`);
+}
+
+@Injectable()
+export class GcpSecretsService {
+  private readonly logger = new Logger(GcpSecretsService.name);
+  private client: SecretManagerServiceClient | null = null;
+
+  /**
+   * Get a specific secret value (useful for on-demand secret access)
+   */
+  async getSecret(secretName: string): Promise<string | null> {
+    const projectId = process.env.GCP_PROJECT_ID;
+    if (!projectId) {
+      throw new Error('GCP_PROJECT_ID not set');
+    }
+
+    if (!this.client) {
+      this.client = new SecretManagerServiceClient();
+    }
+
+    const nodeEnv = process.env.NODE_ENV?.toUpperCase() || 'STAGING';
+    const fullSecretName = `${secretName}_${nodeEnv}`;
+
+    return this.accessSecretVersion(projectId, fullSecretName);
   }
 
   private async accessSecretVersion(
@@ -116,24 +142,5 @@ export class GcpSecretsService implements OnModuleInit {
       }
       throw error;
     }
-  }
-
-  /**
-   * Get a specific secret value (useful for on-demand secret access)
-   */
-  async getSecret(secretName: string): Promise<string | null> {
-    const projectId = process.env.GCP_PROJECT_ID;
-    if (!projectId) {
-      throw new Error('GCP_PROJECT_ID not set');
-    }
-
-    if (!this.client) {
-      this.client = new SecretManagerServiceClient();
-    }
-
-    const nodeEnv = process.env.NODE_ENV?.toUpperCase() || 'STAGING';
-    const fullSecretName = `${secretName}_${nodeEnv}`;
-
-    return this.accessSecretVersion(projectId, fullSecretName);
   }
 }
