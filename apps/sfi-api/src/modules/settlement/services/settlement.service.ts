@@ -1,4 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
+import {
+  SettlementRunStatus,
+  RevenueBatchStatus,
+  Prisma,
+} from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../deals/dto';
@@ -15,339 +26,588 @@ import {
   SettlementPhaseEnum,
   CurrencyEnum,
 } from '../dto';
+import { SettlementEngine } from '../engine/settlement-engine';
+import {
+  SettlementInput,
+  SettlementOutput,
+  ParticipantRole as EngineParticipantRole,
+} from '../engine/types';
 
-/**
- * Settlement Service
- *
- * Responsibilities:
- * - Create and manage settlement runs
- * - Calculate allocations based on rules (deterministic)
- * - Handle preview and finalize workflows
- * - Create correction runs
- * - Generate proof records for auditability
- */
 @Injectable()
 export class SettlementService {
   private readonly logger = new Logger(SettlementService.name);
+  private readonly engine = new SettlementEngine();
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Create a new settlement run
-   * TODO: Implement actual run creation with:
-   * - Deal/snapshot/batch validation
-   * - Revenue batch status checks
-   * - Run creation in DRAFT status
-   */
   async createRun(
     dealId: string,
     createDto: CreateSettlementRunDto,
   ): Promise<SettlementRunResponseDto> {
     this.logger.log(`Creating settlement run for deal: ${dealId}`);
 
-    // TODO: Validate deal exists
-    // TODO: Validate rule snapshot exists and belongs to deal
-    // TODO: Validate all revenue batches exist, belong to deal, and are VALIDATED
-    // TODO: Create run with DRAFT status
+    // Validate deal exists
+    const deal = await this.prisma.deal.findUnique({
+      where: { id: dealId },
+      select: { id: true },
+    });
+    if (!deal) {
+      throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
 
-    const now = new Date().toISOString();
-    return {
-      id: '550e8400-e29b-41d4-a716-446655440100',
-      dealId,
-      ruleSnapshotId: createDto.ruleSnapshotId,
-      runType: RunTypeEnum.NORMAL,
-      status: SettlementStatusEnum.DRAFT,
-      originalSettlementRunId: null,
-      totalAllocated: 0,
-      currency: CurrencyEnum.USD,
-      notes: createDto.notes,
-      executedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // Validate rule snapshot exists and belongs to deal
+    const snapshot = await this.prisma.ruleSnapshot.findUnique({
+      where: { id: createDto.ruleSnapshotId },
+      select: { id: true, dealId: true },
+    });
+    if (!snapshot) {
+      throw new NotFoundException(
+        `Rule snapshot with ID ${createDto.ruleSnapshotId} not found`,
+      );
+    }
+    if (snapshot.dealId !== dealId) {
+      throw new BadRequestException(
+        'Rule snapshot does not belong to this deal',
+      );
+    }
+
+    // Validate all revenue batches exist, belong to deal, and are VALIDATED
+    const batches = await this.prisma.revenueBatch.findMany({
+      where: { id: { in: createDto.revenueBatchIds } },
+      select: { id: true, dealId: true, status: true },
+    });
+
+    if (batches.length !== createDto.revenueBatchIds.length) {
+      throw new NotFoundException('One or more revenue batches not found');
+    }
+
+    for (const batch of batches) {
+      if (batch.dealId !== dealId) {
+        throw new BadRequestException(
+          `Revenue batch ${batch.id} does not belong to this deal`,
+        );
+      }
+      if (batch.status !== RevenueBatchStatus.VALIDATED) {
+        throw new BadRequestException(
+          `Revenue batch ${batch.id} must be in VALIDATED status (current: ${batch.status})`,
+        );
+      }
+    }
+
+    // Create run in DRAFT status
+    const run = await this.prisma.settlementRun.create({
+      data: {
+        dealId,
+        ruleSnapshotId: createDto.ruleSnapshotId,
+        status: SettlementRunStatus.DRAFT,
+        currency: 'USD',
+        notes: createDto.notes,
+        totalAllocated: 0,
+        settlementRevenueLinks: {
+          create: createDto.revenueBatchIds.map((batchId) => ({
+            revenueBatchId: batchId,
+          })),
+        },
+      },
+    });
+
+    this.logger.log(`Settlement run created: ${run.id}`);
+    return this.mapRunToResponse(run);
   }
 
-  /**
-   * List all settlement runs for a deal
-   * TODO: Implement actual database query with pagination and filtering
-   */
   async listRuns(
     dealId: string,
     query: PaginationQueryDto,
   ): Promise<SettlementRunListResponseDto> {
     this.logger.log(`Listing settlement runs for deal: ${dealId}`);
-    const { page = 1, limit = 20 } = query;
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
+    const skip = (page - 1) * limit;
 
-    // TODO: Query with filters for status, runType, etc.
+    const [runs, total] = await Promise.all([
+      this.prisma.settlementRun.findMany({
+        where: { dealId },
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.settlementRun.count({ where: { dealId } }),
+    ]);
 
-    const now = new Date().toISOString();
     return {
-      data: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440100',
-          dealId,
-          ruleSnapshotId: '550e8400-e29b-41d4-a716-446655440099',
-          runType: RunTypeEnum.NORMAL,
-          status: SettlementStatusEnum.FINALIZED,
-          originalSettlementRunId: null,
-          totalAllocated: 125000.0,
-          currency: CurrencyEnum.USD,
-          notes: 'Q1 2024 settlement',
-          executedAt: '2024-04-20T14:00:00.000Z',
-          createdAt: '2024-04-20T10:00:00.000Z',
-          updatedAt: '2024-04-20T14:00:00.000Z',
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440101',
-          dealId,
-          ruleSnapshotId: '550e8400-e29b-41d4-a716-446655440099',
-          runType: RunTypeEnum.NORMAL,
-          status: SettlementStatusEnum.DRAFT,
-          originalSettlementRunId: null,
-          totalAllocated: 0,
-          currency: CurrencyEnum.USD,
-          notes: 'Q2 2024 settlement (in progress)',
-          executedAt: null,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ],
-      meta: {
-        page,
-        limit,
-        total: 2,
-        totalPages: 1,
-      },
+      data: runs.map((run) => this.mapRunToResponse(run)),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  /**
-   * Get a single settlement run with full details
-   * TODO: Implement actual database query with relations
-   */
   async getRun(id: string): Promise<SettlementRunDetailResponseDto> {
     this.logger.log(`Getting settlement run: ${id}`);
 
-    // TODO: Query run with revenue batches, allocations, proof, ledger refs
-    // TODO: Throw NotFoundException if not found
+    const run = await this.prisma.settlementRun.findUnique({
+      where: { id },
+      include: {
+        settlementRevenueLinks: {
+          include: { revenueBatch: true },
+        },
+        settlementAllocations: {
+          include: { participant: true },
+        },
+        proofRecords: { take: 1, orderBy: { createdAt: 'desc' } },
+        ledgerJournals: {
+          include: { _count: { select: { ledgerPostings: true } } },
+        },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Settlement run with ID ${id} not found`);
+    }
+
+    const proof = run.proofRecords[0];
+    const totalPostings = run.ledgerJournals.reduce(
+      (sum, j) => sum + j._count.ledgerPostings,
+      0,
+    );
 
     return {
-      id,
-      dealId: '550e8400-e29b-41d4-a716-446655440000',
-      ruleSnapshotId: '550e8400-e29b-41d4-a716-446655440099',
-      runType: RunTypeEnum.NORMAL,
-      status: SettlementStatusEnum.FINALIZED,
-      originalSettlementRunId: null,
-      totalAllocated: 125000.0,
-      currency: CurrencyEnum.USD,
-      notes: 'Q1 2024 settlement',
-      executedAt: '2024-04-20T14:00:00.000Z',
-      createdAt: '2024-04-20T10:00:00.000Z',
-      updatedAt: '2024-04-20T14:00:00.000Z',
-      revenueBatches: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440050',
-          batchNumber: 'RB-2024-001',
-          periodStart: '2024-01-01T00:00:00.000Z',
-          periodEnd: '2024-03-31T23:59:59.999Z',
-          totalAmount: 125000.0,
-          currency: CurrencyEnum.USD,
-        },
-      ],
-      allocations: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440200',
-          participantId: '550e8400-e29b-41d4-a716-446655440001',
-          participantName: 'Acme Productions LLC',
-          amount: 75000.0,
-          currency: CurrencyEnum.USD,
-          phase: SettlementPhaseEnum.NET_PROFITS,
-          metadata: { percentage: 60, calculationBasis: 'net_revenue' },
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440201',
-          participantId: '550e8400-e29b-41d4-a716-446655440002',
-          participantName: 'Global Distribution Inc',
-          amount: 50000.0,
-          currency: CurrencyEnum.USD,
-          phase: SettlementPhaseEnum.NET_PROFITS,
-          metadata: { percentage: 40, calculationBasis: 'net_revenue' },
-        },
-      ],
-      proof: {
-        proofHash: 'sha256:a1b2c3d4e5f6789012345678901234567890abcdef',
-        algorithm: 'SHA-256',
-        timestamp: '2024-04-20T14:00:00.000Z',
-        inputSummary: {
-          ruleSnapshotVersion: 1,
-          revenueBatchCount: 1,
-          totalRevenue: 125000,
-          participantCount: 2,
-        },
-      },
-      ledger: {
-        journalIds: ['550e8400-e29b-41d4-a716-446655440300'],
-        postingCount: 4,
-      },
+      ...this.mapRunToResponse(run),
+      revenueBatches: run.settlementRevenueLinks.map((link) => ({
+        id: link.revenueBatch.id,
+        batchNumber: link.revenueBatch.batchNumber,
+        periodStart: link.revenueBatch.periodStart.toISOString(),
+        periodEnd: link.revenueBatch.periodEnd.toISOString(),
+        totalAmount: Number(link.revenueBatch.totalAmount),
+        currency: link.revenueBatch.currency as CurrencyEnum,
+      })),
+      allocations: run.settlementAllocations.map((alloc) => ({
+        id: alloc.id,
+        participantId: alloc.participantId,
+        participantName: alloc.participant.name,
+        amount: Number(alloc.amount),
+        currency: alloc.currency as CurrencyEnum,
+        phase: alloc.phase as SettlementPhaseEnum,
+        metadata: alloc.metadata as Record<string, unknown> | undefined,
+      })),
+      proof: proof
+        ? {
+            proofHash: proof.proofHash,
+            algorithm: proof.algorithm,
+            timestamp: proof.timestamp.toISOString(),
+            inputSummary: proof.data as Record<string, unknown>,
+          }
+        : undefined,
+      ledger:
+        run.ledgerJournals.length > 0
+          ? {
+              journalIds: run.ledgerJournals.map((j) => j.id),
+              postingCount: totalPostings,
+            }
+          : undefined,
     };
   }
 
-  /**
-   * Preview settlement allocations
-   * TODO: Implement actual calculation logic with:
-   * - Rule application
-   * - Allocation calculation
-   * - Proof hash generation
-   */
   async previewRun(id: string): Promise<PreviewSettlementResponseDto> {
     this.logger.log(`Previewing settlement run: ${id}`);
 
-    // TODO: Validate run exists and is in DRAFT or PREVIEWED status
-    // TODO: Load rule snapshot and revenue batches
-    // TODO: Calculate allocations deterministically
-    // TODO: Generate proof hash
-    // TODO: Update status to PREVIEWED (but don't persist allocations)
-
-    return {
-      settlementRunId: id,
-      status: SettlementStatusEnum.PREVIEWED,
-      totalRevenue: 275000.0,
-      totalAllocated: 275000.0,
-      currency: CurrencyEnum.USD,
-      allocations: [
-        {
-          id: 'preview-alloc-001',
-          participantId: '550e8400-e29b-41d4-a716-446655440001',
-          participantName: 'Acme Productions LLC',
-          amount: 165000.0,
-          currency: CurrencyEnum.USD,
-          phase: SettlementPhaseEnum.NET_PROFITS,
-          metadata: { percentage: 60, grossRevenue: 275000 },
+    const run = await this.prisma.settlementRun.findUnique({
+      where: { id },
+      include: {
+        ruleSnapshot: {
+          include: {
+            ruleSnapshotParticipants: { include: { participant: true } },
+          },
         },
-        {
-          id: 'preview-alloc-002',
-          participantId: '550e8400-e29b-41d4-a716-446655440002',
-          participantName: 'Global Distribution Inc',
-          amount: 110000.0,
-          currency: CurrencyEnum.USD,
-          phase: SettlementPhaseEnum.NET_PROFITS,
-          metadata: { percentage: 40, grossRevenue: 275000 },
-        },
-      ],
-      proof: {
-        proofHash: 'sha256:preview123456789abcdef0123456789abcdef',
-        algorithm: 'SHA-256',
-        timestamp: new Date().toISOString(),
-        inputSummary: {
-          ruleSnapshotVersion: 1,
-          revenueBatchCount: 2,
-          totalRevenue: 275000,
-          participantCount: 2,
-        },
+        settlementRevenueLinks: { include: { revenueBatch: true } },
       },
-      message: 'Preview complete. Call POST /settlement-runs/{id}/finalize to lock results.',
-    };
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Settlement run with ID ${id} not found`);
+    }
+
+    if (
+      run.status !== SettlementRunStatus.DRAFT &&
+      run.status !== SettlementRunStatus.PREVIEWED
+    ) {
+      throw new BadRequestException(
+        `Cannot preview run in ${run.status} status. Must be DRAFT or PREVIEWED.`,
+      );
+    }
+
+    // Build engine input from database data
+    const engineInput = this.buildEngineInput(run);
+
+    // Calculate allocations using pure engine
+    const result = this.engine.calculate(engineInput);
+
+    // Update status to PREVIEWED
+    await this.prisma.settlementRun.update({
+      where: { id },
+      data: { status: SettlementRunStatus.PREVIEWED },
+    });
+
+    return this.mapEngineOutputToPreview(id, result);
   }
 
-  /**
-   * Finalize settlement run
-   * TODO: Implement actual finalization with:
-   * - Final allocation calculation and persistence
-   * - Proof record creation
-   * - Ledger journal and posting creation
-   * - Revenue batch status update to PROCESSED
-   * - Idempotency check
-   */
   async finalizeRun(id: string): Promise<FinalizeSettlementResponseDto> {
     this.logger.log(`Finalizing settlement run: ${id}`);
 
-    // TODO: Check if already finalized (return existing if so - idempotent)
-    // TODO: Validate run exists and is in PREVIEWED status
-    // TODO: Re-calculate allocations (ensure determinism)
-    // TODO: Persist allocations
-    // TODO: Create proof record
-    // TODO: Create ledger journal and postings
-    // TODO: Update revenue batches to PROCESSED
-    // TODO: Update run status to FINALIZED
+    const run = await this.prisma.settlementRun.findUnique({
+      where: { id },
+      include: {
+        ruleSnapshot: {
+          include: {
+            ruleSnapshotParticipants: { include: { participant: true } },
+          },
+        },
+        settlementRevenueLinks: { include: { revenueBatch: true } },
+        settlementAllocations: true,
+      },
+    });
 
-    const now = new Date().toISOString();
-    return {
-      settlementRunId: id,
-      status: SettlementStatusEnum.FINALIZED,
-      totalRevenue: 275000.0,
-      totalAllocated: 275000.0,
-      currency: CurrencyEnum.USD,
-      allocations: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440200',
-          participantId: '550e8400-e29b-41d4-a716-446655440001',
-          participantName: 'Acme Productions LLC',
-          amount: 165000.0,
-          currency: CurrencyEnum.USD,
-          phase: SettlementPhaseEnum.NET_PROFITS,
-          metadata: { percentage: 60, grossRevenue: 275000 },
+    if (!run) {
+      throw new NotFoundException(`Settlement run with ID ${id} not found`);
+    }
+
+    // Idempotency: if already finalized, return existing results
+    if (run.status === SettlementRunStatus.FINALIZED) {
+      this.logger.log(`Settlement run ${id} already finalized (idempotent)`);
+      return this.buildFinalizedResponse(id);
+    }
+
+    if (run.status === SettlementRunStatus.VOIDED) {
+      throw new ConflictException(
+        'Cannot finalize a voided settlement run',
+      );
+    }
+
+    if (run.status !== SettlementRunStatus.PREVIEWED) {
+      throw new BadRequestException(
+        `Cannot finalize run in ${run.status} status. Must be PREVIEWED first.`,
+      );
+    }
+
+    // Re-calculate via engine (determinism check)
+    const engineInput = this.buildEngineInput(run);
+    const result = this.engine.calculate(engineInput);
+
+    const now = new Date();
+
+    // Persist everything in a transaction
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Persist allocations
+      for (const alloc of result.allocations) {
+        await tx.settlementAllocation.create({
+          data: {
+            settlementRunId: id,
+            participantId: alloc.participantId,
+            amount: new Prisma.Decimal(alloc.amount),
+            currency: run.currency,
+            phase: alloc.phase,
+            metadata: alloc.metadata as Prisma.InputJsonValue,
+          },
+        });
+      }
+
+      // 2. Create proof record
+      await tx.proofRecord.create({
+        data: {
+          settlementRunId: id,
+          proofHash: result.proof.proofHash,
+          algorithm: result.proof.algorithm,
+          timestamp: now,
+          data: result.proof.inputSummary as Prisma.InputJsonValue,
         },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440201',
-          participantId: '550e8400-e29b-41d4-a716-446655440002',
-          participantName: 'Global Distribution Inc',
-          amount: 110000.0,
-          currency: CurrencyEnum.USD,
-          phase: SettlementPhaseEnum.NET_PROFITS,
-          metadata: { percentage: 40, grossRevenue: 275000 },
+      });
+
+      // 3. Create ledger journal and postings
+      const journalNumber = `JNL-${now.getFullYear()}-${Date.now()}`;
+      const journal = await tx.ledgerJournal.create({
+        data: {
+          settlementRunId: id,
+          dealId: run.dealId,
+          journalNumber,
+          description: `Settlement finalization for run ${id}`,
+          postedAt: now,
         },
-      ],
-      proof: {
-        proofHash: 'sha256:finalized123456789abcdef0123456789abcdef',
-        algorithm: 'SHA-256',
-        timestamp: now,
-        inputSummary: {
-          ruleSnapshotVersion: 1,
-          revenueBatchCount: 2,
-          totalRevenue: 275000,
-          participantCount: 2,
+      });
+
+      // Credit: Revenue account
+      await tx.ledgerPosting.create({
+        data: {
+          ledgerJournalId: journal.id,
+          accountType: 'REVENUE',
+          accountCode: 'REV-001',
+          debitAmount: 0,
+          creditAmount: new Prisma.Decimal(result.totalRevenue),
+          currency: run.currency,
+          description: 'Total revenue settled',
         },
-      },
-      ledger: {
-        journalIds: ['550e8400-e29b-41d4-a716-446655440300'],
-        postingCount: 4,
-      },
-      finalizedAt: now,
-      message: 'Settlement finalized successfully. Results are now locked.',
-    };
+      });
+
+      // Debit: Participant allocations
+      for (const alloc of result.allocations) {
+        await tx.ledgerPosting.create({
+          data: {
+            ledgerJournalId: journal.id,
+            participantId: alloc.participantId,
+            accountType: 'LIABILITY',
+            accountCode: `PAYABLE-${alloc.phase}`,
+            debitAmount: new Prisma.Decimal(alloc.amount),
+            creditAmount: 0,
+            currency: run.currency,
+            description: `${alloc.participantName} - ${alloc.phase}`,
+          },
+        });
+      }
+
+      // 4. Update revenue batches to PROCESSED
+      const batchIds = run.settlementRevenueLinks.map(
+        (link) => link.revenueBatchId,
+      );
+      await tx.revenueBatch.updateMany({
+        where: { id: { in: batchIds } },
+        data: { status: RevenueBatchStatus.PROCESSED },
+      });
+
+      // 5. Update run status to FINALIZED
+      await tx.settlementRun.update({
+        where: { id },
+        data: {
+          status: SettlementRunStatus.FINALIZED,
+          executedAt: now,
+          totalAllocated: new Prisma.Decimal(result.totalAllocated),
+        },
+      });
+    });
+
+    this.logger.log(`Settlement run finalized: ${id}`);
+    return this.buildFinalizedResponse(id);
   }
 
-  /**
-   * Create a correction run for an existing settlement
-   * TODO: Implement actual correction logic with:
-   * - Original run validation
-   * - Correction run creation with original_settlement_run_id
-   * - Support for adjustment revenue batches
-   */
   async createCorrectionRun(
     originalRunId: string,
     createDto: CreateCorrectionRunDto,
   ): Promise<SettlementRunResponseDto> {
     this.logger.log(`Creating correction run for: ${originalRunId}`);
 
-    // TODO: Validate original run exists and is FINALIZED
-    // TODO: Create correction run linked to original
-    // TODO: Include adjustment batches if provided
+    const originalRun = await this.prisma.settlementRun.findUnique({
+      where: { id: originalRunId },
+    });
 
-    const now = new Date().toISOString();
+    if (!originalRun) {
+      throw new NotFoundException(
+        `Settlement run with ID ${originalRunId} not found`,
+      );
+    }
+
+    if (originalRun.status !== SettlementRunStatus.FINALIZED) {
+      throw new BadRequestException(
+        'Can only create correction for FINALIZED settlement runs',
+      );
+    }
+
+    const correctionRun = await this.prisma.settlementRun.create({
+      data: {
+        dealId: originalRun.dealId,
+        ruleSnapshotId: originalRun.ruleSnapshotId,
+        runType: 'CORRECTION',
+        status: SettlementRunStatus.DRAFT,
+        originalSettlementRunId: originalRunId,
+        currency: originalRun.currency,
+        notes: createDto.notes,
+        totalAllocated: 0,
+        settlementRevenueLinks: createDto.adjustmentRevenueBatchIds
+          ? {
+              create: createDto.adjustmentRevenueBatchIds.map((batchId) => ({
+                revenueBatchId: batchId,
+              })),
+            }
+          : undefined,
+      },
+    });
+
+    this.logger.log(`Correction run created: ${correctionRun.id}`);
+    return this.mapRunToResponse(correctionRun);
+  }
+
+  // ============================================
+  // Private helpers
+  // ============================================
+
+  private buildEngineInput(run: {
+    id: string;
+    ruleSnapshot: {
+      version: number;
+      rules: unknown;
+      ruleSnapshotParticipants: {
+        participantId: string;
+        participantData: unknown;
+        participant: { id: string; name: string; role: string };
+      }[];
+    };
+    settlementRevenueLinks: {
+      revenueBatch: {
+        id: string;
+        totalAmount: Prisma.Decimal;
+        periodStart: Date;
+        periodEnd: Date;
+      };
+    }[];
+    currency: string;
+  }): SettlementInput {
+    const rules = run.ruleSnapshot.rules as Record<string, unknown>;
+
+    // Extract settlement rules from the flexible JSON structure
+    const settlementRules = this.extractSettlementRules(
+      rules,
+      run.ruleSnapshot.ruleSnapshotParticipants,
+    );
+
     return {
-      id: '550e8400-e29b-41d4-a716-446655440102',
-      dealId: '550e8400-e29b-41d4-a716-446655440000',
-      ruleSnapshotId: '550e8400-e29b-41d4-a716-446655440099',
-      runType: RunTypeEnum.CORRECTION,
-      status: SettlementStatusEnum.DRAFT,
-      originalSettlementRunId: originalRunId,
-      totalAllocated: 0,
-      currency: CurrencyEnum.USD,
-      notes: createDto.notes || 'Correction for settlement run',
-      executedAt: null,
-      createdAt: now,
-      updatedAt: now,
+      settlementRunId: run.id,
+      ruleSnapshotVersion: run.ruleSnapshot.version,
+      currency: run.currency,
+      revenueBatches: run.settlementRevenueLinks.map((link) => ({
+        id: link.revenueBatch.id,
+        amount: Number(link.revenueBatch.totalAmount),
+        periodStart: link.revenueBatch.periodStart.toISOString(),
+        periodEnd: link.revenueBatch.periodEnd.toISOString(),
+      })),
+      participants: run.ruleSnapshot.ruleSnapshotParticipants.map((rsp) => ({
+        id: rsp.participant.id,
+        name: rsp.participant.name,
+        role: rsp.participant.role as EngineParticipantRole,
+      })),
+      rules: settlementRules,
+    };
+  }
+
+  private extractSettlementRules(
+    rules: Record<string, unknown>,
+    participants: {
+      participantId: string;
+      participantData: unknown;
+      participant: { role: string };
+    }[],
+  ): SettlementInput['rules'] {
+    // If rules already has our engine format, use directly
+    if (rules.distributionFees && rules.recoupment && rules.netProfitSplit) {
+      return rules as unknown as SettlementInput['rules'];
+    }
+
+    // Otherwise, build from participant data
+    const distributionFees: SettlementInput['rules']['distributionFees'] = [];
+    const recoupment: SettlementInput['rules']['recoupment'] = [];
+    const netProfitSplit: SettlementInput['rules']['netProfitSplit'] = [];
+
+    for (const p of participants) {
+      const data = (p.participantData as Record<string, unknown>) ?? {};
+
+      if (data.feePercentage) {
+        distributionFees.push({
+          participantId: p.participantId,
+          feePercentage: data.feePercentage as number,
+        });
+      }
+
+      if (data.recoupAmount || data.recoupCap || data.recoupmentCap) {
+        recoupment.push({
+          participantId: p.participantId,
+          recoupAmount: (data.recoupAmount ?? data.recoupmentCap ?? 0) as number,
+          recoupCap: (data.recoupCap ?? data.recoupmentCap ?? 0) as number,
+          priority: (data.priority ?? data.tier ?? 1) as number,
+          previouslyRecouped: (data.previouslyRecouped ?? 0) as number,
+        });
+      }
+
+      if (data.allocationPercentage || data.netProfitPercentage) {
+        netProfitSplit.push({
+          participantId: p.participantId,
+          percentage: (data.allocationPercentage ?? data.netProfitPercentage) as number,
+        });
+      }
+    }
+
+    return { distributionFees, recoupment, netProfitSplit };
+  }
+
+  private mapRunToResponse(run: {
+    id: string;
+    dealId: string;
+    ruleSnapshotId: string;
+    runType: string;
+    status: string;
+    originalSettlementRunId: string | null;
+    totalAllocated: Prisma.Decimal;
+    currency: string;
+    notes: string | null;
+    executedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): SettlementRunResponseDto {
+    return {
+      id: run.id,
+      dealId: run.dealId,
+      ruleSnapshotId: run.ruleSnapshotId,
+      runType: run.runType as RunTypeEnum,
+      status: run.status as SettlementStatusEnum,
+      originalSettlementRunId: run.originalSettlementRunId,
+      totalAllocated: Number(run.totalAllocated),
+      currency: run.currency as CurrencyEnum,
+      notes: run.notes,
+      executedAt: run.executedAt?.toISOString() ?? null,
+      createdAt: run.createdAt.toISOString(),
+      updatedAt: run.updatedAt.toISOString(),
+    };
+  }
+
+  private mapEngineOutputToPreview(
+    settlementRunId: string,
+    result: SettlementOutput,
+  ): PreviewSettlementResponseDto {
+    return {
+      settlementRunId,
+      status: SettlementStatusEnum.PREVIEWED,
+      totalRevenue: result.totalRevenue,
+      totalAllocated: result.totalAllocated,
+      currency: result.currency as CurrencyEnum,
+      allocations: result.allocations.map((a, i) => ({
+        id: `preview-${i}`,
+        participantId: a.participantId,
+        participantName: a.participantName,
+        amount: a.amount,
+        currency: result.currency as CurrencyEnum,
+        phase: a.phase as unknown as SettlementPhaseEnum,
+        metadata: a.metadata,
+      })),
+      proof: result.proof,
+      message:
+        'Preview complete. Call POST /settlement-runs/{id}/finalize to lock results.',
+    };
+  }
+
+  private async buildFinalizedResponse(
+    id: string,
+  ): Promise<FinalizeSettlementResponseDto> {
+    const detail = await this.getRun(id);
+
+    return {
+      settlementRunId: id,
+      status: SettlementStatusEnum.FINALIZED,
+      totalRevenue: detail.allocations
+        ? detail.allocations.reduce((s, a) => s + a.amount, 0)
+        : 0,
+      totalAllocated: detail.totalAllocated,
+      currency: detail.currency,
+      allocations: detail.allocations ?? [],
+      proof: detail.proof ?? {
+        proofHash: '',
+        algorithm: 'SHA-256',
+        timestamp: new Date().toISOString(),
+      },
+      ledger: detail.ledger ?? { journalIds: [], postingCount: 0 },
+      finalizedAt: detail.executedAt ?? new Date().toISOString(),
+      message: 'Settlement finalized successfully. Results are now locked.',
     };
   }
 }

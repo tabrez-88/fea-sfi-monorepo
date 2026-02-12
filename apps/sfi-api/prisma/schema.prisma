@@ -82,6 +82,13 @@ enum RevenueBatchStatus {
   REJECTED
 }
 
+enum SettlementRunStatus {
+  DRAFT
+  PREVIEWED
+  FINALIZED
+  VOIDED
+}
+
 // ===========================================
 // 1) Core Deal & Parties
 // ===========================================
@@ -202,17 +209,19 @@ model RevenueBatch {
 // ===========================================
 
 model SettlementRun {
-  id                       String   @id @default(uuid())
-  dealId                   String   @map("deal_id")
-  ruleSnapshotId           String   @map("rule_snapshot_id")
-  runType                  RunType  @default(NORMAL) @map("run_type")
-  originalSettlementRunId  String?  @map("original_settlement_run_id")
-  executedAt               DateTime @map("executed_at")
-  totalAllocated           Decimal  @map("total_allocated") @db.Decimal(18, 2)
+  id                       String              @id @default(uuid())
+  dealId                   String              @map("deal_id")
+  ruleSnapshotId           String              @map("rule_snapshot_id")
+  runType                  RunType             @default(NORMAL) @map("run_type")
+  status                   SettlementRunStatus @default(DRAFT)
+  originalSettlementRunId  String?             @map("original_settlement_run_id")
+  notes                    String?             @db.Text
+  executedAt               DateTime?           @map("executed_at")
+  totalAllocated           Decimal             @default(0) @map("total_allocated") @db.Decimal(18, 2)
   currency                 Currency
   metadata                 Json?
-  createdAt                DateTime @default(now()) @map("created_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  updatedAt                DateTime            @updatedAt @map("updated_at")
 
   // Relations
   deal                    Deal                     @relation(fields: [dealId], references: [id], onDelete: Cascade)
