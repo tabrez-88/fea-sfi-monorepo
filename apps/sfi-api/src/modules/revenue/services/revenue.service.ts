@@ -1,4 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { RevenueBatchStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../deals/dto';
@@ -8,244 +14,201 @@ import {
   RevenueBatchListResponseDto,
   ValidateRevenueBatchDto,
   RejectRevenueBatchDto,
-  CurrencyEnum,
-  RevenueBatchStatusEnum,
 } from '../dto';
+import { RevenueBatchMapper } from '../mappers/revenue-batch.mapper';
 
-/**
- * Revenue Service
- *
- * Responsibilities:
- * - Create and manage revenue batches
- * - Validate revenue data
- * - Track batch processing status
- * - Link batches to settlement runs
- */
 @Injectable()
 export class RevenueService {
   private readonly logger = new Logger(RevenueService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Create a new revenue batch
-   * TODO: Implement actual batch creation with:
-   * - Deal validation
-   * - Batch number generation
-   * - Data persistence
-   */
   async createBatch(
     dealId: string,
     createDto: CreateRevenueBatchDto,
   ): Promise<RevenueBatchResponseDto> {
     this.logger.log(`Creating revenue batch for deal: ${dealId}`);
 
-    // TODO: Validate deal exists
-    // TODO: Generate unique batch number
-    // TODO: Persist to database
+    // Validate deal exists
+    const deal = await this.prisma.deal.findUnique({
+      where: { id: dealId },
+      select: { id: true },
+    });
+    if (!deal) {
+      throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
 
-    const now = new Date().toISOString();
-    return {
-      id: '550e8400-e29b-41d4-a716-446655440050',
-      dealId,
-      batchNumber: 'RB-2024-001',
-      periodStart: createDto.periodStart,
-      periodEnd: createDto.periodEnd,
-      totalAmount: createDto.totalAmount,
-      currency: createDto.currency,
-      status: RevenueBatchStatusEnum.PENDING,
-      source: createDto.source,
-      metadata: createDto.metadata,
-      isSettled: false,
-      settlementRunCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // Generate unique batch number
+    const batchCount = await this.prisma.revenueBatch.count({
+      where: { dealId },
+    });
+    const year = new Date().getFullYear();
+    const batchNumber = `RB-${year}-${String(batchCount + 1).padStart(3, '0')}`;
+
+    const batch = await this.prisma.revenueBatch.create({
+      data: {
+        dealId,
+        batchNumber,
+        periodStart: new Date(createDto.periodStart),
+        periodEnd: new Date(createDto.periodEnd),
+        totalAmount: new Prisma.Decimal(createDto.totalAmount),
+        currency: createDto.currency,
+        source: createDto.source,
+        metadata: createDto.metadata
+          ? (createDto.metadata as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+      },
+    });
+
+    this.logger.log(`Revenue batch created: ${batch.id} (${batchNumber})`);
+    return RevenueBatchMapper.toResponse(batch);
   }
 
-  /**
-   * List all revenue batches for a deal
-   * TODO: Implement actual database query with pagination and filtering
-   */
   async listBatches(
     dealId: string,
     query: PaginationQueryDto,
   ): Promise<RevenueBatchListResponseDto> {
     this.logger.log(`Listing revenue batches for deal: ${dealId}`);
-    const { page = 1, limit = 20 } = query;
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
+    const skip = (page - 1) * limit;
 
-    // TODO: Query with filters for status, unsettledOnly, etc.
+    const [batches, total] = await Promise.all([
+      this.prisma.revenueBatch.findMany({
+        where: { dealId },
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          _count: { select: { settlementRevenueLinks: true } },
+        },
+      }),
+      this.prisma.revenueBatch.count({ where: { dealId } }),
+    ]);
 
-    const now = new Date().toISOString();
     return {
-      data: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440050',
-          dealId,
-          batchNumber: 'RB-2024-003',
-          periodStart: '2024-07-01T00:00:00.000Z',
-          periodEnd: '2024-09-30T23:59:59.999Z',
-          totalAmount: 175000.0,
-          currency: CurrencyEnum.USD,
-          status: RevenueBatchStatusEnum.VALIDATED,
-          source: 'Netflix Streaming Q3 2024',
-          metadata: { territory: 'US', platform: 'SVOD' },
-          isSettled: false,
-          settlementRunCount: 0,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440051',
-          dealId,
-          batchNumber: 'RB-2024-002',
-          periodStart: '2024-04-01T00:00:00.000Z',
-          periodEnd: '2024-06-30T23:59:59.999Z',
-          totalAmount: 150000.0,
-          currency: CurrencyEnum.USD,
-          status: RevenueBatchStatusEnum.PROCESSED,
-          source: 'Netflix Streaming Q2 2024',
-          metadata: { territory: 'US', platform: 'SVOD' },
-          isSettled: true,
-          settlementRunCount: 1,
-          createdAt: '2024-07-15T10:30:00.000Z',
-          updatedAt: '2024-07-20T14:00:00.000Z',
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440052',
-          dealId,
-          batchNumber: 'RB-2024-001',
-          periodStart: '2024-01-01T00:00:00.000Z',
-          periodEnd: '2024-03-31T23:59:59.999Z',
-          totalAmount: 125000.0,
-          currency: CurrencyEnum.USD,
-          status: RevenueBatchStatusEnum.PROCESSED,
-          source: 'Netflix Streaming Q1 2024',
-          metadata: { territory: 'US', platform: 'SVOD' },
-          isSettled: true,
-          settlementRunCount: 1,
-          createdAt: '2024-04-15T10:30:00.000Z',
-          updatedAt: '2024-04-20T14:00:00.000Z',
-        },
-      ],
+      data: batches.map(RevenueBatchMapper.toResponse),
       meta: {
         page,
         limit,
-        total: 3,
-        totalPages: 1,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     };
   }
 
-  /**
-   * Get a single revenue batch
-   * TODO: Implement actual database query
-   */
   async getBatch(id: string): Promise<RevenueBatchResponseDto> {
     this.logger.log(`Getting revenue batch: ${id}`);
 
-    // TODO: Query batch from database
-    // TODO: Throw NotFoundException if not found
-
-    const now = new Date().toISOString();
-    return {
-      id,
-      dealId: '550e8400-e29b-41d4-a716-446655440000',
-      batchNumber: 'RB-2024-001',
-      periodStart: '2024-01-01T00:00:00.000Z',
-      periodEnd: '2024-03-31T23:59:59.999Z',
-      totalAmount: 125000.0,
-      currency: CurrencyEnum.USD,
-      status: RevenueBatchStatusEnum.VALIDATED,
-      source: 'Netflix Streaming Q1 2024',
-      metadata: {
-        territory: 'US',
-        platform: 'SVOD',
-        lineItems: [
-          { title: 'Film A', amount: 75000 },
-          { title: 'Film B', amount: 50000 },
-        ],
+    const batch = await this.prisma.revenueBatch.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
       },
-      isSettled: false,
-      settlementRunCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
+    });
+
+    if (!batch) {
+      throw new NotFoundException(`Revenue batch with ID ${id} not found`);
+    }
+
+    return RevenueBatchMapper.toResponse(batch);
   }
 
-  /**
-   * Validate a revenue batch
-   * TODO: Implement validation logic with status transition
-   */
   async validateBatch(
     id: string,
-    _validateDto: ValidateRevenueBatchDto,
+    validateDto: ValidateRevenueBatchDto,
   ): Promise<RevenueBatchResponseDto> {
     this.logger.log(`Validating revenue batch: ${id}`);
 
-    // TODO: Check batch exists and is in PENDING status
-    // TODO: Update status to VALIDATED
-    // TODO: Store validation notes
+    const batch = await this.prisma.revenueBatch.findUnique({
+      where: { id },
+    });
 
-    const now = new Date().toISOString();
-    return {
-      id,
-      dealId: '550e8400-e29b-41d4-a716-446655440000',
-      batchNumber: 'RB-2024-001',
-      periodStart: '2024-01-01T00:00:00.000Z',
-      periodEnd: '2024-03-31T23:59:59.999Z',
-      totalAmount: 125000.0,
-      currency: CurrencyEnum.USD,
-      status: RevenueBatchStatusEnum.VALIDATED,
-      source: 'Netflix Streaming Q1 2024',
-      metadata: null,
-      isSettled: false,
-      settlementRunCount: 0,
-      createdAt: '2024-04-15T10:30:00.000Z',
-      updatedAt: now,
-    };
+    if (!batch) {
+      throw new NotFoundException(`Revenue batch with ID ${id} not found`);
+    }
+
+    if (batch.status !== RevenueBatchStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot validate batch in ${batch.status} status. Must be PENDING.`,
+      );
+    }
+
+    const updated = await this.prisma.revenueBatch.update({
+      where: { id },
+      data: {
+        status: RevenueBatchStatus.VALIDATED,
+        metadata: validateDto.validationNotes
+          ? {
+              ...(batch.metadata as Record<string, unknown> | null),
+              validationNotes: validateDto.validationNotes,
+              validatedAt: new Date().toISOString(),
+            }
+          : (batch.metadata as Prisma.InputJsonValue) ?? undefined,
+      },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+      },
+    });
+
+    this.logger.log(`Revenue batch validated: ${id}`);
+    return RevenueBatchMapper.toResponse(updated);
   }
 
-  /**
-   * Reject a revenue batch
-   * TODO: Implement rejection logic with status transition
-   */
   async rejectBatch(
     id: string,
-    _rejectDto: RejectRevenueBatchDto,
+    rejectDto: RejectRevenueBatchDto,
   ): Promise<RevenueBatchResponseDto> {
     this.logger.log(`Rejecting revenue batch: ${id}`);
 
-    // TODO: Check batch exists and is not already processed
-    // TODO: Update status to REJECTED
-    // TODO: Store rejection reason
+    const batch = await this.prisma.revenueBatch.findUnique({
+      where: { id },
+    });
 
-    const now = new Date().toISOString();
-    return {
-      id,
-      dealId: '550e8400-e29b-41d4-a716-446655440000',
-      batchNumber: 'RB-2024-001',
-      periodStart: '2024-01-01T00:00:00.000Z',
-      periodEnd: '2024-03-31T23:59:59.999Z',
-      totalAmount: 125000.0,
-      currency: CurrencyEnum.USD,
-      status: RevenueBatchStatusEnum.REJECTED,
-      source: 'Netflix Streaming Q1 2024',
-      metadata: null,
-      isSettled: false,
-      settlementRunCount: 0,
-      createdAt: '2024-04-15T10:30:00.000Z',
-      updatedAt: now,
-    };
+    if (!batch) {
+      throw new NotFoundException(`Revenue batch with ID ${id} not found`);
+    }
+
+    if (batch.status === RevenueBatchStatus.PROCESSED) {
+      throw new BadRequestException(
+        'Cannot reject a batch that has already been processed.',
+      );
+    }
+
+    const updated = await this.prisma.revenueBatch.update({
+      where: { id },
+      data: {
+        status: RevenueBatchStatus.REJECTED,
+        metadata: {
+          ...(batch.metadata as Record<string, unknown> | null),
+          rejectionReason: rejectDto.rejectionReason,
+          rejectedAt: new Date().toISOString(),
+        },
+      },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+      },
+    });
+
+    this.logger.log(`Revenue batch rejected: ${id}`);
+    return RevenueBatchMapper.toResponse(updated);
   }
 
-  /**
-   * Get validated (unsettled) batches for a deal
-   * TODO: Implement retrieval for settlement run creation
-   */
   async getValidatedBatches(dealId: string): Promise<RevenueBatchResponseDto[]> {
     this.logger.log(`Getting validated batches for deal: ${dealId}`);
-    // TODO: Query for VALIDATED status batches
-    return [];
+
+    const batches = await this.prisma.revenueBatch.findMany({
+      where: {
+        dealId,
+        status: RevenueBatchStatus.VALIDATED,
+      },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+      },
+    });
+
+    return batches.map(RevenueBatchMapper.toResponse);
   }
 }

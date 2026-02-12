@@ -5,7 +5,7 @@
   "description": "SFI-FEA Backend API - NestJS + Prisma",
   "license": "UNLICENSED",
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "rm -f tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo && nest start --watch",
     "build": "nest build",
     "start": "node dist/main",
     "start:debug": "nest start --debug --watch",
@@ -17,7 +17,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "clean": "rm -rf dist .turbo node_modules",
+    "clean": "rm -rf dist .turbo node_modules tsconfig.tsbuildinfo tsconfig.build.tsbuildinfo",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:prod": "prisma migrate deploy",
