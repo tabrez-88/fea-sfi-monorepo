@@ -15,9 +15,9 @@ describe('SettlementEngine', () => {
   });
 
   // ============================================
-  // Helper: Build Naruto Movie Scenario Input
+  // Helper: Build Blockbuster Film Scenario Input
   // ============================================
-  function buildNarutoMovieInput(
+  function buildBlockbusterFilmInput(
     overrides: Partial<SettlementInput> = {},
   ): SettlementInput {
     return {
@@ -43,7 +43,7 @@ describe('SettlementEngine', () => {
         },
         {
           id: 'talent-001',
-          name: 'Naruto Voice Cast',
+          name: 'Lead Actors',
           role: ParticipantRole.TALENT,
         },
       ],
@@ -97,14 +97,14 @@ describe('SettlementEngine', () => {
   }
 
   // ============================================
-  // Scenario 1: Naruto Movie Full Scenario
+  // Scenario 1: Blockbuster Film Full Scenario
   // $150M revenue, distributor 15% fee, 2 investors recoup, net profit split
   // ============================================
-  describe('Naruto Movie Full Scenario ($150M)', () => {
+  describe('Blockbuster Film Full Scenario ($150M)', () => {
     let result: SettlementOutput;
 
     beforeEach(() => {
-      const input = buildNarutoMovieInput();
+      const input = buildBlockbusterFilmInput();
       result = engine.calculate(input, FIXED_TIMESTAMP);
     });
 
@@ -674,7 +674,7 @@ describe('SettlementEngine', () => {
   // ============================================
   describe('Determinism', () => {
     it('should produce identical results for the same input (100 runs)', () => {
-      const input = buildNarutoMovieInput();
+      const input = buildBlockbusterFilmInput();
 
       const firstResult = engine.calculate(input, FIXED_TIMESTAMP);
 
@@ -697,8 +697,8 @@ describe('SettlementEngine', () => {
     });
 
     it('should produce different hash for different input', () => {
-      const input1 = buildNarutoMovieInput();
-      const input2 = buildNarutoMovieInput({
+      const input1 = buildBlockbusterFilmInput();
+      const input2 = buildBlockbusterFilmInput({
         revenueBatches: [
           {
             id: 'batch-1',
@@ -806,21 +806,21 @@ describe('SettlementEngine', () => {
   // ============================================
   describe('Input Validation', () => {
     it('should throw error when no revenue batches', () => {
-      const input = buildNarutoMovieInput({ revenueBatches: [] });
+      const input = buildBlockbusterFilmInput({ revenueBatches: [] });
       expect(() => engine.calculate(input, FIXED_TIMESTAMP)).toThrow(
         'At least one revenue batch is required',
       );
     });
 
     it('should throw error when no participants', () => {
-      const input = buildNarutoMovieInput({ participants: [] });
+      const input = buildBlockbusterFilmInput({ participants: [] });
       expect(() => engine.calculate(input, FIXED_TIMESTAMP)).toThrow(
         'At least one participant is required',
       );
     });
 
     it('should throw error when net profit percentages do not sum to 100', () => {
-      const input = buildNarutoMovieInput();
+      const input = buildBlockbusterFilmInput();
       input.rules.netProfitSplit = [
         { participantId: 'studio-001', percentage: 50 },
         { participantId: 'investor-a', percentage: 30 },
@@ -831,7 +831,7 @@ describe('SettlementEngine', () => {
     });
 
     it('should throw error when revenue batch has negative amount', () => {
-      const input = buildNarutoMovieInput({
+      const input = buildBlockbusterFilmInput({
         revenueBatches: [
           {
             id: 'batch-neg',
@@ -847,7 +847,7 @@ describe('SettlementEngine', () => {
     });
 
     it('should throw error when rule references unknown participant', () => {
-      const input = buildNarutoMovieInput();
+      const input = buildBlockbusterFilmInput();
       input.rules.distributionFees = [
         { participantId: 'nonexistent-id', feePercentage: 10 },
       ];

@@ -38,10 +38,8 @@ export class RevenueService {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
 
-    // Generate unique batch number
-    const batchCount = await this.prisma.revenueBatch.count({
-      where: { dealId },
-    });
+    // Generate globally unique batch number
+    const batchCount = await this.prisma.revenueBatch.count();
     const year = new Date().getFullYear();
     const batchNumber = `RB-${year}-${String(batchCount + 1).padStart(3, '0')}`;
 
