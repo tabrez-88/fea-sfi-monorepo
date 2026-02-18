@@ -3,6 +3,7 @@ import 'reflect-metadata';
 import type { Metadata } from 'next';
 
 import './globals.css';
+import Navbar from '@/components/shared/Navbar';
 
 export const metadata: Metadata = {
   title: 'SFI-FEA | Settlement & Financial Infrastructure',
@@ -16,7 +17,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        {children}
+      </body>
     </html>
   );
 }

@@ -17,10 +17,18 @@
   },
   "dependencies": {
     "@sfi-fea/shared": "workspace:*",
+    "@tailwindcss/postcss": "^4.1.18",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.574.0",
     "next": "^15.1.3",
+    "postcss": "^8.5.6",
+    "radix-ui": "^1.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "tailwind-merge": "^3.4.1",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@sfi-fea/eslint-config": "workspace:*",
@@ -35,6 +43,8 @@
     "eslint-config-next": "^15.1.3",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
+    "shadcn": "^3.8.5",
+    "tw-animate-css": "^1.4.0",
     "typescript": "^5.7.2"
   }
 }
