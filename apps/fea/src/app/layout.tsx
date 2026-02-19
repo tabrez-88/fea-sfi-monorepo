@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 
 import './globals.css';
 import Navbar from '@/components/shared/Navbar';
@@ -10,6 +11,8 @@ export const metadata: Metadata = {
   description: 'Settlement and Financial Infrastructure platform for managing deals and revenue allocation',
 };
 
+const inter = Inter({ subsets: ['latin'] });
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -17,7 +20,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
+      <head>
+        <meta name="apple-mobile-web-app-title" content="FEA" />
+      </head>
+      <body className={inter.className}>
         <Navbar />
         {children}
       </body>
