@@ -1,8 +1,12 @@
 "use client"
 
+import { Activity, Menu } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, Menu } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+import { Button } from "../ui/button"
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -10,7 +14,6 @@ import {
   NavigationMenuList,
 } from "../ui/navigation-menu"
 import { Separator } from "../ui/separator"
-import { Button } from "../ui/button"
 import {
   Sheet,
   SheetClose,
@@ -19,7 +22,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "../ui/sheet"
-import { cn } from "@/lib/utils"
+
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -36,16 +39,18 @@ export default function Navbar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href)
 
   return (
-    <div className="flex items-center justify-between gap-4 w-full p-4 lg:p-6 border-b border-[#E0E0E0]">
+    <div className="flex items-center justify-between gap-4 w-full p-4 lg:p-6 border-b border">
       {/* Logo + Desktop Nav */}
       <div className="flex items-center h-12 gap-4">
-        <Activity />
-        <Separator orientation="vertical" className="bg-[#E0E0E0] hidden md:block" />
+        <div className="pl-4">
+          <Activity />
+        </div>
+        <Separator orientation="vertical" className="bg-border hidden md:block" />
         <NavigationMenu className="hidden md:flex">
           <NavigationMenuList className="gap-2 lg:gap-6">
             {NAV_LINKS.map((link) => (
               <NavigationMenuItem key={link.href}>
-                <NavigationMenuLink active={isActive(link.href)}>
+                <NavigationMenuLink asChild active={isActive(link.href)}>
                   <Link
                     href={link.href}
                     className={cn(
@@ -92,7 +97,7 @@ export default function Navbar() {
                   className={cn(
                     "rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
                     isActive(link.href) &&
-                      "bg-accent/50 font-semibold text-primary"
+                    "bg-accent/50 font-semibold text-primary"
                   )}
                 >
                   {link.label}

@@ -5,11 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-hover: #0060df;
-  --border: oklch(0.929 0.013 255.508);
-  --error: #e00;
-  --success: #0070f3;
+  --primary: oklch(0.104 0.023 264.695);
+  --border: oklch(0.878 0.002 247.839);
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
@@ -21,7 +18,7 @@
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.208 0.042 265.755);
   --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: #808080;
+  --muted-foreground: oklch(0.502 0 0);
   --accent: oklch(0.968 0.007 247.896);
   --accent-foreground: oklch(0.208 0.042 265.755);
   --destructive: oklch(0.577 0.245 27.325);
@@ -40,57 +37,6 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --border: #333;
-  }
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  font-family: 'Inter', sans-serif;
-  line-height: 1.6;
-}
-
-
-
-h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-}
-
-h2 {
-  font-size: 1.5rem;
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0.5rem;
-}
-
-ul {
-  list-style: none;
-  padding-left: 0;
-}
-
-li {
-  padding: 0.5rem 0;
-}
-
-.status-section,
-.links-section {
-  margin-top: 2rem;
 }
 
 @theme inline {

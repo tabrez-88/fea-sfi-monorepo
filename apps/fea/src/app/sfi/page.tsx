@@ -1,9 +1,9 @@
-import React from 'react'
+import Container from '@/components/shared/Container'
 
 export default function page() {
   return (
-    <div>
+    <Container>
       SFI Page
-    </div>
+    </Container>
   )
 }
