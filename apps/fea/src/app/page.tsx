@@ -1,92 +1,84 @@
-import { CircleCheck, Gift, Hash, LockKeyhole } from "lucide-react";
-
-import ImageGrid from "@/components/Home/ImageGrid";
+import CTA from "@/components/Home/CTA";
+import Industries from "@/components/Home/Industries";
 import Jumbotron from "@/components/Home/Jumbotron";
+import Projects, { ProjectCardData } from "@/components/Home/Projects";
+import Testimonials from "@/components/Home/Testimonials";
+import WhyChooseFEA from "@/components/Home/WhyChooseFEA";
+import Banners from "@/components/shared/Banners";
 import Container from "@/components/shared/Container";
+
+const trendingProjects: ProjectCardData[] = [
+  {
+    id: 1,
+    image: "/assets/studio.jpg",
+    title: 'Live Music: Hanover & Tyke',
+    badges: ['Trending'],
+    category: { emoji: '🎤', label: 'Live Events' },
+    location: 'USA',
+    status: 'Funded',
+    statusColor: 'text-green-500',
+    description:
+      'Join us for an electrifying rock performance by an incredible lineup of talented artist ready to rock the stage!',
+    perksAvailable: true,
+    verifiedParticipant: true,
+    progress: 100,
+    entryFrom: 200,
+  },
+  {
+    id: 2,
+    image: "/assets/studio2.jpg",
+    title: 'Creative Studio',
+    badges: ['Trending', 'New'],
+    category: { emoji: '🌟', label: 'Creator Projects' },
+    location: 'Europe',
+    status: '9 Days',
+    description:
+      'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+    perksAvailable: true,
+    verifiedParticipant: false,
+    progress: 60,
+    entryFrom: 400,
+  },
+  {
+    id: 3,
+    image: "/assets/studio.jpg",
+    title: 'Rose Boy- Avery Davis Album r...',
+    badges: ['Trending'],
+    category: { emoji: '🎵', label: 'Music' },
+    location: 'USA',
+    status: 'Closed',
+    description:
+      'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
+    perksAvailable: true,
+    verifiedParticipant: true,
+    progress: 60,
+    entryFrom: 800,
+  },
+]
 
 export default function HomePage() {
   return (
     <Container>
       <Jumbotron />
-      <div className="grid grid-cols-3 gap-6">
-        <div className="flex p-8 flex-col gap-4 border border-[#E5E5E5] rounded-2xl">
-          <div className="p-4 shadow-xl rounded-xl w-fit">
-            <Gift className="size-6" />
-          </div>
-          <p className="text-xl font-bold">Exclusive Perks & Access</p>
-          <p className="text-muted-foreground leading-relaxed">Get closer to the action. Unlock behind-the-scenes content, limited collectibles, and premiere invites just for backers.</p>
-        </div>
-        <div className="flex p-8 flex-col gap-4 border border-[#E5E5E5] rounded-2xl">
-          <div className="p-4 shadow-xl rounded-xl w-fit">
-            <LockKeyhole className="size-6" />
-          </div>
-          <p className="text-xl font-bold">Exclusive Perks & Access</p>
-          <p className="text-muted-foreground leading-relaxed">Get closer to the action. Unlock behind-the-scenes content, limited collectibles, and premiere invites just for backers.</p>
-        </div>
-        <div className="flex p-8 flex-col gap-4 border border-[#E5E5E5] rounded-2xl">
-          <div className="p-4 shadow-xl rounded-xl w-fit">
-            <Hash className="size-6" />
-          </div>
-          <p className="text-xl font-bold">Exclusive Perks & Access</p>
-          <p className="text-muted-foreground leading-relaxed">Get closer to the action. Unlock behind-the-scenes content, limited collectibles, and premiere invites just for backers.</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 w-full gap-6">
-        <ImageGrid />
-        <div className="flex flex-col justify-between gap-8">
-          <div className="flex flex-col">
-            <p className="text-[20px] text-muted-foreground font-bold">Discover the Future of Entertainment</p>
-            <h4 className="text-[40px] font-extralight">A Modern platform for <span className="font-bold">creative</span> projects</h4>
-          </div>
-          <div className="flex gap-2 items-start w-full ">
-            <CircleCheck fill="#000000" color="white" className="size-8" />
-            <div className="flex flex-col gap-2">
-              <h5 className="text-[20px] font-bold">Transparent, secure, and community-driven.</h5>
-              <p className="text-muted-foreground">
-                Support curated creative projects with verified identities and clear roadmaps, focused on real execution and delivery, not hype-driven speculation.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col gap-6">
-            <div className="flex gap-2 items-start w-full ">
-              <CircleCheck fill="#000000" color="white" className="size-8" />
-              <div className="flex flex-col gap-2">
-                <h5 className="text-[20px] font-bold">Transparent, secure, and community-driven.</h5>
-                <p className="text-muted-foreground">
-                  Support curated creative projects with verified identities and clear roadmaps, focused on real execution and delivery, not hype-driven speculation.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2 items-start w-full ">
-              <CircleCheck fill="#000000" color="white" className="size-8" />
-              <div className="flex flex-col gap-2">
-                <h5 className="text-[20px] font-bold">Transparent, secure, and community-driven.</h5>
-                <p className="text-muted-foreground">
-                  Support curated creative projects with verified identities and clear roadmaps, focused on real execution and delivery, not hype-driven speculation.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2 items-start w-full ">
-              <CircleCheck fill="#000000" color="white" className="size-8" />
-              <div className="flex flex-col gap-2">
-                <h5 className="text-[20px] font-bold">Transparent, secure, and community-driven.</h5>
-                <p className="text-muted-foreground">
-                  Support curated creative projects with verified identities and clear roadmaps, focused on real execution and delivery, not hype-driven speculation.
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2 items-start w-full ">
-              <CircleCheck fill="#000000" color="white" className="size-8" />
-              <div className="flex flex-col gap-2">
-                <h5 className="text-[20px] font-bold">Transparent, secure, and community-driven.</h5>
-                <p className="text-muted-foreground">
-                  Support curated creative projects with verified identities and clear roadmaps, focused on real execution and delivery, not hype-driven speculation.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <WhyChooseFEA />
+      <Projects
+        title={
+          <>Discover the <span className="font-bold">Featured</span> Entertainment Projects</>
+        }
+        subtitle="Featured Deals"
+        projects={trendingProjects}
+      />
+      <Industries />
+      <Projects
+        title={
+          <>Discover the <span className="font-bold">Latest</span> Entertainment Projects</>
+        }
+        subtitle="New Opportunities"
+        projects={trendingProjects}
+      />
+      <CTA />
+      <Testimonials />
+      <Banners />
     </Container>
   );
 }

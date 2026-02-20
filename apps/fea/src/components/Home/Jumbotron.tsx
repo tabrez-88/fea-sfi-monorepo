@@ -70,7 +70,7 @@ export default function Jumbotron() {
   );
 
   return (
-    <div className="flex gap-10">
+    <section className="flex gap-10">
       <div className="flex flex-col size-full basis-2/3 gap-12">
         <div className="flex flex-col gap-4">
           <div className="flex w-full flex-wrap gap-2 md:gap-3">
@@ -128,8 +128,8 @@ export default function Jumbotron() {
               <AvatarFallback>ER</AvatarFallback>
             </Avatar>
           </AvatarGroup>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-medium">10.5k+</p>
+          <div className="flex flex-col">
+            <p className="text-sm font-bold">10.5k+</p>
             <p className="text-xs text-muted-foreground">
               Community Members
             </p>
@@ -187,6 +187,6 @@ export default function Jumbotron() {
           ))}
         </div>
       </div>
-    </div>
+    </section>
   );
 }

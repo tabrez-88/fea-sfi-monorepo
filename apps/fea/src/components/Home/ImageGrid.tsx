@@ -25,11 +25,11 @@ const images: GridImage[] = [
 
 export default function ImageGrid() {
   return (
-    <div className="grid w-full grid-cols-4 auto-rows-[180px] gap-3">
+    <div className="grid w-full grid-cols-4 auto-rows-[174px] gap-2">
       {images.map((image, index) => (
         <div
           key={index}
-          className={`relative overflow-hidden rounded-2xl ${image.className}`}
+          className={`relative overflow-hidden rounded-md ${image.className}`}
         >
           <Image
             src={image.src}
