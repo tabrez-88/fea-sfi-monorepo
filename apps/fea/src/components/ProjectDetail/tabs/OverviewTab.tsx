@@ -5,8 +5,9 @@ import Image from 'next/image'
 import { useState } from 'react'
 
 import { Separator } from '@/components/ui/separator'
-import SocialIcon from '../SocialIcon'
+
 import type { SocialIconType } from '../SocialIcon'
+import SocialIcon from '../SocialIcon'
 
 export interface TimelineItem {
   range: string
