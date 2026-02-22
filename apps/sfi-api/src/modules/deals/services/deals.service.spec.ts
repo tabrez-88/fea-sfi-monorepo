@@ -5,6 +5,19 @@ import { PrismaService } from '../../../prisma/prisma.service';
 
 import { DealsService } from './deals.service';
 
+jest.mock('@prisma/client', () => ({
+  PrismaClient: class PrismaClient {},
+  DealStatus: {
+    DRAFT: 'DRAFT',
+    ACTIVE: 'ACTIVE',
+    SUSPENDED: 'SUSPENDED',
+    CLOSED: 'CLOSED',
+  },
+  Prisma: {
+    JsonNull: 'DbNull',
+  },
+}));
+
 describe('DealsService', () => {
   let service: DealsService;
   let _prisma: PrismaService;

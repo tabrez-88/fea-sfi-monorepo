@@ -1,3 +1,4 @@
+import type { Route } from 'next'
 import Link from 'next/link'
 import React from 'react'
 
@@ -20,7 +21,7 @@ export default function Projects({ title, subtitle, projects }: ProjectType) {
           <p className="text-[20px] text-muted-foreground font-bold uppercase">{subtitle}</p>
           <h4 className="text-[40px] font-extralight leading-tight">{title}</h4>
         </div>
-        <Link href="/projects" className="font-bold underline">
+        <Link href={"/projects" as Route} className="font-bold underline">
           See More
         </Link>
       </div>
