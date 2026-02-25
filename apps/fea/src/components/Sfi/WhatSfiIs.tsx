@@ -1,5 +1,8 @@
+import { ArrowRight } from 'lucide-react'
 import Image from 'next/image'
 import React from 'react'
+
+import Container from '../shared/Container'
 
 export interface WhatSfiIsProps {
   subtitle: string
@@ -9,13 +12,12 @@ export interface WhatSfiIsProps {
 
 export default function WhatSfiIs({ subtitle, description, footnote }: WhatSfiIsProps) {
   return (
-    <section className="flex flex-col gap-6">
-      <p className="text-sm text-muted-foreground font-bold uppercase">{subtitle}</p>
-      <p className="text-xl lg:text-2xl font-extralight leading-relaxed max-w-3xl">
+    <Container orientation='vertical' gap='sm'>
+      <p className="text-muted-foreground text-[20px] font-bold uppercase">{subtitle}</p>
+      <p className="text-xl lg:text-[32px] font-extralight leading-thight">
         {description}
       </p>
 
-      {/* Flow Diagram */}
       <div className="relative rounded-3xl overflow-hidden h-64 lg:h-80">
         <Image
           src="/assets/studio2.jpg"
@@ -24,21 +26,23 @@ export default function WhatSfiIs({ subtitle, description, footnote }: WhatSfiIs
           className="object-cover opacity-20"
         />
         <div className="absolute inset-0 flex items-center justify-center gap-8">
-          <div className="bg-card border border-border rounded-xl px-8 py-4 text-center font-bold shadow">
-            FEA
+          <div className="bg-card w-58.5 h-28.25 border border-border flex justify-center items-center text-[20px] px-8 py-4 text-center font-bold shadow">
+            <span>FEA</span>
           </div>
-          <div className="bg-foreground text-background rounded-xl px-8 py-4 text-center font-bold shadow-lg">
-            SFI
+          <ArrowRight className="size-6 text-muted-foreground" />
+          <div className="bg-foreground w-58.5 h-28.25 text-background flex justify-center items-center text-[20px] px-8 py-4 text-center font-bold shadow-lg">
+            <span>SFI</span>
           </div>
-          <div className="bg-card border border-border rounded-xl px-8 py-4 text-center font-bold shadow">
-            CHAIN
+          <ArrowRight className="size-6 text-muted-foreground" />
+          <div className="bg-card w-58.5 h-28.25 border border-border flex justify-center items-center text-[20px] px-8 py-4 text-center font-bold shadow">
+            <span>CHAIN</span>
           </div>
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground max-w-3xl">
+      <p className="text-[32px] text-muted-foreground">
         {footnote}
       </p>
-    </section>
+    </Container>
   )
 }

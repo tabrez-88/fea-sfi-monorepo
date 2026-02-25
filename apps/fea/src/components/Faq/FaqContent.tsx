@@ -1,11 +1,13 @@
 "use client"
 
-import { CirclePlus, Flag, HeartHandshake, Settings, UserCheck } from 'lucide-react'
+import { CircleMinus, CirclePlus, Flag, HeartHandshake, Settings, UserCheck } from 'lucide-react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import SearchBar from '@/components/shared/SearchBar'
 import { Button } from '@/components/ui/button'
+
+import Container from '../shared/Container'
 
 export interface FaqItem {
   question: string
@@ -62,55 +64,57 @@ export default function FaqContent({ categories }: FaqContentProps) {
   const currentFaqs = (categories[activeCategory]?.faqs ?? []).filter((faq) =>
     searchQuery
       ? faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
+      faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
       : true,
   )
 
   return (
-    <>
-      {/* Search */}
-      <section className="flex items-center gap-3">
+    <Container orientation="vertical" py="sm" gap="sm">
+      <div className="flex items-center gap-3">
         <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Ask a question" />
-        <Button className="rounded-lg">Search</Button>
-      </section>
+        <Button size="lg">Search</Button>
+      </div>
 
-      {/* Category Tabs */}
-      <section className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {categories.map((category, idx) => (
             <button
               key={category.label}
               onClick={() => handleTabChange(idx)}
-              className={`flex flex-col items-start gap-3 border rounded-xl p-4 transition-colors ${
-                activeCategory === idx
-                  ? 'border-foreground bg-muted font-bold'
-                  : 'border-border hover:bg-muted'
-              }`}
+              className={`flex flex-col items-start gap-6 border rounded-md justify-between p-4 transition-colors ${activeCategory === idx
+                ? 'border-foreground font-bold'
+                : 'border-border hover:bg-muted'
+                }`}
             >
-              {iconMap[category.icon]}
-              <span className="text-sm font-bold">{category.label}</span>
+              <div className="flex bg-muted size-10.5 justify-center items-center aspect-square rounded-md">
+                {iconMap[category.icon]}
+              </div>
+              <span className="text-[20px] font-bold">{category.label}</span>
             </button>
           ))}
         </div>
 
-        {/* FAQ Items */}
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-6">
           {currentFaqs.map((faq, idx) => (
-            <div key={faq.question} className="border-b border-border">
+            <div key={faq.question} className="border border-border p-6 flex flex-col rounded-md gap-2">
               <button
                 onClick={() => setOpenQuestion(openQuestion === idx ? -1 : idx)}
-                className="flex items-center justify-between w-full py-5 text-left"
+                className="flex items-center justify-between w-full text-left"
               >
-                <span className="font-bold text-sm">{faq.question}</span>
-                <CirclePlus
-                  className={`size-5 shrink-0 ml-4 transition-transform ${
-                    openQuestion === idx ? 'rotate-45' : ''
-                  }`}
-                />
+                <span className="font-bold text-[20px]">{faq.question}</span>
+                <span className={`transition-transform duration-300 ${openQuestion === idx ? 'rotate-180' : 'rotate-0'}`}>
+                  {openQuestion === idx ? (
+                    <CircleMinus className="size-5 shrink-0" />
+                  ) : (
+                    <CirclePlus className="size-5 shrink-0" />
+                  )}
+                </span>
               </button>
-              {openQuestion === idx && (
-                <p className="text-sm text-muted-foreground pb-5 pr-10">{faq.answer}</p>
-              )}
+              <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${openQuestion === idx ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                <div className="overflow-hidden">
+                  <p className="text-sm text-muted-foreground/80">{faq.answer}</p>
+                </div>
+              </div>
             </div>
           ))}
 
@@ -120,7 +124,7 @@ export default function FaqContent({ categories }: FaqContentProps) {
             </p>
           )}
         </div>
-      </section>
-    </>
+      </div>
+    </Container>
   )
 }

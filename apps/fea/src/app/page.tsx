@@ -5,7 +5,7 @@ import Projects, { ProjectCardData } from "@/components/Home/Projects";
 import Testimonials from "@/components/Home/Testimonials";
 import WhyChooseFEA from "@/components/Home/WhyChooseFEA";
 import Banners from "@/components/shared/Banners";
-import Container from "@/components/shared/Container";
+import { Separator } from "@/components/ui/separator";
 
 const trendingProjects: ProjectCardData[] = [
   {
@@ -57,10 +57,13 @@ const trendingProjects: ProjectCardData[] = [
 ]
 
 export default function HomePage() {
+
   return (
-    <Container>
+    <div>
       <Jumbotron />
+      <Separator />
       <WhyChooseFEA />
+      <Separator />
       <Projects
         title={
           <>Discover the <span className="font-bold">Featured</span> Entertainment Projects</>
@@ -68,7 +71,9 @@ export default function HomePage() {
         subtitle="Featured Deals"
         projects={trendingProjects}
       />
+      <Separator />
       <Industries />
+      <Separator />
       <Projects
         title={
           <>Discover the <span className="font-bold">Latest</span> Entertainment Projects</>
@@ -76,9 +81,11 @@ export default function HomePage() {
         subtitle="New Opportunities"
         projects={trendingProjects}
       />
+      <Separator />
       <CTA />
+      <Separator />
       <Testimonials />
       <Banners />
-    </Container>
+    </div>
   );
 }

@@ -92,19 +92,20 @@ const sortOptions = ['Newest', 'Oldest']
 
 export default function BlogPage() {
   return (
-    <Container>
-      {/* Header */}
-      <section className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground font-bold uppercase">Blog</p>
-        <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
-          Stories from the world of{' '}
-          <span className="font-bold">entertainment participation</span>
-        </h1>
-      </section>
+    <div>
+      <Container orientation="vertical">
+        {/* Header */}
+        <section className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground font-bold uppercase">Blog</p>
+          <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
+            Stories from the world of{' '}
+            <span className="font-bold">entertainment participation</span>
+          </h1>
+        </section>
 
-      <BlogGrid posts={allPosts} categories={categories} sortOptions={sortOptions} />
-
+        <BlogGrid posts={allPosts} categories={categories} sortOptions={sortOptions} />
+      </Container>
       <Banners />
-    </Container>
+    </div>
   )
 }

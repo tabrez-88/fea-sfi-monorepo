@@ -1,5 +1,7 @@
-import { CircleCheckBig } from 'lucide-react'
+import { CircleCheck } from 'lucide-react'
 import React from 'react'
+
+import Container from '../shared/Container'
 
 export interface WhatSfiDoesProps {
   subtitle: string
@@ -10,19 +12,19 @@ export interface WhatSfiDoesProps {
 
 export default function WhatSfiDoes({ subtitle, title, items, principles }: WhatSfiDoesProps) {
   return (
-    <section className="flex flex-col gap-8">
-      <div className="flex flex-col lg:flex-row gap-8 items-start">
+    <Container orientation='vertical' className="flex flex-col gap-8">
+      <div className="flex flex-col lg:flex-row justify-between gap-8 items-start">
         <div className="flex flex-col gap-4 lg:w-1/2">
-          <p className="text-sm text-muted-foreground font-bold uppercase">{subtitle}</p>
-          <h3 className="text-3xl lg:text-4xl font-extralight leading-tight">
+          <p className="text-[20px] text-muted-foreground font-bold uppercase">{subtitle}</p>
+          <h3 className="text-3xl lg:text-[40px] font-extralight leading-tight">
             {title}
           </h3>
         </div>
-        <div className="lg:w-1/2">
-          <ul className="flex flex-col gap-3">
+        <div >
+          <ul className="flex flex-col gap-2">
             {items.map((item) => (
-              <li key={item} className="flex items-start gap-2 text-sm font-bold">
-                <span className="mt-1.5 size-1.5 rounded-full bg-foreground shrink-0" />
+              <li key={item} className="flex items-center gap-2 text-[20px] font-bold">
+                <span className="size-2 rounded-full bg-foreground shrink-0" />
                 {item}
               </li>
             ))}
@@ -30,21 +32,20 @@ export default function WhatSfiDoes({ subtitle, title, items, principles }: What
         </div>
       </div>
 
-      {/* Principles */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {principles.map((principle) => (
           <div
             key={principle.title}
-            className="border border-border rounded-2xl p-6 flex flex-col gap-2"
+            className="border border-border rounded-md p-6 flex flex-col gap-2"
           >
-            <div className="flex items-center gap-2">
-              <CircleCheckBig className="size-5" />
-              <h4 className="font-bold">{principle.title}</h4>
+            <div className="flex gap-2 items-center">
+              <CircleCheck fill='black' color='white' className="size-6" />
+              <h4 className="font-bold text-[20px] leading-none">{principle.title}</h4>
             </div>
-            <p className="text-sm text-muted-foreground">{principle.description}</p>
+            <p className="ml-8 text-muted-foreground/80">{principle.description}</p>
           </div>
         ))}
       </div>
-    </section>
+    </Container>
   )
 }

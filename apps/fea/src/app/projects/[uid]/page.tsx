@@ -254,48 +254,49 @@ const risks = [
 
 export default function ProjectDetailPage() {
   return (
-    <Container>
-      <ProjectHeader
-        category={project.category}
-        title={project.title}
-        tagline={project.tagline}
-      />
-
-      <section className="flex flex-col lg:flex-row gap-8 items-start">
-        <div className="flex-1 flex flex-col gap-6 min-w-0">
-          <ProjectImageCarousel images={project.images} title={project.title} />
-          <StudioInfoBar
-            studio={project.studio}
-            supporters={project.supporters}
-            closingDate={project.closingDate}
-          />
-          <ProjectTabs
-            overviewContent={
-              <OverviewTab
-                timelineItems={timelineItems}
-                teamMembers={teamMembers}
-                faqItems={faqItems}
-                risks={risks}
-              />
-            }
-            updatesContent={<UpdatesTab updates={updates} />}
-            discussionContent={<DiscussionTab discussions={discussions} />}
-            reviewContent={<ReviewTab reviews={reviews} />}
-          />
-        </div>
-
-        <SupportSidebar
-          goal={project.goal}
-          minimumSupport={project.minimumSupport}
-          supporters={project.supporters}
-          progress={project.progress}
-          raised={project.raised}
-          target={project.target}
-          perkTiers={perkTiers}
+    <div>
+      <Container orientation="vertical">
+        <ProjectHeader
+          category={project.category}
+          title={project.title}
+          tagline={project.tagline}
         />
-      </section>
 
+        <section className="flex flex-col lg:flex-row gap-8 items-start">
+          <div className="flex-1 flex flex-col gap-6 min-w-0">
+            <ProjectImageCarousel images={project.images} title={project.title} />
+            <StudioInfoBar
+              studio={project.studio}
+              supporters={project.supporters}
+              closingDate={project.closingDate}
+            />
+            <ProjectTabs
+              overviewContent={
+                <OverviewTab
+                  timelineItems={timelineItems}
+                  teamMembers={teamMembers}
+                  faqItems={faqItems}
+                  risks={risks}
+                />
+              }
+              updatesContent={<UpdatesTab updates={updates} />}
+              discussionContent={<DiscussionTab discussions={discussions} />}
+              reviewContent={<ReviewTab reviews={reviews} />}
+            />
+          </div>
+
+          <SupportSidebar
+            goal={project.goal}
+            minimumSupport={project.minimumSupport}
+            supporters={project.supporters}
+            progress={project.progress}
+            raised={project.raised}
+            target={project.target}
+            perkTiers={perkTiers}
+          />
+        </section>
+      </Container>
       <Banners />
-    </Container>
+    </div>
   )
 }

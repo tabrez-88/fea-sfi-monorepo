@@ -15,7 +15,7 @@ export interface HeroSectionProps {
 
 export default function HeroSection({ title, description, ctaHref, ctaLabel, image, imageAlt }: HeroSectionProps) {
   return (
-    <section className="relative bg-foreground text-background rounded-3xl overflow-hidden">
+    <section className="relative bg-foreground text-background overflow-hidden">
       <div className="flex flex-col lg:flex-row">
         <div className="flex flex-col gap-6 p-10 lg:p-16 lg:w-1/2 justify-center">
           <h1 className="text-4xl lg:text-5xl font-extralight leading-tight">

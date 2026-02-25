@@ -2,6 +2,7 @@ import DiscoverGrid from '@/components/Discover/DiscoverGrid'
 import Banners from '@/components/shared/Banners'
 import Container from '@/components/shared/Container'
 import type { ProjectCardData } from '@/components/shared/ProjectCardItem'
+import { Separator } from '@/components/ui/separator'
 
 const allProjects: ProjectCardData[] = [
   {
@@ -149,25 +150,26 @@ const sortOptions = ['Newest', 'Oldest', 'Most Funded', 'Entry: Low to High', 'E
 
 export default function DiscoverPage() {
   return (
-    <Container>
-      <div className="flex flex-col gap-4">
-        <p className="text-[20px] text-muted-foreground font-bold uppercase">
-          Discover Opportunities
-        </p>
-        <h4 className="text-[40px] font-extralight leading-tight">
-          <span className="font-bold">Explore</span> films, music, games, live events, and
-          creator projects.
-        </h4>
-      </div>
-
+    <div>
+      <Container orientation="vertical" py="md">
+        <div className="flex flex-col gap-4">
+          <p className="text-[20px] text-muted-foreground font-bold uppercase">
+            Discover Opportunities
+          </p>
+          <h4 className="text-[40px] font-extralight leading-tight">
+            <span className="font-bold">Explore</span> films, music, games, live events, and
+            creator projects.
+          </h4>
+        </div>
+      </Container>
+      <Separator />
       <DiscoverGrid
         projects={allProjects}
         categories={categories}
         statuses={statuses}
         sortOptions={sortOptions}
       />
-
       <Banners />
-    </Container>
+    </div>
   )
 }

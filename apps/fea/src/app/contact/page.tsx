@@ -1,20 +1,13 @@
 import ContactForm from '@/components/Contact/ContactForm'
 import ContactHero from '@/components/Contact/ContactHero'
-import ContactInfoCards, { ContactInfoItem } from '@/components/Contact/ContactInfoCards'
 import Banners from '@/components/shared/Banners'
-import Container from '@/components/shared/Container'
-
-const contactInfo: ContactInfoItem[] = [
-  { icon: 'mail', title: 'Email', value: 'hellofea.ask@funkyland.io' },
-  { icon: 'phone', title: 'Phone', value: '+1 (888) 888-8888' },
-  { icon: 'map-pin', title: 'Address', value: 'Elgin St. Celina, Delaware 299' },
-]
+import { Separator } from '@/components/ui/separator'
 
 const subjects = ['Partnership', 'General Inquiry', 'Project Proposal', 'Support', 'Other']
 
 export default function ContactPage() {
   return (
-    <Container>
+    <div>
       <ContactHero
         subtitle="Contact FEA"
         title={
@@ -24,10 +17,9 @@ export default function ContactPage() {
         }
         description="Have a question, partnership inquiry, or project proposal? We'd like to hear from you."
         ctaHref="#contact-form"
-        ctaLabel="Send a Message"
         heroImage="/assets/studio2.jpg"
       />
-      <ContactInfoCards items={contactInfo} />
+      <Separator />
       <ContactForm
         title={
           <>
@@ -38,6 +30,6 @@ export default function ContactPage() {
         subjects={subjects}
       />
       <Banners />
-    </Container>
+    </div>
   )
 }

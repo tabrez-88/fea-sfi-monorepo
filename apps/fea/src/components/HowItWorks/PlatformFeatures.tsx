@@ -1,16 +1,20 @@
 import Image from 'next/image'
 import React from 'react'
 
+import Container from '../shared/Container'
+
 export interface PlatformFeaturesProps {
   subtitle: string
   title: React.ReactNode
   features: { image: string; title: string; description: string }[]
+  missionText: React.ReactNode
+  stats: { value: string; label: string }[]
 }
 
-export default function PlatformFeatures({ subtitle, title, features }: PlatformFeaturesProps) {
+export default function PlatformFeatures({ subtitle, title, features, missionText, stats }: PlatformFeaturesProps) {
   return (
-    <section>
-      <div className="flex flex-col gap-2 mb-8">
+    <Container orientation='vertical'>
+      <div className="flex flex-col gap-2">
         <p className="text-sm text-muted-foreground font-bold">{subtitle}</p>
         <h3 className="text-3xl lg:text-4xl font-extralight leading-tight max-w-xl">
           {title}
@@ -38,6 +42,25 @@ export default function PlatformFeatures({ subtitle, title, features }: Platform
           </div>
         ))}
       </div>
-    </section>
+      <div className='flex flex-col gap-12'>
+        <div className="max-w-212.25">
+          <p className="text-xl lg:text-[32px] font-light leading-relaxed">
+            {missionText}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {stats.map((stat) => (
+            <div
+              key={stat.label}
+              className="border border-border rounded-md p-6 gap-4 flex flex-col"
+            >
+              <p className="text-[32px] font-extralight leading-none">{stat.value}</p>
+              <p className="text-[20px] font-bold leading-tight">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Container >
   )
 }

@@ -3,6 +3,8 @@ import Link from 'next/link'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
+import Container from '../shared/Container'
+
 interface Testimonial {
   avatar: string
   name: string
@@ -65,8 +67,8 @@ function StarRating({ rating }: { rating: number }) {
 
 export default function Testimonials() {
   return (
-    <section>
-      <div className="flex items-center justify-between gap-4 w-full">
+    <Container orientation="vertical">
+      <div className="flex flex-col md:flex-row item-start md:items-center justify-between gap-4 w-full">
         <div className="flex flex-col gap-4">
           <p className="text-[20px] text-muted-foreground font-bold uppercase">
             Testimonials
@@ -105,6 +107,6 @@ export default function Testimonials() {
           </div>
         ))}
       </div>
-    </section>
+    </Container>
   )
 }

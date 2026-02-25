@@ -3,12 +3,14 @@ import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
 
+import Container from '../shared/Container'
+import { Separator } from '../ui/separator'
+
 export interface ContactHeroProps {
   subtitle: string
   title: React.ReactNode
   description: string
   ctaHref: string
-  ctaLabel: string
   heroImage: string
 }
 
@@ -17,25 +19,28 @@ export default function ContactHero({
   title,
   description,
   ctaHref,
-  ctaLabel,
   heroImage,
 }: ContactHeroProps) {
   return (
-    <section className="flex flex-col lg:flex-row items-center gap-12">
-      <div className="flex flex-col gap-6 lg:w-1/2">
+    <Container py='md' className='justify-between' gap='sm'>
+      <div className="flex flex-col gap-4 lg:max-w-91">
         <p className="text-[20px] text-muted-foreground font-bold uppercase">{subtitle}</p>
-        <h1 className="text-4xl lg:text-5xl font-extralight leading-tight">
+        <h1 className="text-4xl lg:text-[40px] font-extralight leading-none">
           {title}
         </h1>
         <p className="text-muted-foreground max-w-md">{description}</p>
-        <div>
-          <Button asChild size="lg" className="rounded-xl">
-            <Link href={ctaHref as never}>{ctaLabel}</Link>
+        <div className='mt-auto'>
+          <Button asChild size="lg">
+            <Link href={ctaHref as never}>
+              <p>Mail us</p>
+              <Separator orientation='vertical' className='data-[orientation=vertical]:h-4 block' />
+              <span className='font-light text-[#989898]'>hellofea.ask@funkyland.io</span>
+            </Link>
           </Button>
         </div>
       </div>
 
-      <div className="relative lg:w-1/2 aspect-video rounded-2xl overflow-hidden">
+      <div className="relative w-full max-w-188 max-h-87 aspect-video rounded-md overflow-hidden">
         <Image
           src={heroImage}
           alt="Team meeting"
@@ -43,6 +48,6 @@ export default function ContactHero({
           className="object-cover"
         />
       </div>
-    </section>
+    </Container>
   )
 }

@@ -1,4 +1,6 @@
-import { CircleCheck, Gift, Hash, LockKeyhole } from 'lucide-react'
+import { CircleCheck } from 'lucide-react'
+
+import Container from '../shared/Container'
 
 import ImageGrid from './ImageGrid'
 
@@ -27,36 +29,13 @@ const items = [
 
 export default function WhyChooseFEA() {
   return (
-    <section className='flex flex-col gap-10'>
-      <div className="grid grid-cols-3 gap-6">
-        <div className="flex p-8 flex-col gap-4 border border-[#E5E5E5] rounded-2xl">
-          <div className="p-4 shadow-xl rounded-xl w-fit">
-            <Gift className="size-6" />
-          </div>
-          <p className="text-xl font-bold">Exclusive Perks & Access</p>
-          <p className="text-muted-foreground leading-relaxed">Get closer to the action. Unlock behind-the-scenes content, limited collectibles, and premiere invites just for backers.</p>
-        </div>
-        <div className="flex p-8 flex-col gap-4 border border-[#E5E5E5] rounded-2xl">
-          <div className="p-4 shadow-xl rounded-xl w-fit">
-            <LockKeyhole className="size-6" />
-          </div>
-          <p className="text-xl font-bold">Verified Participant</p>
-          <p className="text-muted-foreground leading-relaxed">Unlock advanced support tiers. Verification grants access to defined contractual structures and deep project engagement.</p>
-        </div>
-        <div className="flex p-8 flex-col gap-4 border border-[#E5E5E5] rounded-2xl">
-          <div className="p-4 shadow-xl rounded-xl w-fit">
-            <Hash className="size-6" />
-          </div>
-          <p className="text-xl font-bold">Transparent Settlement</p>
-          <p className="text-muted-foreground leading-relaxed">Powered by SFI Protocol. Smart waterfall logic ensures every distribution is transparent, immutable, and on-time.</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 w-full gap-6">
+    <Container py="md">
+      <div className="grid md:grid-cols-2 w-full gap-6">
         <ImageGrid />
-        <div className="flex flex-col justify-between size-full">
+        <div className="flex flex-col gap-6 md:gap-12 justify-between size-full">
           <div className="flex flex-col gap-4">
-            <p className="text-[20px] text-muted-foreground font-bold uppercase">Why Creator & Bakers Choose FEA</p>
-            <h4 className="text-[40px] font-extralight leading-tight">A Modern platform for <span className="font-bold">creative</span> projects</h4>
+            <p className="text-[20px] text-muted-foreground font-bold leading-tight uppercase">Why Creator & Bakers Choose FEA</p>
+            <h4 className="text-[40px] font-extralight leading-tight tracking-tight">A Modern platform for <span className="font-bold">creative</span> projects</h4>
           </div>
           <div className="flex flex-col gap-6">
             {items.map((item, index) => (
@@ -71,6 +50,6 @@ export default function WhyChooseFEA() {
           </div>
         </div>
       </div>
-    </section>
+    </Container>
   )
 }

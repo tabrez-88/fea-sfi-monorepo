@@ -1,5 +1,8 @@
+
 import { Clapperboard, Gamepad2, Music } from 'lucide-react'
 import Link from 'next/link'
+
+import Container from '../shared/Container'
 
 interface IndustryCard {
   icon: React.ReactNode
@@ -43,7 +46,7 @@ const industries: IndustryCard[] = [
 
 export default function Industries() {
   return (
-    <section>
+    <Container orientation='vertical' py='md'>
       <div className="flex flex-col gap-4">
         <p className="text-[20px] text-muted-foreground font-bold uppercase">
           Inside the Future of Environment
@@ -54,11 +57,11 @@ export default function Industries() {
         </h4>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mt-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {industries.map((industry) => (
           <div
             key={industry.title}
-            className="rounded-xl border p-4 flex flex-col gap-6 w-52 xl:w-full"
+            className="rounded-xl border p-4 flex flex-col gap-6 w-full last:col-span-2 lg:last:col-span-1"
           >
             <div className="size-14 rounded-xl shadow-xl/15 flex items-center justify-center">
               {industry.icon}
@@ -78,6 +81,6 @@ export default function Industries() {
           </div>
         ))}
       </div>
-    </section>
+    </Container>
   )
 }

@@ -51,7 +51,7 @@ export default function ProjectCardItem({ project }: { project: ProjectCardData 
         </button>
       </div>
 
-      <div className="p-6 flex flex-col gap-4 flex-1">
+      <div className="p-6 flex flex-col w-full flex-1 gap-4">
         <div className="flex flex-col gap-2">
           <h3 className="text-xl font-bold truncate">{project.title}</h3>
           <div className="flex items-center text-muted-foreground font-bold gap-2 text-sm">
@@ -97,13 +97,13 @@ export default function ProjectCardItem({ project }: { project: ProjectCardData 
           </div>
         </div>
 
-        <div className="flex items-center mt-auto justify-between">
-          <div>
-            <p className="text-sm font-bold">Entry from</p>
+        <div className="flex items-center h-12 w-full gap-4 relative">
+          <div className='flex flex-col flex-nowrap'>
+            <p className="text-sm font-bold text-nowrap">Entry from</p>
             <p className="text-lg font-bold">${project.entryFrom}</p>
           </div>
-          <Button asChild className="rounded-lg px-10">
-            <Link href={`/projects/${project.id}` as never}>View</Link>
+          <Button variant="link" asChild className="rounded-md h-full flex-1">
+            <Link href={`/projects/${project.id}`}>View</Link>
           </Button>
         </div>
       </div>

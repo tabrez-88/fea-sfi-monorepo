@@ -74,22 +74,24 @@ const sections: LegalSectionData[] = [
 
 export default function LegalPage() {
   return (
-    <Container>
-      <section className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground font-bold uppercase">Legal & Disclosures</p>
-        <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
-          Important information about using <span className="font-bold">FEA</span> and
-          participating in projects
-        </h1>
-      </section>
-
+    <div>
+      <Container orientation="vertical">
+        <section className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground font-bold uppercase">Legal & Disclosures</p>
+          <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
+            Important information about using <span className="font-bold">FEA</span> and
+            participating in projects
+          </h1>
+        </section>
+      </Container>
       <Separator />
-
-      <section className="flex gap-12">
-        <LegalContent sections={sections} />
-        <LegalSidebar sections={sections} />
-      </section>
+      <Container>
+        <section className="flex gap-12">
+          <LegalContent sections={sections} />
+          <LegalSidebar sections={sections} />
+        </section>
+      </Container>
       <Banners />
-    </Container>
+    </div>
   )
 }

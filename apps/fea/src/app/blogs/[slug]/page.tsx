@@ -66,17 +66,19 @@ const relatedPosts: RelatedPost[] = [
 
 export default function BlogDetailPage() {
   return (
-    <Container>
-      <section className="flex flex-col lg:flex-row gap-10">
-        <BlogArticle
-          heroImage="/assets/studio2.jpg"
-          title="Ut enim ad minim veniam, quis nostrud exercitation"
-          date="23 Feb, 2024"
-          shareLinks={shareLinks}
-          content={content}
-        />
-        <RelatedPosts posts={relatedPosts} />
-      </section>
-    </Container>
+    <div>
+      <Container>
+        <section className="flex flex-col lg:flex-row gap-10">
+          <BlogArticle
+            heroImage="/assets/studio2.jpg"
+            title="Ut enim ad minim veniam, quis nostrud exercitation"
+            date="23 Feb, 2024"
+            shareLinks={shareLinks}
+            content={content}
+          />
+          <RelatedPosts posts={relatedPosts} />
+        </section>
+      </Container>
+    </div>
   )
 }

@@ -67,14 +67,12 @@ export default function Navbar() {
         </NavigationMenu>
       </div>
 
-      {/* Desktop Buttons */}
       <div className="hidden md:flex gap-4">
         <Button size="lg" variant="outline">Submit a Project</Button>
         <Button size="lg" variant="outline">Login</Button>
         <Button size="lg" variant="default">Sign Up</Button>
       </div>
 
-      {/* Mobile Hamburger + Sheet */}
       <Sheet>
         <SheetTrigger asChild className="md:hidden">
           <Button variant="ghost" size="icon">

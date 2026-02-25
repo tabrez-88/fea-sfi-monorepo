@@ -45,9 +45,8 @@ export default function DiscoverGrid({
   )
 
   return (
-    <>
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mt-8">
+    <div className='flex flex-col pt-6 pb-12 lg:px-37.5'>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
         <SearchBar
           value={searchQuery}
           onChange={(value) => {
@@ -91,8 +90,7 @@ export default function DiscoverGrid({
         />
       </div>
 
-      {/* Project Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
         {paginatedProjects.map((project) => (
           <ProjectCardItem key={project.id} project={project} />
         ))}
@@ -104,12 +102,11 @@ export default function DiscoverGrid({
         </div>
       )}
 
-      {/* Pagination */}
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
       />
-    </>
+    </div>
   )
 }

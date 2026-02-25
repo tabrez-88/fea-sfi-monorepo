@@ -4,6 +4,7 @@ import FaqContent, { type FaqCategoryData } from '@/components/Faq/FaqContent'
 import StillNeedHelp from '@/components/Faq/StillNeedHelp'
 import Banners from '@/components/shared/Banners'
 import Container from '@/components/shared/Container'
+import { Separator } from '@/components/ui/separator'
 
 const categories: FaqCategoryData[] = [
   {
@@ -98,22 +99,22 @@ const categories: FaqCategoryData[] = [
 
 export default function FaqPage() {
   return (
-    <Container>
-      <section className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground font-bold uppercase">Support</p>
-        <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
-          Learn how <span className="font-bold">FEA</span> works, how support differs from
-          investment, and what to expect
-        </h1>
-      </section>
-
+    <div>
+      <Container orientation="vertical" py="md" gap="sm">
+        <div className="flex flex-col gap-4 max-w-212.25">
+          <p className="text-[20px] text-muted-foreground font-bold uppercase">Support</p>
+          <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight">
+            Learn how <span className="font-bold">FEA</span> works, how support differs from
+            investment, and what to expect
+          </h1>
+        </div>
+      </Container>
+      <Separator />
       <Suspense>
         <FaqContent categories={categories} />
       </Suspense>
-
       <StillNeedHelp />
-
       <Banners />
-    </Container>
+    </div>
   )
 }

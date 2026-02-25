@@ -1,10 +1,8 @@
 import HeroSection from '@/components/HowItWorks/HeroSection'
 import ParticipationTypes from '@/components/HowItWorks/ParticipationTypes'
 import PlatformFeatures from '@/components/HowItWorks/PlatformFeatures'
-import StatsSection from '@/components/HowItWorks/StatsSection'
 import WhySection from '@/components/HowItWorks/WhySection'
 import Banners from '@/components/shared/Banners'
-import Container from '@/components/shared/Container'
 
 const perksFeatures = [
   'Perks are non-financial benefits',
@@ -50,7 +48,7 @@ const stats = [
 
 export default function HowItWorksPage() {
   return (
-    <Container>
+    <div>
       <HeroSection
         title={
           <>
@@ -65,7 +63,6 @@ export default function HowItWorksPage() {
         image="/assets/studio2.jpg"
         imageAlt="Entertainment projects showcase"
       />
-
       <ParticipationTypes
         introText={
           <>
@@ -78,7 +75,6 @@ export default function HowItWorksPage() {
         verifiedTitle="Verified Participation"
         verifiedFeatures={verifiedFeatures}
       />
-
       <WhySection
         subtitle="Why We Build FEA"
         title={
@@ -91,7 +87,6 @@ export default function HowItWorksPage() {
         image="/assets/studio2.jpg"
         imageAlt="Creators collaborating"
       />
-
       <PlatformFeatures
         subtitle="his"
         title={
@@ -101,20 +96,16 @@ export default function HowItWorksPage() {
           </>
         }
         features={platformFeatures}
-      />
-
-      <StatsSection
         missionText={
           <>
             <span className="font-bold">FEA</span> aims to become a core platform for entertainment
-            projects, with revenue settlement powered by <span className="font-bold">SFI.</span> Our
+            projects, with revenue settlement powered by SFI. Our
             focus is long-term sustainability, not short-term speculation.
           </>
         }
         stats={stats}
       />
-
       <Banners />
-    </Container>
+    </div>
   )
 }

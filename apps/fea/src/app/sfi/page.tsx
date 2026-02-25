@@ -3,7 +3,6 @@ import SfiProcess from '@/components/Sfi/SfiProcess'
 import WhatSfiDoes from '@/components/Sfi/WhatSfiDoes'
 import WhatSfiIs from '@/components/Sfi/WhatSfiIs'
 import Banners from '@/components/shared/Banners'
-import Container from '@/components/shared/Container'
 import { Separator } from '@/components/ui/separator'
 
 const heroSteps = [
@@ -61,7 +60,7 @@ const processSteps = [
 
 export default function SfiPage() {
   return (
-    <Container>
+    <div>
       <SfiHero
         title="SFI"
         subtitle={
@@ -76,7 +75,7 @@ export default function SfiPage() {
         ctaLabel="Explore SFI"
         steps={heroSteps}
       />
-
+      <Separator />
       <WhatSfiIs
         subtitle="What SFI Is"
         description={
@@ -88,9 +87,7 @@ export default function SfiPage() {
         }
         footnote="It calculates allocations based on reported revenue and predefined rules, and produces verifiable settlement records over time."
       />
-
       <Separator />
-
       <WhatSfiDoes
         subtitle="What SFI Does"
         title={
@@ -101,9 +98,7 @@ export default function SfiPage() {
         items={sfiDoes}
         principles={principles}
       />
-
       <Separator />
-
       <SfiProcess
         subtitle="The Process"
         title={
@@ -115,8 +110,7 @@ export default function SfiPage() {
         processImage="/assets/studio2.jpg"
         steps={processSteps}
       />
-
       <Banners />
-    </Container>
+    </div>
   )
 }

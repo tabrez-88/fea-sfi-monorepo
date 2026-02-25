@@ -63,24 +63,25 @@ const listSections = [
 
 export default function CareerDetailPage() {
   return (
-    <Container>
-      <section className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground font-bold uppercase">{jobDetails.type}</p>
-        <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
-          {jobDetails.title}
-        </h1>
-      </section>
+    <div>
+      <Container orientation="vertical">
+        <section className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground font-bold uppercase">{jobDetails.type}</p>
+          <h1 className="text-3xl lg:text-[40px] font-extralight leading-tight max-w-2xl">
+            {jobDetails.title}
+          </h1>
+        </section>
 
-      <section className="flex flex-col lg:flex-row gap-10 items-start">
-        <JobDetailInfo
-          infoRows={infoRows}
-          roleOverview={roleOverview}
-          sections={listSections}
-        />
-        <ApplicationForm />
-      </section>
-
+        <section className="flex flex-col lg:flex-row gap-10 items-start">
+          <JobDetailInfo
+            infoRows={infoRows}
+            roleOverview={roleOverview}
+            sections={listSections}
+          />
+          <ApplicationForm />
+        </section>
+      </Container>
       <Banners />
-    </Container>
+    </div>
   )
 }
