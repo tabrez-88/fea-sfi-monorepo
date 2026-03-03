@@ -70,7 +70,12 @@ create a new snapshot with updated terms.
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid input - validation failed or invalid participant references',
+    description: `Invalid input. Possible errors:
+- Participant ID not found in this deal
+- feePercentage must be 0-100
+- recoupCap must be positive
+- netProfitPercentage must be 0-100
+- Net profit percentages sum exceeds 100%`,
   })
   @ApiResponse({
     status: 404,
@@ -134,6 +139,7 @@ Returns the complete rule snapshot including all participant data.
 - All participants with their frozen terms
 - Effective date range
 - Version information
+- **ruleSummary**: auto-generated breakdown of distribution fees, recoupment caps, net profit splits, and warnings
 
 **Use Cases:**
 - Inspect the exact rules used for a settlement run

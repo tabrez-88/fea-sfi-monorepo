@@ -38,6 +38,15 @@ export class RevenueService {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
 
+    // Validate period dates
+    const periodStart = new Date(createDto.periodStart);
+    const periodEnd = new Date(createDto.periodEnd);
+    if (periodStart >= periodEnd) {
+      throw new BadRequestException(
+        'periodStart must be before periodEnd',
+      );
+    }
+
     // Generate globally unique batch number
     const batchCount = await this.prisma.revenueBatch.count();
     const year = new Date().getFullYear();
@@ -47,8 +56,8 @@ export class RevenueService {
       data: {
         dealId,
         batchNumber,
-        periodStart: new Date(createDto.periodStart),
-        periodEnd: new Date(createDto.periodEnd),
+        periodStart,
+        periodEnd,
         totalAmount: new Prisma.Decimal(createDto.totalAmount),
         currency: createDto.currency,
         source: createDto.source,

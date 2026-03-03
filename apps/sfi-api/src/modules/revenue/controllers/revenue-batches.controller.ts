@@ -71,7 +71,11 @@ revenue collected during a specific time period from a specific source.
   })
   @ApiResponse({
     status: 400,
-    description: 'Invalid input - validation failed',
+    description: `Invalid input. Possible errors:
+- periodStart must be before periodEnd
+- totalAmount must be >= 0
+- Invalid currency code
+- Invalid date format`,
   })
   @ApiResponse({
     status: 404,
