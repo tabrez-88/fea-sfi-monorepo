@@ -230,12 +230,56 @@ export class RuleSnapshotResponseDto {
   updatedAt!: string;
 }
 
+export class RuleSummaryDto {
+  @ApiProperty({
+    description: 'Total number of participants in this snapshot',
+    example: 4,
+  })
+  totalParticipants!: number;
+
+  @ApiProperty({
+    description: 'Breakdown of participants by role',
+    example: { PRODUCER: 1, DISTRIBUTOR: 1, INVESTOR: 1, TALENT: 1 },
+  })
+  roleBreakdown!: Record<string, number>;
+
+  @ApiPropertyOptional({
+    description: 'Total distribution fee percentage across all fee-paying participants',
+    example: 30,
+  })
+  totalDistributionFeePercent?: number;
+
+  @ApiPropertyOptional({
+    description: 'Total recoupment cap across all participants with recoupment',
+    example: 500000,
+  })
+  totalRecoupmentCap?: number;
+
+  @ApiPropertyOptional({
+    description: 'Net profit split breakdown by participant name',
+    example: { 'Studio A': 50, 'Investor Group': 30, 'Lead Actors': 20 },
+  })
+  netProfitSplit?: Record<string, number>;
+
+  @ApiPropertyOptional({
+    description: 'Warnings or issues detected in the rule configuration',
+    example: ['Net profit percentages sum to 90% (expected 100%)'],
+  })
+  warnings?: string[];
+}
+
 export class RuleSnapshotDetailResponseDto extends RuleSnapshotResponseDto {
   @ApiProperty({
     description: 'Participants included in this snapshot with their frozen rule data',
     type: [RuleSnapshotParticipantResponseDto],
   })
   participants!: RuleSnapshotParticipantResponseDto[];
+
+  @ApiProperty({
+    description: 'Human-readable summary of the rule configuration derived from participant data',
+    type: RuleSummaryDto,
+  })
+  ruleSummary!: RuleSummaryDto;
 }
 
 export class RuleSnapshotListResponseDto {

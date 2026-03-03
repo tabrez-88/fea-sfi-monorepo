@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -30,6 +35,71 @@ export class RulesService {
     });
     if (!deal) {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
+
+    // Validate participants exist and belong to this deal
+    const participantIds = createDto.participants.map((p) => p.participantId);
+    const existingParticipants = await this.prisma.participant.findMany({
+      where: { id: { in: participantIds }, dealId },
+      select: { id: true },
+    });
+    const existingIds = new Set(existingParticipants.map((p) => p.id));
+    const missingIds = participantIds.filter((id) => !existingIds.has(id));
+    if (missingIds.length > 0) {
+      throw new BadRequestException(
+        `Participants not found in this deal: ${missingIds.join(', ')}`,
+      );
+    }
+
+    // Validate participantData rules
+    const errors: string[] = [];
+    let totalNetProfit = 0;
+    let hasNetProfit = false;
+
+    for (const p of createDto.participants) {
+      const data = p.participantData;
+      if (!data) continue;
+
+      const feePercent = data.feePercentage as number | undefined;
+      if (feePercent !== undefined && (feePercent < 0 || feePercent > 100)) {
+        errors.push(
+          `Participant ${p.participantId}: feePercentage must be 0-100 (got ${feePercent})`,
+        );
+      }
+
+      const recoupCap = (data.recoupCap ?? data.recoupAmount) as
+        | number
+        | undefined;
+      if (recoupCap !== undefined && recoupCap < 0) {
+        errors.push(
+          `Participant ${p.participantId}: recoupCap must be positive (got ${recoupCap})`,
+        );
+      }
+
+      const profitPercent = (data.netProfitPercentage ??
+        data.allocationPercentage) as number | undefined;
+      if (profitPercent !== undefined) {
+        if (profitPercent < 0 || profitPercent > 100) {
+          errors.push(
+            `Participant ${p.participantId}: netProfitPercentage must be 0-100 (got ${profitPercent})`,
+          );
+        }
+        totalNetProfit += profitPercent;
+        hasNetProfit = true;
+      }
+    }
+
+    if (hasNetProfit && totalNetProfit > 100) {
+      errors.push(
+        `Net profit percentages sum to ${totalNetProfit}% (cannot exceed 100%)`,
+      );
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        message: 'Rule validation failed',
+        errors,
+      });
     }
 
     // Get next version number
