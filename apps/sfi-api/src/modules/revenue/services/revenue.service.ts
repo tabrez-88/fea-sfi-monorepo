@@ -7,6 +7,7 @@ import {
 import { RevenueBatchStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import { PaginationQueryDto } from '../../deals/dto';
 import {
   CreateRevenueBatchDto,
@@ -21,7 +22,10 @@ import { RevenueBatchMapper } from '../mappers/revenue-batch.mapper';
 export class RevenueService {
   private readonly logger = new Logger(RevenueService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   async createBatch(
     dealId: string,
@@ -71,6 +75,16 @@ export class RevenueService {
     });
 
     this.logger.log(`Revenue batch created: ${batch.id} (${batchNumber})`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'CREATED',
+      entityType: 'RevenueBatch',
+      entityId: batch.id,
+      dealId,
+      metadata: { batchNumber, totalAmount: createDto.totalAmount, currency: createDto.currency },
+    });
+
     return RevenueBatchMapper.toResponse(batch);
   }
 
@@ -161,6 +175,16 @@ export class RevenueService {
     });
 
     this.logger.log(`Revenue batch validated: ${id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'VALIDATED',
+      entityType: 'RevenueBatch',
+      entityId: id,
+      dealId: batch.dealId,
+      metadata: { previousStatus: 'PENDING', newStatus: 'VALIDATED' },
+    });
+
     return RevenueBatchMapper.toResponse(updated);
   }
 
@@ -200,6 +224,16 @@ export class RevenueService {
     });
 
     this.logger.log(`Revenue batch rejected: ${id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'REJECTED',
+      entityType: 'RevenueBatch',
+      entityId: id,
+      dealId: batch.dealId,
+      metadata: { previousStatus: batch.status, newStatus: 'REJECTED', reason: rejectDto.rejectionReason },
+    });
+
     return RevenueBatchMapper.toResponse(updated);
   }
 

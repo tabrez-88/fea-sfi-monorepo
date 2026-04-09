@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { ParticipantRole, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import { PaginationQueryDto } from '../../deals/dto';
 import { DealsService } from '../../deals/services/deals.service';
 import { CreateParticipantDto, ParticipantResponseDto } from '../dto';
@@ -14,6 +15,7 @@ export class ParticipantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dealsService: DealsService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   async create(
@@ -40,6 +42,16 @@ export class ParticipantsService {
     });
 
     this.logger.log(`Participant created with ID: ${participant.id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'CREATED',
+      entityType: 'Participant',
+      entityId: participant.id,
+      dealId,
+      metadata: { name: participant.name, role: participant.role },
+    });
+
     return ParticipantMapper.toResponse(participant);
   }
 

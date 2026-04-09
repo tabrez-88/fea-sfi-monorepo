@@ -24,6 +24,7 @@ import {
   PreviewSettlementResponseDto,
   FinalizeSettlementResponseDto,
   CreateCorrectionRunDto,
+  ProofVerificationResponseDto,
 } from '../dto';
 import { SettlementService } from '../services/settlement.service';
 
@@ -361,5 +362,50 @@ The correction chain (original -> correction) provides full audit history:
     @Body() createDto: CreateCorrectionRunDto,
   ): Promise<SettlementRunResponseDto> {
     return this.settlementService.createCorrectionRun(id, createDto);
+  }
+
+  @Post('settlement-runs/:id/verify')
+  @ApiOperation({
+    summary: 'Verify settlement integrity',
+    description: `
+Re-computes the settlement using the same inputs (rule snapshot + revenue batches)
+and compares the resulting proof hash against the stored proof hash.
+
+**Purpose:**
+Proves that the settlement is deterministic and has not been tampered with.
+Given identical inputs, the engine always produces the same allocations and hash.
+
+**Requirements:**
+- Settlement run must be in PREVIEWED or FINALIZED status
+- A proof record must exist for the run
+
+**Result:**
+- verified=true: Computed hash matches stored hash — settlement is intact
+- verified=false: Hash mismatch — data may have been altered (investigate)
+    `,
+  })
+  @ApiParam({
+    name: 'id',
+    type: 'string',
+    format: 'uuid',
+    description: 'The settlement run ID to verify',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification result',
+    type: ProofVerificationResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot verify (invalid status)',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Settlement run or proof record not found',
+  })
+  async verifyRun(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ProofVerificationResponseDto> {
+    return this.settlementService.verifyRun(id);
   }
 }

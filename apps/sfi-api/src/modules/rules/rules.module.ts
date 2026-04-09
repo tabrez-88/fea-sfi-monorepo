@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 
+import { AuditLogModule } from '../audit-log/audit-log.module';
+
 import { RuleSnapshotsController } from './controllers/rule-snapshots.controller';
 import { RulesService } from './services/rules.service';
 
@@ -15,6 +17,7 @@ import { RulesService } from './services/rules.service';
  * - Participant roster freezing within snapshots
  */
 @Module({
+  imports: [AuditLogModule],
   controllers: [RuleSnapshotsController],
   providers: [RulesService],
   exports: [RulesService],

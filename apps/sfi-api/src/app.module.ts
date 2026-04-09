@@ -9,6 +9,7 @@ import { ParticipantsModule } from './modules/participants/participants.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { RulesModule } from './modules/rules/rules.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { PrismaModule } from './prisma/prisma.module';
     SettlementModule,
     LedgerModule,
     DocumentsModule,
+    AuditLogModule,
   ],
 })
 export class AppModule {}

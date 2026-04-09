@@ -12,6 +12,7 @@ import {
 } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import { PaginationQueryDto } from '../../deals/dto';
 import {
   CreateSettlementRunDto,
@@ -21,6 +22,7 @@ import {
   PreviewSettlementResponseDto,
   FinalizeSettlementResponseDto,
   CreateCorrectionRunDto,
+  ProofVerificationResponseDto,
   RunTypeEnum,
   SettlementStatusEnum,
   SettlementPhaseEnum,
@@ -38,7 +40,10 @@ export class SettlementService {
   private readonly logger = new Logger(SettlementService.name);
   private readonly engine = new SettlementEngine();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   async createRun(
     dealId: string,
@@ -112,6 +117,16 @@ export class SettlementService {
     });
 
     this.logger.log(`Settlement run created: ${run.id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'CREATED',
+      entityType: 'SettlementRun',
+      entityId: run.id,
+      dealId,
+      metadata: { ruleSnapshotId: createDto.ruleSnapshotId, revenueBatchCount: createDto.revenueBatchIds.length },
+    });
+
     return this.mapRunToResponse(run);
   }
 
@@ -243,6 +258,15 @@ export class SettlementService {
     await this.prisma.settlementRun.update({
       where: { id },
       data: { status: SettlementRunStatus.PREVIEWED },
+    });
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'PREVIEWED',
+      entityType: 'SettlementRun',
+      entityId: id,
+      dealId: run.dealId,
+      metadata: { previousStatus: run.status, newStatus: 'PREVIEWED', totalAllocated: result.totalAllocated },
     });
 
     return this.mapEngineOutputToPreview(id, result);
@@ -381,6 +405,16 @@ export class SettlementService {
     });
 
     this.logger.log(`Settlement run finalized: ${id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'FINALIZED',
+      entityType: 'SettlementRun',
+      entityId: id,
+      dealId: run.dealId,
+      metadata: { totalAllocated: result.totalAllocated, allocationCount: result.allocations.length },
+    });
+
     return this.buildFinalizedResponse(id);
   }
 
@@ -427,7 +461,81 @@ export class SettlementService {
     });
 
     this.logger.log(`Correction run created: ${correctionRun.id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'CORRECTION_CREATED',
+      entityType: 'SettlementRun',
+      entityId: correctionRun.id,
+      dealId: originalRun.dealId,
+      metadata: { originalRunId: originalRunId, notes: createDto.notes },
+    });
+
     return this.mapRunToResponse(correctionRun);
+  }
+
+  async verifyRun(id: string): Promise<ProofVerificationResponseDto> {
+    this.logger.log(`Verifying settlement run: ${id}`);
+
+    const run = await this.prisma.settlementRun.findUnique({
+      where: { id },
+      include: {
+        ruleSnapshot: {
+          include: {
+            ruleSnapshotParticipants: { include: { participant: true } },
+          },
+        },
+        settlementRevenueLinks: { include: { revenueBatch: true } },
+        proofRecords: { take: 1, orderBy: { createdAt: 'desc' } },
+      },
+    });
+
+    if (!run) {
+      throw new NotFoundException(`Settlement run with ID ${id} not found`);
+    }
+
+    if (
+      run.status !== SettlementRunStatus.FINALIZED &&
+      run.status !== SettlementRunStatus.PREVIEWED
+    ) {
+      throw new BadRequestException(
+        `Cannot verify run in ${run.status} status. Must be PREVIEWED or FINALIZED.`,
+      );
+    }
+
+    const storedProof = run.proofRecords[0];
+    if (!storedProof) {
+      throw new NotFoundException(
+        `No proof record found for settlement run ${id}`,
+      );
+    }
+
+    // Re-compute using the same engine with the stored timestamp
+    const engineInput = this.buildEngineInput(run);
+    const result = this.engine.calculate(
+      engineInput,
+      storedProof.timestamp.toISOString(),
+    );
+
+    const verified = storedProof.proofHash === result.proof.proofHash;
+    const now = new Date().toISOString();
+
+    this.logger.log(
+      `Verification result for run ${id}: ${verified ? 'MATCH' : 'MISMATCH'}`,
+    );
+
+    return {
+      settlementRunId: id,
+      verified,
+      storedHash: storedProof.proofHash,
+      computedHash: result.proof.proofHash,
+      algorithm: storedProof.algorithm,
+      originalTimestamp: storedProof.timestamp.toISOString(),
+      verifiedAt: now,
+      message: verified
+        ? 'Settlement is DETERMINISTIC and UNTAMPERED. Hash match confirmed.'
+        : 'WARNING: Hash MISMATCH detected. The settlement data may have been altered.',
+    };
   }
 
   // ============================================

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { DealStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import { CreateDealDto, DealResponseDto, PaginationQueryDto } from '../dto';
 import { DealMapper } from '../mappers/deal.mapper';
 
@@ -9,7 +10,10 @@ import { DealMapper } from '../mappers/deal.mapper';
 export class DealsService {
   private readonly logger = new Logger(DealsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   async create(createDealDto: CreateDealDto): Promise<DealResponseDto> {
     this.logger.log(`Creating deal: ${createDealDto.name}`);
@@ -30,6 +34,16 @@ export class DealsService {
     });
 
     this.logger.log(`Deal created with ID: ${deal.id}`);
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'CREATED',
+      entityType: 'Deal',
+      entityId: deal.id,
+      dealId: deal.id,
+      metadata: { name: deal.name, status: deal.status },
+    });
+
     return DealMapper.toResponse(deal);
   }
 

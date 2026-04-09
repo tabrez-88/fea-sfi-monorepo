@@ -341,7 +341,29 @@ model ProofRecord {
 }
 
 // ===========================================
-// 6) Documents / Evidence Storage
+// 6) Audit Log
+// ===========================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actor      String   @db.VarChar(255) // User ID or system identifier
+  action     String   @db.VarChar(50)  // CREATED, VALIDATED, FINALIZED, VOIDED, etc.
+  entityType String   @map("entity_type") @db.VarChar(50) // Deal, RevenueBatch, SettlementRun, etc.
+  entityId   String   @map("entity_id")
+  dealId     String?  @map("deal_id")
+  metadata   Json?    // Additional context (before/after values, reason, etc.)
+  timestamp  DateTime @default(now())
+
+  @@index([actor])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([dealId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// ===========================================
+// 7) Documents / Evidence Storage
 // ===========================================
 
 model Document {

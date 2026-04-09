@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 
+import { AuditLogModule } from '../audit-log/audit-log.module';
+
 import { SettlementRunsController } from './controllers/settlement-runs.controller';
 import { SettlementService } from './services/settlement.service';
 
@@ -16,6 +18,7 @@ import { SettlementService } from './services/settlement.service';
  * - Deterministic calculations with proof records for auditability
  */
 @Module({
+  imports: [AuditLogModule],
   controllers: [SettlementRunsController],
   providers: [SettlementService],
   exports: [SettlementService],

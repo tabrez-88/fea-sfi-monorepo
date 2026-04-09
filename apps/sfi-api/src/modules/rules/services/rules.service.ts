@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import { PaginationQueryDto } from '../../deals/dto';
 import {
   CreateRuleSnapshotDto,
@@ -20,7 +21,10 @@ import { RuleSnapshotMapper } from '../mappers/rule-snapshot.mapper';
 export class RulesService {
   private readonly logger = new Logger(RulesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   async createSnapshot(
     dealId: string,
@@ -146,6 +150,16 @@ export class RulesService {
     this.logger.log(
       `Rule snapshot created: ${snapshot.id} (version ${nextVersion})`,
     );
+
+    await this.auditLog.create({
+      actor: 'system',
+      action: 'CREATED',
+      entityType: 'RuleSnapshot',
+      entityId: snapshot.id,
+      dealId,
+      metadata: { version: nextVersion, participantCount: createDto.participants.length },
+    });
+
     return RuleSnapshotMapper.toResponse(snapshot);
   }
 

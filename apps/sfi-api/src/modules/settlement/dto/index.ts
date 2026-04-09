@@ -432,6 +432,57 @@ export class CreateCorrectionRunDto {
   params?: Record<string, unknown>;
 }
 
+// ============================================
+// Proof Verification Response DTO
+// ============================================
+
+export class ProofVerificationResponseDto {
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440100' })
+  settlementRunId!: string;
+
+  @ApiProperty({
+    description: 'Whether the re-computed hash matches the stored hash',
+    example: true,
+  })
+  verified!: boolean;
+
+  @ApiProperty({
+    description: 'The stored proof hash from when the settlement was finalized',
+    example: 'sha256:a1b2c3d4e5f6...',
+  })
+  storedHash!: string;
+
+  @ApiProperty({
+    description: 'The re-computed proof hash using the same inputs',
+    example: 'sha256:a1b2c3d4e5f6...',
+  })
+  computedHash!: string;
+
+  @ApiProperty({
+    description: 'Algorithm used for hash generation',
+    example: 'SHA-256',
+  })
+  algorithm!: string;
+
+  @ApiProperty({
+    description: 'When the original proof was generated',
+    example: '2024-01-15T10:30:00.000Z',
+  })
+  originalTimestamp!: string;
+
+  @ApiProperty({
+    description: 'When the verification was performed',
+    example: '2024-03-12T14:00:00.000Z',
+  })
+  verifiedAt!: string;
+
+  @ApiProperty({
+    description: 'Human-readable result message',
+    example: 'Settlement is DETERMINISTIC and UNTAMPERED. Hash match confirmed.',
+  })
+  message!: string;
+}
+
 export class SettlementRunListResponseDto {
   @ApiProperty({ type: [SettlementRunResponseDto] })
   data!: SettlementRunResponseDto[];
