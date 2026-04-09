@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PaginationQueryDto } from '../../deals/dto';
@@ -10,250 +10,305 @@ import {
   CurrencyEnum,
 } from '../dto';
 
-/**
- * Ledger Service
- *
- * Responsibilities:
- * - Create journals for settlement runs
- * - Create balanced debit/credit postings
- * - Calculate account balances
- * - Generate ledger reports
- * - Provide audit trail for all financial transactions
- */
 @Injectable()
 export class LedgerService {
   private readonly logger = new Logger(LedgerService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Get all ledger entries for a deal
-   * TODO: Implement actual database query
-   */
   async getDealLedger(
     dealId: string,
     query: PaginationQueryDto,
   ): Promise<DealLedgerResponseDto> {
     this.logger.log(`Getting ledger for deal: ${dealId}`);
     const { page = 1, limit = 20 } = query;
+    const skip = (page - 1) * limit;
 
-    // TODO: Query journals for this deal with pagination
+    const deal = await this.prisma.deal.findUnique({
+      where: { id: dealId },
+      select: { id: true },
+    });
+    if (!deal) {
+      throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
+
+    const [journals, total] = await Promise.all([
+      this.prisma.ledgerJournal.findMany({
+        where: { dealId },
+        include: {
+          ledgerPostings: {
+            select: {
+              debitAmount: true,
+              creditAmount: true,
+              currency: true,
+            },
+          },
+        },
+        orderBy: { postedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.ledgerJournal.count({ where: { dealId } }),
+    ]);
+
+    const mappedJournals = journals.map((journal) => {
+      const totalDebit = journal.ledgerPostings.reduce(
+        (sum, p) => sum + Number(p.debitAmount),
+        0,
+      );
+      const totalCredit = journal.ledgerPostings.reduce(
+        (sum, p) => sum + Number(p.creditAmount),
+        0,
+      );
+      return {
+        id: journal.id,
+        dealId: journal.dealId,
+        settlementRunId: journal.settlementRunId,
+        journalNumber: journal.journalNumber,
+        description: journal.description,
+        postedAt: journal.postedAt.toISOString(),
+        totalDebit,
+        totalCredit,
+        postingCount: journal.ledgerPostings.length,
+        createdAt: journal.createdAt.toISOString(),
+        updatedAt: journal.updatedAt.toISOString(),
+      };
+    });
+
+    const summaryTotalDebits = mappedJournals.reduce(
+      (sum, j) => sum + j.totalDebit,
+      0,
+    );
+    const summaryTotalCredits = mappedJournals.reduce(
+      (sum, j) => sum + j.totalCredit,
+      0,
+    );
+    const summaryTotalPostings = mappedJournals.reduce(
+      (sum, j) => sum + j.postingCount,
+      0,
+    );
+
+    // Determine currency from the first posting, default to USD
+    const firstCurrency = journals[0]?.ledgerPostings[0]?.currency;
 
     return {
       dealId,
-      journals: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440300',
-          dealId,
-          settlementRunId: '550e8400-e29b-41d4-a716-446655440100',
-          journalNumber: 'JRN-2024-00001',
-          description: 'Settlement run - Q1 2024 quarterly settlement',
-          postedAt: '2024-04-20T14:00:00.000Z',
-          totalDebit: 125000,
-          totalCredit: 125000,
-          postingCount: 4,
-          createdAt: '2024-04-20T14:00:00.000Z',
-          updatedAt: '2024-04-20T14:00:00.000Z',
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440301',
-          dealId,
-          settlementRunId: '550e8400-e29b-41d4-a716-446655440101',
-          journalNumber: 'JRN-2024-00002',
-          description: 'Settlement run - Q2 2024 quarterly settlement',
-          postedAt: '2024-07-20T14:00:00.000Z',
-          totalDebit: 150000,
-          totalCredit: 150000,
-          postingCount: 4,
-          createdAt: '2024-07-20T14:00:00.000Z',
-          updatedAt: '2024-07-20T14:00:00.000Z',
-        },
-      ],
+      journals: mappedJournals,
       summary: {
-        totalJournals: 2,
-        totalPostings: 8,
-        totalDebits: 275000,
-        totalCredits: 275000,
-        currency: CurrencyEnum.USD,
+        totalJournals: total,
+        totalPostings: summaryTotalPostings,
+        totalDebits: summaryTotalDebits,
+        totalCredits: summaryTotalCredits,
+        currency: (firstCurrency as CurrencyEnum) ?? CurrencyEnum.USD,
       },
       meta: {
         page,
         limit,
-        total: 2,
-        totalPages: 1,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     };
   }
 
-  /**
-   * Get a single ledger journal with all postings
-   * TODO: Implement actual database query
-   */
   async getJournal(id: string): Promise<LedgerJournalDetailDto> {
     this.logger.log(`Getting journal: ${id}`);
 
-    // TODO: Query journal with postings
-    // TODO: Throw NotFoundException if not found
+    const journal = await this.prisma.ledgerJournal.findUnique({
+      where: { id },
+      include: {
+        ledgerPostings: {
+          include: {
+            participant: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!journal) {
+      throw new NotFoundException(`Ledger journal with ID ${id} not found`);
+    }
+
+    const totalDebit = journal.ledgerPostings.reduce(
+      (sum, p) => sum + Number(p.debitAmount),
+      0,
+    );
+    const totalCredit = journal.ledgerPostings.reduce(
+      (sum, p) => sum + Number(p.creditAmount),
+      0,
+    );
 
     return {
-      id,
-      dealId: '550e8400-e29b-41d4-a716-446655440000',
-      settlementRunId: '550e8400-e29b-41d4-a716-446655440100',
-      journalNumber: 'JRN-2024-00001',
-      description: 'Settlement run - Q1 2024 quarterly settlement',
-      postedAt: '2024-04-20T14:00:00.000Z',
-      totalDebit: 125000,
-      totalCredit: 125000,
-      postingCount: 4,
-      createdAt: '2024-04-20T14:00:00.000Z',
-      updatedAt: '2024-04-20T14:00:00.000Z',
-      postings: [
-        {
-          id: '550e8400-e29b-41d4-a716-446655440400',
-          journalId: id,
-          participantId: null,
-          participantName: null,
-          accountType: LedgerAccountTypeEnum.ASSET,
-          accountCode: '1100-REVENUE-CLEARING',
-          debitAmount: 0,
-          creditAmount: 125000,
-          currency: CurrencyEnum.USD,
-          description: 'Revenue clearing - settlement allocation',
-          createdAt: '2024-04-20T14:00:00.000Z',
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440401',
-          journalId: id,
-          participantId: '550e8400-e29b-41d4-a716-446655440001',
-          participantName: 'Acme Productions LLC',
-          accountType: LedgerAccountTypeEnum.LIABILITY,
-          accountCode: '2100-PAYABLE-PARTICIPANT',
-          debitAmount: 0,
-          creditAmount: 75000,
-          currency: CurrencyEnum.USD,
-          description: 'Settlement allocation - NET_PROFITS (60%)',
-          createdAt: '2024-04-20T14:00:00.000Z',
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440402',
-          journalId: id,
-          participantId: '550e8400-e29b-41d4-a716-446655440002',
-          participantName: 'Global Distribution Inc',
-          accountType: LedgerAccountTypeEnum.LIABILITY,
-          accountCode: '2100-PAYABLE-PARTICIPANT',
-          debitAmount: 0,
-          creditAmount: 50000,
-          currency: CurrencyEnum.USD,
-          description: 'Settlement allocation - NET_PROFITS (40%)',
-          createdAt: '2024-04-20T14:00:00.000Z',
-        },
-        {
-          id: '550e8400-e29b-41d4-a716-446655440403',
-          journalId: id,
-          participantId: null,
-          participantName: null,
-          accountType: LedgerAccountTypeEnum.ASSET,
-          accountCode: '1100-REVENUE-CLEARING',
-          debitAmount: 125000,
-          creditAmount: 0,
-          currency: CurrencyEnum.USD,
-          description: 'Revenue clearing - offset entry',
-          createdAt: '2024-04-20T14:00:00.000Z',
-        },
-      ],
+      id: journal.id,
+      dealId: journal.dealId,
+      settlementRunId: journal.settlementRunId,
+      journalNumber: journal.journalNumber,
+      description: journal.description,
+      postedAt: journal.postedAt.toISOString(),
+      totalDebit,
+      totalCredit,
+      postingCount: journal.ledgerPostings.length,
+      createdAt: journal.createdAt.toISOString(),
+      updatedAt: journal.updatedAt.toISOString(),
+      postings: journal.ledgerPostings.map((posting) => ({
+        id: posting.id,
+        journalId: posting.ledgerJournalId,
+        participantId: posting.participantId,
+        participantName: posting.participant?.name ?? null,
+        accountType: posting.accountType as LedgerAccountTypeEnum,
+        accountCode: posting.accountCode,
+        debitAmount: Number(posting.debitAmount),
+        creditAmount: Number(posting.creditAmount),
+        currency: posting.currency as CurrencyEnum,
+        description: posting.description,
+        createdAt: posting.createdAt.toISOString(),
+      })),
     };
   }
 
-  /**
-   * Get ledger for a specific settlement run
-   * TODO: Implement actual database query
-   */
-  async getSettlementLedger(settlementRunId: string): Promise<LedgerJournalDetailDto> {
+  async getSettlementLedger(
+    settlementRunId: string,
+  ): Promise<LedgerJournalDetailDto> {
     this.logger.log(`Getting ledger for settlement run: ${settlementRunId}`);
 
-    // TODO: Query journal by settlement run ID
-    // TODO: Throw NotFoundException if not found or not finalized
+    const journal = await this.prisma.ledgerJournal.findFirst({
+      where: { settlementRunId },
+      include: {
+        ledgerPostings: {
+          include: {
+            participant: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
 
-    return this.getJournal('550e8400-e29b-41d4-a716-446655440300');
+    if (!journal) {
+      throw new NotFoundException(
+        `No ledger journal found for settlement run ${settlementRunId}. The run may not be finalized yet.`,
+      );
+    }
+
+    const totalDebit = journal.ledgerPostings.reduce(
+      (sum, p) => sum + Number(p.debitAmount),
+      0,
+    );
+    const totalCredit = journal.ledgerPostings.reduce(
+      (sum, p) => sum + Number(p.creditAmount),
+      0,
+    );
+
+    return {
+      id: journal.id,
+      dealId: journal.dealId,
+      settlementRunId: journal.settlementRunId,
+      journalNumber: journal.journalNumber,
+      description: journal.description,
+      postedAt: journal.postedAt.toISOString(),
+      totalDebit,
+      totalCredit,
+      postingCount: journal.ledgerPostings.length,
+      createdAt: journal.createdAt.toISOString(),
+      updatedAt: journal.updatedAt.toISOString(),
+      postings: journal.ledgerPostings.map((posting) => ({
+        id: posting.id,
+        journalId: posting.ledgerJournalId,
+        participantId: posting.participantId,
+        participantName: posting.participant?.name ?? null,
+        accountType: posting.accountType as LedgerAccountTypeEnum,
+        accountCode: posting.accountCode,
+        debitAmount: Number(posting.debitAmount),
+        creditAmount: Number(posting.creditAmount),
+        currency: posting.currency as CurrencyEnum,
+        description: posting.description,
+        createdAt: posting.createdAt.toISOString(),
+      })),
+    };
   }
 
-  /**
-   * Get ledger entries for a participant
-   * TODO: Implement actual database query
-   */
   async getParticipantLedger(
     participantId: string,
     query: PaginationQueryDto,
   ): Promise<ParticipantLedgerResponseDto> {
     this.logger.log(`Getting ledger for participant: ${participantId}`);
     const { page = 1, limit = 20 } = query;
+    const skip = (page - 1) * limit;
 
-    // TODO: Query postings for this participant with pagination
+    const participant = await this.prisma.participant.findUnique({
+      where: { id: participantId },
+      select: { id: true, name: true },
+    });
+    if (!participant) {
+      throw new NotFoundException(
+        `Participant with ID ${participantId} not found`,
+      );
+    }
+
+    const where = { participantId };
+
+    const [postings, total] = await Promise.all([
+      this.prisma.ledgerPosting.findMany({
+        where,
+        include: {
+          ledgerJournal: {
+            select: {
+              id: true,
+              journalNumber: true,
+              settlementRunId: true,
+              postedAt: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.ledgerPosting.count({ where }),
+    ]);
+
+    // Calculate total balance across ALL postings (not just this page)
+    const balanceAgg = await this.prisma.ledgerPosting.aggregate({
+      where: { participantId },
+      _sum: {
+        debitAmount: true,
+        creditAmount: true,
+      },
+    });
+
+    const totalDebits = Number(balanceAgg._sum.debitAmount ?? 0);
+    const totalCredits = Number(balanceAgg._sum.creditAmount ?? 0);
+
+    // Determine currency from first posting, default to USD
+    const firstCurrency = postings[0]?.currency;
 
     return {
       participantId,
-      participantName: 'Acme Productions LLC',
-      entries: [
-        {
-          postingId: '550e8400-e29b-41d4-a716-446655440401',
-          journalId: '550e8400-e29b-41d4-a716-446655440300',
-          journalNumber: 'JRN-2024-00001',
-          settlementRunId: '550e8400-e29b-41d4-a716-446655440100',
-          accountType: LedgerAccountTypeEnum.LIABILITY,
-          accountCode: '2100-PAYABLE-PARTICIPANT',
-          debitAmount: 0,
-          creditAmount: 75000,
-          currency: CurrencyEnum.USD,
-          description: 'Settlement allocation - Q1 2024',
-          postedAt: '2024-04-20T14:00:00.000Z',
-        },
-        {
-          postingId: '550e8400-e29b-41d4-a716-446655440411',
-          journalId: '550e8400-e29b-41d4-a716-446655440301',
-          journalNumber: 'JRN-2024-00002',
-          settlementRunId: '550e8400-e29b-41d4-a716-446655440101',
-          accountType: LedgerAccountTypeEnum.LIABILITY,
-          accountCode: '2100-PAYABLE-PARTICIPANT',
-          debitAmount: 0,
-          creditAmount: 90000,
-          currency: CurrencyEnum.USD,
-          description: 'Settlement allocation - Q2 2024',
-          postedAt: '2024-07-20T14:00:00.000Z',
-        },
-      ],
+      participantName: participant.name,
+      entries: postings.map((posting) => ({
+        postingId: posting.id,
+        journalId: posting.ledgerJournal.id,
+        journalNumber: posting.ledgerJournal.journalNumber,
+        settlementRunId: posting.ledgerJournal.settlementRunId,
+        accountType: posting.accountType as LedgerAccountTypeEnum,
+        accountCode: posting.accountCode,
+        debitAmount: Number(posting.debitAmount),
+        creditAmount: Number(posting.creditAmount),
+        currency: posting.currency as CurrencyEnum,
+        description: posting.description,
+        postedAt: posting.ledgerJournal.postedAt.toISOString(),
+      })),
       balance: {
-        totalDebits: 0,
-        totalCredits: 165000,
-        netBalance: 165000,
-        currency: CurrencyEnum.USD,
+        totalDebits,
+        totalCredits,
+        netBalance: totalCredits - totalDebits,
+        currency: (firstCurrency as CurrencyEnum) ?? CurrencyEnum.USD,
       },
       meta: {
         page,
         limit,
-        total: 2,
-        totalPages: 1,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     };
-  }
-
-  /**
-   * Create a journal for a settlement run (internal use)
-   * TODO: Implement actual journal creation
-   */
-  async createJournal(_settlementRunId: string): Promise<string> {
-    this.logger.log('Creating journal for settlement run');
-    // TODO: Create journal entry
-    // TODO: Return journal ID
-    return '550e8400-e29b-41d4-a716-446655440300';
-  }
-
-  /**
-   * Create postings for a journal (internal use)
-   * TODO: Implement posting creation
-   */
-  async createPostings(_journalId: string, _postings: unknown[]): Promise<void> {
-    this.logger.log('Creating postings for journal');
-    // TODO: Create balanced debit/credit postings
-    // TODO: Verify total debits = total credits
   }
 }

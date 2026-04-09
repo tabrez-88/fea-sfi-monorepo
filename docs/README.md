@@ -1,256 +1,127 @@
 # SFI-FEA Documentation
 
-This folder contains all documentation for the SFI-FEA (Settlement and Financial Engine - Film, Entertainment, Arts) project.
+This folder contains all documentation for the SFI-FEA (Settlement and Financial Infrastructure — Film Entertainment Assets) project, organized by audience and purpose.
 
 ---
 
-## 📚 Available Documents
-
-### For Client Demo
-
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| **[CLIENT_DEMO_GUIDE.md](./CLIENT_DEMO_GUIDE.md)** | Step-by-step demo walkthrough with screenshots-style instructions | Non-technical client |
-| **[DEMO_QUICK_REFERENCE.md](./DEMO_QUICK_REFERENCE.md)** | Quick reference card for presenter during demo | Developer (you) |
-
-### Technical Documentation
-
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| **[MILESTONE_1_IMPLEMENTATION.md](./MILESTONE_1_IMPLEMENTATION.md)** | Complete technical report on what was built, how to test it, and what's next | Technical stakeholders |
-| **[GCP_SETUP_GUIDE.md](./GCP_SETUP_GUIDE.md)** | Google Cloud Platform setup for deployment | DevOps/Developer |
-
----
-
-## 🎯 Quick Start Guide
-
-### For Client Demo Preparation
-
-1. **Read first:** [DEMO_QUICK_REFERENCE.md](./DEMO_QUICK_REFERENCE.md) - Get familiar with the flow
-2. **Practice:** Follow [CLIENT_DEMO_GUIDE.md](./CLIENT_DEMO_GUIDE.md) once yourself
-3. **During demo:** Keep [DEMO_QUICK_REFERENCE.md](./DEMO_QUICK_REFERENCE.md) open in another tab
-
-### For Technical Review
-
-1. **Read:** [MILESTONE_1_IMPLEMENTATION.md](./MILESTONE_1_IMPLEMENTATION.md) - Full technical details
-2. **Run tests:** `cd apps/sfi-api && npx jest --testPathPattern=engine`
-3. **Review code:** All engine code in `apps/sfi-api/src/modules/settlement/engine/`
-
----
-
-## 📋 Document Summaries
-
-### CLIENT_DEMO_GUIDE.md
-- **What:** Non-technical walkthrough of the settlement engine demo
-- **Length:** ~10 pages
-- **Time to read:** 15 minutes
-- **Contains:**
-  - Plain English explanation of what the system does
-  - Step-by-step Swagger UI instructions with JSON examples
-  - Expected results with dollar amounts
-  - FAQ section for client questions
-
-**Use this when:** Preparing for or conducting the client demo
-
----
-
-### DEMO_QUICK_REFERENCE.md
-- **What:** One-page cheat sheet for demo presenter
-- **Length:** 1 page
-- **Time to read:** 3 minutes
-- **Contains:**
-  - Server startup commands
-  - 9-step demo flow table
-  - Expected calculation results
-  - Key talking points
-  - Troubleshooting commands
-
-**Use this when:** During the live demo (keep it open for quick reference)
-
----
-
-### MILESTONE_1_IMPLEMENTATION.md
-- **What:** Complete technical implementation report
-- **Length:** ~25 pages
-- **Time to read:** 45 minutes
-- **Contains:**
-  - Executive summary
-  - Detailed list of all files created/modified
-  - Test results (29 passing tests)
-  - Architecture diagrams
-  - How to run locally
-  - Known limitations
-  - Next steps
-
-**Use this when:**
-- Writing status reports to client
-- Onboarding new developers
-- Planning future milestones
-- Technical reviews
-
----
-
-### GCP_SETUP_GUIDE.md
-- **What:** Google Cloud Platform deployment guide
-- **Length:** ~8 pages
-- **Time to read:** 20 minutes
-- **Contains:**
-  - Project setup instructions
-  - Service account configuration
-  - Secret Manager setup for production
-  - Cloud Run deployment steps
-
-**Use this when:** Deploying to staging or production
-
----
-
-## 🎬 Demo Scenario: Naruto The Movie
-
-All demo guides use the same consistent example:
-
-**Revenue:** $150,000,000 (box office)
-
-**Participants:**
-- Studio Pierrot (STUDIO) - 70% net profit
-- Toho Distribution (DISTRIBUTOR) - 15% fee
-- Investor Alpha Corp (INVESTOR) - $30M recoup cap, 15% net profit
-- Investor Beta LLC (INVESTOR) - $20M recoup cap, 10% net profit
-- Masashi Kishimoto (TALENT) - 5% net profit
-
-**Expected Results:**
-- Distributor: $22.5M (15% fee)
-- Investor A: $41.625M ($30M recoup + $11.625M profit)
-- Investor B: $27.75M ($20M recoup + $7.75M profit)
-- Studio: $54.25M (70% of $77.5M remaining)
-- Talent: $3.875M (5% of $77.5M remaining)
-- **Total: $150M** ✅
-
----
-
-## 🔧 Technical Setup
-
-### Prerequisites
-- Node.js v20.19.5
-- pnpm installed
-- Supabase database (DATABASE_URL in .env)
-
-### Start API Server
-```bash
-cd apps/sfi-api
-npx tsc --rootDir src --outDir dist
-node dist/main.js
-```
-
-### Run Tests
-```bash
-cd apps/sfi-api
-npx jest --testPathPattern=engine --verbose
-```
-
-### Access Swagger UI
-Open browser: http://localhost:3001/docs
-
----
-
-## 📊 Milestone Status
-
-### ✅ Milestone 1: Core Settlement Engine (COMPLETE)
-- Pure computation engine with 29 passing tests
-- Database schema with status tracking
-- Real Prisma service implementations
-- REST API with Swagger documentation
-- Audit trail with proof hashes
-- Double-entry ledger integration
-
-### 🔄 Milestone 2: Next Features (Planned)
-- Multi-currency support
-- Exchange rate handling
-- Tax calculations
-- Web UI (React frontend)
-- Participant login portal
-
----
-
-## 🆘 Need Help?
-
-### During Demo
-- **Server won't start:** See troubleshooting in [DEMO_QUICK_REFERENCE.md](./DEMO_QUICK_REFERENCE.md)
-- **Wrong results:** Check you used correct participant IDs from Step 2
-- **Client asks technical question:** Refer to [MILESTONE_1_IMPLEMENTATION.md](./MILESTONE_1_IMPLEMENTATION.md)
-
-### For Development
-- **Architecture questions:** See "Technical Architecture Summary" in [MILESTONE_1_IMPLEMENTATION.md](./MILESTONE_1_IMPLEMENTATION.md)
-- **Test failures:** See "Test Results" section
-- **API endpoints:** Open http://localhost:3001/docs
-
----
-
-## 📝 Document Maintenance
-
-### When to Update
-
-**Update CLIENT_DEMO_GUIDE.md when:**
-- API endpoints change
-- Demo flow changes
-- New features added
-
-**Update MILESTONE_1_IMPLEMENTATION.md when:**
-- New files added to codebase
-- Test count changes
-- Architecture changes
-- Known limitations resolved
-
-**Update DEMO_QUICK_REFERENCE.md when:**
-- Demo steps change
-- Expected results change
-- New talking points needed
-
----
-
-## 📂 File Structure
+## Folder Structure
 
 ```
 docs/
-├── README.md                           # This file - documentation index
-├── CLIENT_DEMO_GUIDE.md                # Non-technical demo walkthrough
-├── DEMO_QUICK_REFERENCE.md             # One-page demo cheat sheet
-├── MILESTONE_1_IMPLEMENTATION.md       # Complete technical report
-└── GCP_SETUP_GUIDE.md                  # Cloud deployment guide
+├── README.md                  # This index
+├── client-reports/            # Client-facing reports & overviews (for Liang)
+├── design/                    # UI/UX design specs & concepts
+├── demos/                     # Demo scripts & API tutorials
+├── engineering/               # Technical implementation reports
+├── execution/                 # Sprint execution workflow (Notion → BE → FE gates)
+└── infrastructure/            # Setup & deployment guides
 ```
 
 ---
 
-## 🚀 Quick Commands Reference
+## [client-reports/](./client-reports/)
 
-### Start Demo
-```bash
-# Terminal 1: Start API
-cd apps/sfi-api
-npx tsc --rootDir src --outDir dist
-node dist/main.js
+Documents prepared for client review — milestone reports, portal scope overviews, delivery plans, and stakeholder explainers.
 
-# Terminal 2: Open docs in browser
-# http://localhost:3001/docs
-```
-
-### Run Tests
-```bash
-cd apps/sfi-api
-npx jest --testPathPattern=engine --verbose
-```
-
-### Check Everything Compiles
-```bash
-npx tsc --noEmit --project apps/sfi-api/tsconfig.json
-```
-
-### Lint Code
-```bash
-npx eslint apps/sfi-api/src/modules/settlement/
-```
+| Document | Purpose |
+|----------|---------|
+| [WHAT_IS_FEA_AND_SFI.md](./client-reports/WHAT_IS_FEA_AND_SFI.md) | Plain-English explainer of FEA & SFI for non-technical stakeholders |
+| [CLIENT_MILESTONE_1_REPORT.md](./client-reports/CLIENT_MILESTONE_1_REPORT.md) | Milestone 1 — Settlement Computation Engine delivery report |
+| [CLIENT_MILESTONE_2B_REPORT.md](./client-reports/CLIENT_MILESTONE_2B_REPORT.md) | Milestone 2B — Rule Snapshots & Revenue Structures delivery report |
+| [CLIENT_ADMIN_PORTAL_OVERVIEW.md](./client-reports/CLIENT_ADMIN_PORTAL_OVERVIEW.md) | Admin Portal scope v1 (42 screens, pre-review) |
+| [CLIENT_ADMIN_PORTAL_OVERVIEW_V2.md](./client-reports/CLIENT_ADMIN_PORTAL_OVERVIEW_V2.md) | Admin Portal scope v2 (32 screens, post-review, Phase 1) |
+| [PHASE_1_DELIVERY_PLAN.md](./client-reports/PHASE_1_DELIVERY_PLAN.md) | Phase 1 delivery plan — 32 screens broken into 5 milestones |
 
 ---
 
-**Last Updated:** February 12, 2026
-**Version:** 1.0.0 (Milestone 1)
-**Status:** Production Ready for Demo
+## [design/](./design/)
+
+Design blueprints and UI/UX specs for the FEA Admin Portal.
+
+| Document | Purpose |
+|----------|---------|
+| [PHASE_1_DESIGN_SPEC.md](./design/PHASE_1_DESIGN_SPEC.md) | Complete UI/UX spec for all 32 Phase 1 screens (Figma execution blueprint) |
+| [FEA_ADMIN_PORTAL_COMPLETE_DESIGN.md](./design/FEA_ADMIN_PORTAL_COMPLETE_DESIGN.md) | Full design concept for the FEA Admin Console with SFI module |
+| [SFI_ADMIN_PORTAL_DESIGN_CONCEPT.md](./design/SFI_ADMIN_PORTAL_DESIGN_CONCEPT.md) | Early SFI-specific design concept (superseded by complete design) |
+
+---
+
+## [demos/](./demos/)
+
+Demo walkthroughs, presenter cheat sheets, and Swagger tutorials.
+
+| Document | Purpose |
+|----------|---------|
+| [CLIENT_DEMO_GUIDE.md](./demos/CLIENT_DEMO_GUIDE.md) | Non-technical walkthrough of the settlement engine demo |
+| [DEMO_QUICK_REFERENCE.md](./demos/DEMO_QUICK_REFERENCE.md) | One-page cheat sheet for the demo presenter |
+| [SETTLEMENT_LIVE_DEMO.md](./demos/SETTLEMENT_LIVE_DEMO.md) | Live Swagger demo — "The Last Horizon" ($200M settlement) |
+| [SETTLEMENT_LIVE_DEMO_2B.md](./demos/SETTLEMENT_LIVE_DEMO_2B.md) | Live Swagger demo — Milestone 2B ("Echoes of Tomorrow", $75M) |
+| [SWAGGER_TUTORIAL.md](./demos/SWAGGER_TUTORIAL.md) | How to use Swagger UI for non-technical users |
+
+---
+
+## [engineering/](./engineering/)
+
+Internal technical implementation reports, API status tracking, and coding standards.
+
+| Document | Purpose |
+|----------|---------|
+| [MILESTONE_1_IMPLEMENTATION.md](./engineering/MILESTONE_1_IMPLEMENTATION.md) | Full Milestone 1 implementation report — files, tests, architecture |
+| [ENDPOINT_STATUS.md](./engineering/ENDPOINT_STATUS.md) | API endpoint implementation status tracking |
+
+### [engineering/standards/](./engineering/standards/)
+
+Canonical coding standards — enforced for all code written from 2026-04-08 onwards.
+
+| Document | Purpose |
+|----------|---------|
+| [standards/README.md](./engineering/standards/README.md) | Standards index — which rules apply to which app |
+| [standards/BACKEND_STANDARDS.md](./engineering/standards/BACKEND_STANDARDS.md) | NestJS module layout, controllers, services, DTOs, mappers, error handling, audit logging |
+| [standards/FRONTEND_ADMIN_STANDARDS.md](./engineering/standards/FRONTEND_ADMIN_STANDARDS.md) | `apps/sfi-admin` strict rules — folder structure, TypeScript config, Axios, React Query hooks, shadcn, constants, types |
+| [standards/TESTING_STANDARDS.md](./engineering/standards/TESTING_STANDARDS.md) | Test naming, placement, mock patterns (Prisma + MSW), coverage expectations, CI integration |
+
+---
+
+## [execution/](./execution/)
+
+Sprint-by-sprint execution workflow for the FEA Admin Portal build. Enforces a **Notion → Backend → Frontend** gate sequence so FE work never starts against missing endpoints.
+
+| Document | Purpose |
+|----------|---------|
+| [README.md](./execution/README.md) | Three-gate workflow definition + sprint verification template |
+| [sprints/sprint-1-be-verification.md](./execution/sprints/sprint-1-be-verification.md) | Sprint 1 (MS-1: Shell & Deals) — BE verification report |
+
+---
+
+## [infrastructure/](./infrastructure/)
+
+Deployment, environment setup, and architectural decision records for infrastructure choices.
+
+| Document | Purpose |
+|----------|---------|
+| [GCP_SETUP_GUIDE.md](./infrastructure/GCP_SETUP_GUIDE.md) | Google Cloud Platform setup for staging/production deployment |
+| [FRONTEND_REPO_STRATEGY.md](./infrastructure/FRONTEND_REPO_STRATEGY.md) | Decision record: where to host the new FEA SFI Admin Portal (verdict: add as `apps/sfi-admin` in this monorepo) |
+
+---
+
+## Quick Navigation by Role
+
+**Client / Stakeholder (Liang):** start with [client-reports/](./client-reports/)
+**UI/UX Designer:** start with [design/PHASE_1_DESIGN_SPEC.md](./design/PHASE_1_DESIGN_SPEC.md)
+**Developer (onboarding):** start with [engineering/MILESTONE_1_IMPLEMENTATION.md](./engineering/MILESTONE_1_IMPLEMENTATION.md)
+**Sprint executor (BE→FE):** start with [execution/README.md](./execution/README.md)
+**Demo presenter:** start with [demos/DEMO_QUICK_REFERENCE.md](./demos/DEMO_QUICK_REFERENCE.md)
+**DevOps:** start with [infrastructure/GCP_SETUP_GUIDE.md](./infrastructure/GCP_SETUP_GUIDE.md)
+
+---
+
+## Milestone Status
+
+### Milestone 1 — Core Settlement Engine — **DELIVERED**
+Pure computation engine, database schema, REST API, audit trail, double-entry ledger.
+
+### Milestone 2B — Rule Snapshots & Revenue Structures — **DELIVERED**
+Immutable rule snapshots, validated revenue batches, rule/revenue/engine binding.
+
+### Phase 1 Admin Portal — **IN DESIGN**
+32 screens across 8 sections, delivered in 5 milestones. See [PHASE_1_DELIVERY_PLAN.md](./client-reports/PHASE_1_DELIVERY_PLAN.md).
