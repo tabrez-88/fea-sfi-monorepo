@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 
 import { ROUTES } from '@/constants/routes';
@@ -21,8 +22,7 @@ const SIZE_SPECS = {
 } as const;
 
 /**
- * FEA-SFI Admin wordmark. The icon is a solid square with a lightning-bolt cutout
- * — matches the Figma `Logo/Dark` symbol (node 88:1323).
+ * FEA-SFI Admin wordmark. Uses /images/logo/logo.png as the icon.
  *
  * When `subtitle` is provided the component renders a column: icon+wordmark row
  * on top, subtitle text below, indented to align with the wordmark text.
@@ -38,24 +38,22 @@ export function Logo({
 
   const wordmark = (
     <Link href={href} className={cn('inline-flex items-center gap-[11px]', !subtitle && className)}>
-      <svg
+      <Image
+        src="/images/logo/logo.png"
+        alt="FEA-SFI Admin"
         width={spec.icon}
         height={spec.icon}
-        viewBox="0 0 48 48"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        aria-hidden
-        className="shrink-0 text-foreground"
-      >
-        <rect width="48" height="48" rx="8" fill="currentColor" />
-        <path d="M25.5 12 L17 27 H23 L20.5 36 L31 20.5 H25 Z" className="fill-background" />
-      </svg>
+        className="shrink-0"
+        priority
+      />
       {!iconOnly && (
         <div className="flex flex-col">
           <span className={cn('font-medium text-foreground whitespace-nowrap', spec.text)}>
             FEA-SFI Admin
           </span>
-          <p className="text-[16px] leading-[20px] tracking-[0.032px] text-neutral">{subtitle}</p>
+          {subtitle && (
+            <p className="text-[16px] leading-[20px] tracking-[0.032px] text-neutral">{subtitle}</p>
+          )}
         </div>
       )}
     </Link>
@@ -63,5 +61,6 @@ export function Logo({
 
   if (!subtitle) return wordmark;
 
-  return <div className={cn('flex flex-col ', className)}>{wordmark}</div>;
+  return <div className={cn('flex flex-col', className)}>{wordmark}</div>;
 }
+
