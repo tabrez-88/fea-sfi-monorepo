@@ -80,7 +80,7 @@ describe('DashboardService', () => {
         _sum: { totalAllocated: 450000000 },
       });
 
-      const result = await service.getSummary();
+      const result = await service.getSummary('user-123');
 
       expect(result.totalDeals).toBe(18);
       expect(result.activeDeals).toBe(9);
@@ -96,7 +96,7 @@ describe('DashboardService', () => {
         _sum: { totalAllocated: null },
       });
 
-      const result = await service.getSummary();
+      const result = await service.getSummary('user-123');
 
       expect(result.totalDeals).toBe(0);
       expect(result.activeDeals).toBe(0);
@@ -135,7 +135,7 @@ describe('DashboardService', () => {
       // For the run position lookup
       mockPrismaService.settlementRun.count.mockResolvedValueOnce(3);
 
-      const result = await service.getPendingReviews();
+      const result = await service.getPendingReviews('user-123');
 
       expect(result.revenueBatches).toHaveLength(1);
       expect(result.revenueBatches[0]).toMatchObject({
@@ -162,7 +162,7 @@ describe('DashboardService', () => {
       mockPrismaService.revenueBatch.findMany.mockResolvedValueOnce([]);
       mockPrismaService.settlementRun.findMany.mockResolvedValueOnce([]);
 
-      const result = await service.getPendingReviews();
+      const result = await service.getPendingReviews('user-123');
 
       expect(result.revenueBatches).toEqual([]);
       expect(result.settlementRuns).toEqual([]);
