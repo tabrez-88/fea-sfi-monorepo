@@ -4,15 +4,19 @@ import { authStorage } from '@/lib/auth-storage';
 import { env } from '@/lib/env';
 
 export const apiClient = axios.create({
-  baseURL: env.NEXT_PUBLIC_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
   timeout: 15_000,
 });
 
-// ─── Request interceptor — attach auth token ──────────────────────────────────
+// ─── Request interceptor — set baseURL lazily + attach auth token ──────────────
+// `env.NEXT_PUBLIC_API_URL` is resolved here (not in `axios.create`) so the Zod
+// env schema is never evaluated at module-load time during `next build` prerender.
 apiClient.interceptors.request.use((config) => {
+  if (!config.baseURL) {
+    config.baseURL = env.NEXT_PUBLIC_API_URL;
+  }
   const token = authStorage.getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

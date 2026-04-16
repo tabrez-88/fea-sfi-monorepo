@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 
 import { LoginForm } from '@/components/auth/LoginForm';
 import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
@@ -15,7 +16,9 @@ export default function LoginPage() {
       imageAlt="Person working at a desk"
       subtitle="Create your own deals here"
     >
-      <LoginForm />
+      <Suspense>
+        <LoginForm />
+      </Suspense>
     </AuthSplitLayout>
   );
 }
