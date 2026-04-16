@@ -5,8 +5,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
-import { authStorage } from '@/lib/auth-storage';
 import { useCurrentUser } from '@/hooks/auth/useCurrentUser';
+import { authStorage } from '@/lib/auth-storage';
 import type { UserRole } from '@/types/auth.types';
 
 type RequireAuthProps = Readonly<{

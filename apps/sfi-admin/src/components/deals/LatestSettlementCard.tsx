@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { Copy } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';

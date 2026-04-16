@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
 import { SidebarIconRail } from '@/components/layout/Sidebar';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/lib/utils';

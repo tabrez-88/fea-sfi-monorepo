@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { Fragment } from 'react';
 
 import { cn } from '@/lib/utils';

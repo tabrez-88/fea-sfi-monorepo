@@ -2,9 +2,9 @@
 
 import { Bell, PanelLeft } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/layout/Logo';
 import { UserMenu } from '@/components/layout/UserMenu';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type NavbarProps = Readonly<{

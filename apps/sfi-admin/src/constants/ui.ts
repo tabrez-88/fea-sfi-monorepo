@@ -1,8 +1,8 @@
-import type { DealStatus } from '@/types/deal.types';
 import type {
   RevenueBatchStatus,
   SettlementRunStatus,
 } from '@/types/dashboard.types';
+import type { DealStatus } from '@/types/deal.types';
 
 /** Badge/pill tone — maps an API status enum to a `Badge` variant. */
 export type StatusTone =

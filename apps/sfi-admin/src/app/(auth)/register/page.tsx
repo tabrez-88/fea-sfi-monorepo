@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
-import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
 import { RegisterForm } from '@/components/auth/RegisterForm';
+import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
 
 export const metadata: Metadata = {
   title: 'Create Account',

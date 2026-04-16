@@ -1,5 +1,5 @@
-import { apiClient } from '@/lib/axios';
 import { API_ENDPOINTS } from '@/constants/api';
+import { apiClient } from '@/lib/axios';
 import type {
   AuthResponse,
   AuthUser,

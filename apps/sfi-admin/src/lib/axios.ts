@@ -1,7 +1,7 @@
 import axios, { AxiosError } from 'axios';
 
-import { env } from '@/lib/env';
 import { authStorage } from '@/lib/auth-storage';
+import { env } from '@/lib/env';
 
 export const apiClient = axios.create({
   baseURL: env.NEXT_PUBLIC_API_URL,

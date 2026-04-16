@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
-import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
 import { ForgotPasswordForm } from '@/components/auth/ForgotPasswordForm';
+import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
 
 export const metadata: Metadata = {
   title: 'Forgot Password',

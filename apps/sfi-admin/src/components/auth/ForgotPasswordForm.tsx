@@ -1,17 +1,17 @@
 'use client';
 
-import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AxiosError } from 'axios';
 import { MailCheck } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import Link from 'next/link';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { FormError, FieldError } from '@/components/auth/FormError';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label, RequiredMark } from '@/components/ui/label';
-import { FieldError, FormError } from '@/components/auth/FormError';
 import { ROUTES } from '@/constants/routes';
 import { useForgotPassword } from '@/hooks/auth/useForgotPassword';
 import type { ApiErrorBody } from '@/types/api.types';

@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { DealStatusBadge } from '@/components/deals/DealStatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
-import { formatNumber } from '@/utils/format';
-import { formatDate } from '@/utils/date';
-import { cn } from '@/lib/utils';
 import { useRecentDeals } from '@/hooks/deals/useRecentDeals';
+import { cn } from '@/lib/utils';
 import type { Deal } from '@/types/deal.types';
+import { formatDate } from '@/utils/date';
+import { formatNumber } from '@/utils/format';
 
 const GRID_COLS = 'grid grid-cols-[250px_1fr_1fr_1fr]';
 

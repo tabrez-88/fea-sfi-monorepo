@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { RevenueBatchStatusChip, SettlementRunStatusChip } from '@/components/dashboard/StatusChip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
-import { formatCurrencyCompact } from '@/utils/format';
-import { cn } from '@/lib/utils';
 import { usePendingReviews } from '@/hooks/dashboard/usePendingReviews';
+import { cn } from '@/lib/utils';
 import type { PendingRevenueBatch, PendingSettlementRun } from '@/types/dashboard.types';
+import { formatCurrencyCompact } from '@/utils/format';
 
 /**
  * Outer "Pending Reviews" card. Figma structure:

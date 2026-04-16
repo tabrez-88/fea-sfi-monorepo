@@ -1,20 +1,19 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AxiosError } from 'axios';
-import { useForm } from 'react-hook-form';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
 import { z } from 'zod';
 
-import { toast } from 'sonner';
-
+import { FormError, FieldError } from '@/components/auth/FormError';
+import { PasswordField } from '@/components/auth/PasswordField';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label, RequiredMark } from '@/components/ui/label';
-import { FieldError, FormError } from '@/components/auth/FormError';
-import { PasswordField } from '@/components/auth/PasswordField';
 import { ROUTES } from '@/constants/routes';
 import { useRegister } from '@/hooks/auth/useRegister';
 import type { ApiErrorBody } from '@/types/api.types';

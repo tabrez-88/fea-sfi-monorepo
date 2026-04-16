@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { ArrowUpRight, type LucideIcon } from 'lucide-react';
+import Link from 'next/link';
 
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/lib/utils';

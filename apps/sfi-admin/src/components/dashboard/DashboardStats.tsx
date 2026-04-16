@@ -1,8 +1,8 @@
 'use client';
 
 import { StatCard } from '@/components/dashboard/StatCard';
-import { formatCurrencyCompact, formatNumber } from '@/utils/format';
 import { useDashboardSummary } from '@/hooks/dashboard/useDashboardSummary';
+import { formatCurrencyCompact, formatNumber } from '@/utils/format';
 
 /**
  * Row of 4 stat cards. Figma layout: flex row, `justify-between`, each card

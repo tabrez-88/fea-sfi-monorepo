@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
-import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
 import { LoginForm } from '@/components/auth/LoginForm';
+import { AuthSplitLayout } from '@/components/layout/AuthSplitLayout';
 
 export const metadata: Metadata = {
   title: 'Sign In',

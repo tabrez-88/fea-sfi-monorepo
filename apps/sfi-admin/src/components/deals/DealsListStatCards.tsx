@@ -1,11 +1,10 @@
 'use client';
 
+import type { DealsStatusFilter } from '@/components/deals/DealsFilterBar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { DealsCountsResponse } from '@/types/deal.types';
 import { formatNumber } from '@/utils/format';
-
-import type { DealsStatusFilter } from '@/components/deals/DealsFilterBar';
 
 type DealsListStatCardsProps = Readonly<{
   counts?: DealsCountsResponse | undefined;

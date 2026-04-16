@@ -1,8 +1,8 @@
 'use client';
 
+import { ArrowUpDown, FileText, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ArrowUpDown, FileText, Plus } from 'lucide-react';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
@@ -22,8 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { DEFAULT_PAGE_SIZE } from '@/constants/ui';
 import { ROUTES } from '@/constants/routes';
+import { DEFAULT_PAGE_SIZE } from '@/constants/ui';
 import { useDeals } from '@/hooks/deals/useDeals';
 import { useDealsCounts } from '@/hooks/deals/useDealsCounts';
 import { cn } from '@/lib/utils';
