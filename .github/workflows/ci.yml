@@ -98,4 +98,6 @@ jobs:
         run: pnpm --filter @sfi-fea/api db:generate
 
       - name: Build all packages
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001
         run: pnpm build

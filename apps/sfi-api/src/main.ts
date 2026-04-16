@@ -39,8 +39,18 @@ async function bootstrap() {
     'CORS_ORIGIN',
     'http://localhost:3000',
   );
+  const corsOrigins = corsOrigin.split(',').map((origin) => origin.trim());
+
+  // Allow an additional admin origin (set via Cloud Run env vars)
+  const adminOrigin = configService.get<string>('ADMIN_CORS_ORIGIN', '');
+  if (adminOrigin) {
+    corsOrigins.push(
+      ...adminOrigin.split(',').map((origin) => origin.trim()),
+    );
+  }
+
   app.enableCors({
-    origin: corsOrigin.split(',').map((origin) => origin.trim()),
+    origin: [...new Set(corsOrigins)],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });
