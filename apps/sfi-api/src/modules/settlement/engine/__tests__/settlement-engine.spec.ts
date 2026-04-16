@@ -3,7 +3,7 @@ import {
   SettlementInput,
   SettlementOutput,
   Phase,
-  ParticipantRole,
+  ParticipantBehavior,
 } from '../types';
 
 describe('SettlementEngine', () => {
@@ -25,26 +25,26 @@ describe('SettlementEngine', () => {
       ruleSnapshotVersion: 1,
       currency: 'USD',
       participants: [
-        { id: 'studio-001', name: 'Studio XYZ', role: ParticipantRole.STUDIO },
+        { id: 'studio-001', name: 'Studio XYZ', roleName: 'Studio', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE },
         {
           id: 'investor-a',
           name: 'Investor A',
-          role: ParticipantRole.INVESTOR,
+          roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
         },
         {
           id: 'investor-b',
           name: 'Investor B',
-          role: ParticipantRole.INVESTOR,
+          roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
         },
         {
           id: 'distributor-001',
           name: 'AMC Theatres',
-          role: ParticipantRole.DISTRIBUTOR,
+          roleName: 'Distributor', behaviorType: ParticipantBehavior.FEE_DEDUCTION,
         },
         {
           id: 'talent-001',
           name: 'Lead Actors',
-          role: ParticipantRole.TALENT,
+          roleName: 'Talent', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
         },
       ],
       revenueBatches: [
@@ -254,12 +254,12 @@ describe('SettlementEngine', () => {
           {
             id: 'investor-1',
             name: 'Solo Investor',
-            role: ParticipantRole.INVESTOR,
+            roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
           },
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [
@@ -327,12 +327,12 @@ describe('SettlementEngine', () => {
           {
             id: 'investor-1',
             name: 'Investor',
-            role: ParticipantRole.INVESTOR,
+            roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
           },
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [
@@ -400,17 +400,17 @@ describe('SettlementEngine', () => {
           {
             id: 'investor-a',
             name: 'Priority Investor',
-            role: ParticipantRole.INVESTOR,
+            roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
           },
           {
             id: 'investor-b',
             name: 'Secondary Investor',
-            role: ParticipantRole.INVESTOR,
+            roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
           },
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [
@@ -499,12 +499,12 @@ describe('SettlementEngine', () => {
           {
             id: 'investor-1',
             name: 'Investor',
-            role: ParticipantRole.INVESTOR,
+            roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
           },
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [
@@ -581,12 +581,12 @@ describe('SettlementEngine', () => {
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
           {
             id: 'talent-1',
             name: 'Talent',
-            role: ParticipantRole.TALENT,
+            roleName: 'Talent', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [
@@ -641,7 +641,7 @@ describe('SettlementEngine', () => {
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [
@@ -729,17 +729,17 @@ describe('SettlementEngine', () => {
           {
             id: 'distributor-1',
             name: 'Distributor',
-            role: ParticipantRole.DISTRIBUTOR,
+            roleName: 'Distributor', behaviorType: ParticipantBehavior.FEE_DEDUCTION,
           },
           {
             id: 'investor-1',
             name: 'Investor',
-            role: ParticipantRole.INVESTOR,
+            roleName: 'Investor', behaviorType: ParticipantBehavior.RECOUPMENT,
           },
           {
             id: 'producer-1',
             name: 'Producer',
-            role: ParticipantRole.PRODUCER,
+            roleName: 'Producer', behaviorType: ParticipantBehavior.NET_PROFIT_SHARE,
           },
         ],
         revenueBatches: [

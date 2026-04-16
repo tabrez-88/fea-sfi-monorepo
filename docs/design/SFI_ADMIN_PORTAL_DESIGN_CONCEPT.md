@@ -1,17 +1,17 @@
 # SFI Admin Portal — Design Concept & Screen Specification
 
-**Purpose:** Design blueprint for the SFI section within the FEA Admin Console
-**Context:** "Admin" = Deal/Project Owner (not super admin). SFI lives inside the existing FEA Admin Console as a per-deal module.
+**Purpose:** Design blueprint for the SFI section within the FEA-SFI Admin Console
+**Context:** "Admin" = Deal/Project Owner (not super admin). SFI lives inside the existing FEA-SFI Admin Console as a per-deal module.
 **Date:** March 2026
 
 ---
 
 ## Portal Architecture
 
-SFI is **not** a standalone portal. It is a **module inside the FEA Admin Console**, scoped per deal/project.
+SFI is **not** a standalone portal. It is a **module inside the FEA-SFI Admin Console**, scoped per deal/project.
 
 ```
-FEA Admin Console (Liang's Lovable app)
+FEA-SFI Admin Console (Liang's Lovable app)
 ├── Projects / Deals (existing)
 ├── Users / Team (existing)
 ├── ... other FEA modules ...
@@ -27,32 +27,32 @@ FEA Admin Console (Liang's Lovable app)
     └── Proof & Audit
 ```
 
-**Entry Point:** User selects a Project/Deal in FEA Admin → clicks into "Settlement" or "SFI" tab → lands on Deal Dashboard.
+**Entry Point:** User selects a Project/Deal in FEA-SFI Admin → clicks into "Settlement" or "SFI" tab → lands on Deal Dashboard.
 
 ---
 
 ## Screen Inventory
 
-| # | Screen | Type | API Endpoints Used |
-|---|--------|------|--------------------|
-| 1 | Deal Dashboard | Read-only overview | GET deals/:id, GET settlement-runs, GET revenue-batches |
-| 2 | Participants List | CRUD (CR) | GET/POST deals/:dealId/participants |
-| 3 | Participant Detail | Read | GET (from list data) |
-| 4 | Rule Snapshots List | List + Create | GET/POST deals/:dealId/rule-snapshots |
-| 5 | Rule Snapshot Detail | Read (with ruleSummary) | GET rule-snapshots/:id |
-| 6 | Create Rule Snapshot | Form (complex) | POST deals/:dealId/rule-snapshots |
-| 7 | Revenue Batches List | CRUD (CRU) | GET/POST deals/:dealId/revenue-batches |
-| 8 | Revenue Batch Detail | Read + Actions | GET revenue-batches/:id, PATCH validate/reject |
-| 9 | Create Revenue Batch | Form | POST deals/:dealId/revenue-batches |
-| 10 | Settlement Runs List | List + Create | GET/POST deals/:dealId/settlement-runs |
-| 11 | Settlement Run Detail | Read + Actions | GET settlement-runs/:id, POST preview/finalize |
-| 12 | Create Settlement Run | Form (select rule + batches) | POST deals/:dealId/settlement-runs |
-| 13 | Settlement Preview | Read (allocation breakdown) | POST settlement-runs/:id/preview |
-| 14 | Ledger Overview | Read (per deal) | GET deals/:dealId/ledger |
-| 15 | Journal Detail | Read (postings) | GET ledger-journals/:id |
-| 16 | Participant Ledger | Read (per participant) | GET participants/:id/ledger |
-| 17 | Documents | CRUD (CRD) | GET/POST/DELETE documents |
-| 18 | Proof & Audit | Read | GET settlement-runs/:id (proofHash) |
+| #   | Screen                | Type                         | API Endpoints Used                                      |
+| --- | --------------------- | ---------------------------- | ------------------------------------------------------- |
+| 1   | Deal Dashboard        | Read-only overview           | GET deals/:id, GET settlement-runs, GET revenue-batches |
+| 2   | Participants List     | CRUD (CR)                    | GET/POST deals/:dealId/participants                     |
+| 3   | Participant Detail    | Read                         | GET (from list data)                                    |
+| 4   | Rule Snapshots List   | List + Create                | GET/POST deals/:dealId/rule-snapshots                   |
+| 5   | Rule Snapshot Detail  | Read (with ruleSummary)      | GET rule-snapshots/:id                                  |
+| 6   | Create Rule Snapshot  | Form (complex)               | POST deals/:dealId/rule-snapshots                       |
+| 7   | Revenue Batches List  | CRUD (CRU)                   | GET/POST deals/:dealId/revenue-batches                  |
+| 8   | Revenue Batch Detail  | Read + Actions               | GET revenue-batches/:id, PATCH validate/reject          |
+| 9   | Create Revenue Batch  | Form                         | POST deals/:dealId/revenue-batches                      |
+| 10  | Settlement Runs List  | List + Create                | GET/POST deals/:dealId/settlement-runs                  |
+| 11  | Settlement Run Detail | Read + Actions               | GET settlement-runs/:id, POST preview/finalize          |
+| 12  | Create Settlement Run | Form (select rule + batches) | POST deals/:dealId/settlement-runs                      |
+| 13  | Settlement Preview    | Read (allocation breakdown)  | POST settlement-runs/:id/preview                        |
+| 14  | Ledger Overview       | Read (per deal)              | GET deals/:dealId/ledger                                |
+| 15  | Journal Detail        | Read (postings)              | GET ledger-journals/:id                                 |
+| 16  | Participant Ledger    | Read (per participant)       | GET participants/:id/ledger                             |
+| 17  | Documents             | CRUD (CRD)                   | GET/POST/DELETE documents                               |
+| 18  | Proof & Audit         | Read                         | GET settlement-runs/:id (proofHash)                     |
 
 **Total: 18 screens** (can be reduced to ~12 with modals/drawers for simple forms)
 
@@ -100,12 +100,14 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Data Sources:**
+
 - GET `/deals/:id` → deal info, participant count
 - GET `/deals/:dealId/settlement-runs?limit=1&sortBy=createdAt&sortOrder=desc` → latest run
 - GET `/deals/:dealId/revenue-batches` → total revenue sum, batch count
 - GET `/deals/:dealId/rule-snapshots` → snapshot count, latest version
 
 **Components:**
+
 - 4x Stat Cards (participants, snapshots, revenue total, settlement count)
 - Latest Settlement Summary Card
 - Quick Action Buttons
@@ -137,6 +139,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **CRUD Operations:**
+
 - **Create:** Modal/drawer form → POST `/deals/:dealId/participants`
 - **Read:** Table with pagination → GET `/deals/:dealId/participants`
 - **Update:** Not supported by API (participants are reference data)
@@ -144,15 +147,16 @@ FEA Admin Console (Liang's Lovable app)
 
 **Create Participant Form Fields:**
 
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| Name | Text input | Yes | 1-255 chars |
-| Role | Dropdown select | Yes | PRODUCER, DISTRIBUTOR, INVESTOR, TALENT, STUDIO, LICENSOR, LICENSEE, COLLECTION_AGENT |
-| Email | Email input | No | Valid email format |
-| External ID | Text input | No | Max 100 chars (for linking to external systems) |
-| Metadata | JSON editor (optional, collapsible) | No | Valid JSON |
+| Field       | Type                                | Required | Validation                                                                            |
+| ----------- | ----------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| Name        | Text input                          | Yes      | 1-255 chars                                                                           |
+| Role        | Dropdown select                     | Yes      | PRODUCER, DISTRIBUTOR, INVESTOR, TALENT, STUDIO, LICENSOR, LICENSEE, COLLECTION_AGENT |
+| Email       | Email input                         | No       | Valid email format                                                                    |
+| External ID | Text input                          | No       | Max 100 chars (for linking to external systems)                                       |
+| Metadata    | JSON editor (optional, collapsible) | No       | Valid JSON                                                                            |
 
 **Role Badge Colors:**
+
 - STUDIO: Blue
 - DISTRIBUTOR: Purple
 - INVESTOR: Green
@@ -190,6 +194,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Data Sources:**
+
 - Participant data from list
 - GET `/participants/:participantId/ledger` → ledger postings summary
 
@@ -217,6 +222,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Key UX Notes:**
+
 - Active snapshot (no effectiveTo) highlighted with green badge
 - Closed snapshots grayed out
 - Version number is auto-incremented, not editable
@@ -278,6 +284,7 @@ FEA Admin Console (Liang's Lovable app)
 **Data Source:** GET `/rule-snapshots/:id` → includes `ruleSummary` + `participants` + `rules`
 
 **Components:**
+
 - Rule Summary Card (visual: role pie chart, profit split bar chart)
 - Participant Terms Table (frozen data from snapshot)
 - Collapsible raw JSON viewer (for power users)
@@ -292,6 +299,7 @@ FEA Admin Console (Liang's Lovable app)
 **URL:** `/deals/:dealId/sfi/rules/new`
 
 **Step 1: Basic Settings**
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Create Rule Snapshot                         Step 1 of 3       │
@@ -308,6 +316,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Step 2: Participant Rules**
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Create Rule Snapshot                         Step 2 of 3       │
@@ -344,6 +353,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Step 3: Review & Confirm**
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Create Rule Snapshot                         Step 3 of 3       │
@@ -360,6 +370,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Validation (live, client-side + server-side):**
+
 - Net profit % running total shown in real-time (warning if > 100%)
 - Fee % must be 0-100
 - Recoup cap must be > 0
@@ -393,6 +404,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Status Badges & Colors:**
+
 - PENDING: Yellow — awaiting validation
 - VALIDATED: Green — ready for settlement
 - PROCESSED: Blue — used in finalized settlement
@@ -442,12 +454,14 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Action Buttons (conditional):**
+
 - PENDING → Show both [Validate] and [Reject]
 - VALIDATED → Show only [Reject] (can still reject before processed)
 - PROCESSED → No actions (locked)
 - REJECTED → No actions (terminal state)
 
 **Validate/Reject triggers confirmation modal:**
+
 ```
 ┌─────────────────────────────────────────┐
 │  Validate Revenue Batch?                │
@@ -499,6 +513,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Validation:**
+
 - Amount ≥ 0
 - Period Start < Period End (live check)
 - Currency from supported list (USD, EUR, GBP, JPY, CHF, CAD, AUD)
@@ -529,6 +544,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Status Badges:**
+
 - DRAFT: Gray — created, not yet computed
 - PREVIEWED: Yellow — computed but not locked
 - FINALIZED: Green — locked, ledger entries created
@@ -600,12 +616,14 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Action Buttons (conditional by status):**
+
 - DRAFT → [Preview Settlement]
 - PREVIEWED → [Finalize Settlement] [Re-Preview]
 - FINALIZED → [Create Correction Run] [View Ledger] [Download Report]
 - VOIDED → No actions
 
 **Finalize Confirmation Modal:**
+
 ```
 ┌─────────────────────────────────────────┐
 │  ⚠ Finalize Settlement?                │
@@ -663,6 +681,7 @@ FEA Admin Console (Liang's Lovable app)
 ```
 
 **Validation:**
+
 - Must select exactly 1 rule snapshot
 - Must select at least 1 revenue batch
 - Only VALIDATED batches selectable
@@ -784,6 +803,7 @@ Not a separate screen — the preview results are shown **on Screen 11** after t
 ```
 
 **CRUD Operations:**
+
 - **Create:** Upload form (file + docType + optional link to batch/run)
 - **Read:** List with filters + detail view (metadata)
 - **Delete:** Only if not linked to finalized settlement
@@ -831,7 +851,7 @@ Not a separate screen — the preview results are shown **on Screen 11** after t
 ## Navigation Structure
 
 ```
-SFI Module (within FEA Admin Console)
+SFI Module (within FEA-SFI Admin Console)
 │
 ├── 📊 Dashboard (/deals/:id/sfi)
 │     └── Overview stats, latest settlement, quick actions
@@ -874,17 +894,17 @@ SFI Module (within FEA Admin Console)
 
 ## Screen Count Summary
 
-| Category | Screens | Implementation |
-|----------|---------|----------------|
-| Dashboard | 1 | Full page |
-| Participants | 2 | Page + modal/drawer |
-| Rules | 3 | List page + detail page + multi-step form |
-| Revenue | 3 | List page + detail page + form |
-| Settlements | 2 | List page + detail page (with inline preview) |
-| Ledger | 3 | Overview + journal detail + participant ledger |
-| Documents | 1 | Page with upload modal |
-| Audit | 1 | Full page |
-| **Total** | **16 unique views** | **8 full pages + 8 modals/drawers/sub-views** |
+| Category     | Screens             | Implementation                                 |
+| ------------ | ------------------- | ---------------------------------------------- |
+| Dashboard    | 1                   | Full page                                      |
+| Participants | 2                   | Page + modal/drawer                            |
+| Rules        | 3                   | List page + detail page + multi-step form      |
+| Revenue      | 3                   | List page + detail page + form                 |
+| Settlements  | 2                   | List page + detail page (with inline preview)  |
+| Ledger       | 3                   | Overview + journal detail + participant ledger |
+| Documents    | 1                   | Page with upload modal                         |
+| Audit        | 1                   | Full page                                      |
+| **Total**    | **16 unique views** | **8 full pages + 8 modals/drawers/sub-views**  |
 
 ---
 
@@ -892,17 +912,17 @@ SFI Module (within FEA Admin Console)
 
 If Liang wants fewer screens for MVP, here's the minimum viable set:
 
-| Priority | Screen | Covers |
-|----------|--------|--------|
-| P0 | Participants List + Add Modal | Managing parties |
-| P0 | Create Rule Snapshot (form) | Defining waterfall rules |
-| P0 | Revenue Batch List + Create + Validate | Revenue input lifecycle |
-| P0 | Settlement Run Detail (with preview + finalize) | Core computation flow |
-| P1 | Deal Dashboard | Overview stats |
-| P1 | Rule Snapshot Detail | Viewing ruleSummary |
-| P1 | Ledger Overview + Journal Detail | Accounting audit |
-| P2 | Documents | Supporting files |
-| P2 | Audit Trail | Proof verification |
+| Priority | Screen                                          | Covers                   |
+| -------- | ----------------------------------------------- | ------------------------ |
+| P0       | Participants List + Add Modal                   | Managing parties         |
+| P0       | Create Rule Snapshot (form)                     | Defining waterfall rules |
+| P0       | Revenue Batch List + Create + Validate          | Revenue input lifecycle  |
+| P0       | Settlement Run Detail (with preview + finalize) | Core computation flow    |
+| P1       | Deal Dashboard                                  | Overview stats           |
+| P1       | Rule Snapshot Detail                            | Viewing ruleSummary      |
+| P1       | Ledger Overview + Journal Detail                | Accounting audit         |
+| P2       | Documents                                       | Supporting files         |
+| P2       | Audit Trail                                     | Proof verification       |
 
 **MVP (P0): 4 screens** — enough to run a complete settlement end-to-end.
 **Full (P0+P1): 7 screens** — production-ready admin experience.
@@ -913,6 +933,7 @@ If Liang wants fewer screens for MVP, here's the minimum viable set:
 ## Technical Integration Notes
 
 ### API Base URL
+
 ```
 Production: https://sfi-api.{domain}/api/v1
 Development: http://localhost:3001/api/v1
@@ -920,44 +941,47 @@ Development: http://localhost:3001/api/v1
 
 ### All Endpoints Used (by screen)
 
-| Endpoint | Method | Used In Screen |
-|----------|--------|----------------|
-| `/deals/:id` | GET | Dashboard |
-| `/deals/:dealId/participants` | GET, POST | Participants |
-| `/deals/:dealId/rule-snapshots` | GET, POST | Rules |
-| `/rule-snapshots/:id` | GET | Rule Detail |
-| `/deals/:dealId/revenue-batches` | GET, POST | Revenue |
-| `/revenue-batches/:id` | GET | Revenue Detail |
-| `/revenue-batches/:id/validate` | PATCH | Revenue Detail |
-| `/revenue-batches/:id/reject` | PATCH | Revenue Detail |
-| `/deals/:dealId/settlement-runs` | GET, POST | Settlements |
-| `/settlement-runs/:id` | GET | Settlement Detail |
-| `/settlement-runs/:id/preview` | POST | Settlement Detail |
-| `/settlement-runs/:id/finalize` | POST | Settlement Detail |
-| `/settlement-runs/:id/corrections` | POST | Settlement Detail |
-| `/deals/:dealId/ledger` | GET | Ledger |
-| `/ledger-journals/:id` | GET | Journal Detail |
-| `/participants/:id/ledger` | GET | Participant Ledger |
-| `/documents` | POST, DELETE | Documents |
-| `/deals/:dealId/documents` | GET, POST | Documents |
+| Endpoint                           | Method       | Used In Screen     |
+| ---------------------------------- | ------------ | ------------------ |
+| `/deals/:id`                       | GET          | Dashboard          |
+| `/deals/:dealId/participants`      | GET, POST    | Participants       |
+| `/deals/:dealId/rule-snapshots`    | GET, POST    | Rules              |
+| `/rule-snapshots/:id`              | GET          | Rule Detail        |
+| `/deals/:dealId/revenue-batches`   | GET, POST    | Revenue            |
+| `/revenue-batches/:id`             | GET          | Revenue Detail     |
+| `/revenue-batches/:id/validate`    | PATCH        | Revenue Detail     |
+| `/revenue-batches/:id/reject`      | PATCH        | Revenue Detail     |
+| `/deals/:dealId/settlement-runs`   | GET, POST    | Settlements        |
+| `/settlement-runs/:id`             | GET          | Settlement Detail  |
+| `/settlement-runs/:id/preview`     | POST         | Settlement Detail  |
+| `/settlement-runs/:id/finalize`    | POST         | Settlement Detail  |
+| `/settlement-runs/:id/corrections` | POST         | Settlement Detail  |
+| `/deals/:dealId/ledger`            | GET          | Ledger             |
+| `/ledger-journals/:id`             | GET          | Journal Detail     |
+| `/participants/:id/ledger`         | GET          | Participant Ledger |
+| `/documents`                       | POST, DELETE | Documents          |
+| `/deals/:dealId/documents`         | GET, POST    | Documents          |
 
 ### Pagination Standard
+
 All list endpoints support:
+
 - `page` (default: 1)
 - `limit` (default: 10)
 - `sortBy` (field name)
 - `sortOrder` (asc/desc)
 
 ### Status Color Coding Convention
-| Color | Meaning | Used For |
-|-------|---------|----------|
-| Gray | Not started / Draft | DRAFT deals, DRAFT settlement runs |
-| Yellow | Awaiting action | PENDING batches, PREVIEWED runs |
-| Green | Active / Approved | ACTIVE deals, VALIDATED batches, FINALIZED runs |
-| Blue | Completed / Processed | PROCESSED batches |
-| Red | Error / Rejected | REJECTED batches, VOIDED runs, SUSPENDED deals |
-| Purple | Special | CORRECTION runs |
+
+| Color  | Meaning               | Used For                                        |
+| ------ | --------------------- | ----------------------------------------------- |
+| Gray   | Not started / Draft   | DRAFT deals, DRAFT settlement runs              |
+| Yellow | Awaiting action       | PENDING batches, PREVIEWED runs                 |
+| Green  | Active / Approved     | ACTIVE deals, VALIDATED batches, FINALIZED runs |
+| Blue   | Completed / Processed | PROCESSED batches                               |
+| Red    | Error / Rejected      | REJECTED batches, VOIDED runs, SUSPENDED deals  |
+| Purple | Special               | CORRECTION runs                                 |
 
 ---
 
-*This document maps every backend capability to a specific UI screen for the SFI admin portal. Use as the design blueprint for Figma wireframes and frontend implementation.*
+_This document maps every backend capability to a specific UI screen for the SFI admin portal. Use as the design blueprint for Figma wireframes and frontend implementation._

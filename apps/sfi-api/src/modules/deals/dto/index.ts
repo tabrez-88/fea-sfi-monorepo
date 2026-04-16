@@ -12,12 +12,28 @@ import {
   Max,
 } from 'class-validator';
 
+import { IsAfterDate } from '../../../common/validators/is-after-date.validator';
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
 export enum DealStatusDto {
   DRAFT = 'DRAFT',
   ACTIVE = 'ACTIVE',
   SUSPENDED = 'SUSPENDED',
   CLOSED = 'CLOSED',
 }
+
+export enum DealCurrencyDto {
+  USD = 'USD',
+  EUR = 'EUR',
+  GBP = 'GBP',
+  JPY = 'JPY',
+  CHF = 'CHF',
+  CAD = 'CAD',
+  AUD = 'AUD',
+}
+
+// ─── Create ───────────────────────────────────────────────────────────────────
 
 export class CreateDealDto {
   @ApiProperty({ description: 'Name of the deal', maxLength: 255 })
@@ -37,19 +53,36 @@ export class CreateDealDto {
   @IsEnum(DealStatusDto)
   status?: DealStatusDto;
 
-  @ApiProperty({ description: 'Effective date of the deal' })
+  @ApiPropertyOptional({
+    enum: DealCurrencyDto,
+    default: DealCurrencyDto.USD,
+    description: 'Currency for the deal (defaults to USD if not specified)',
+  })
+  @IsOptional()
+  @IsEnum(DealCurrencyDto)
+  currency?: DealCurrencyDto;
+
+  @ApiProperty({ description: 'Effective date of the deal (ISO 8601)' })
   @IsDateString()
   effectiveDate!: string;
 
-  @ApiPropertyOptional({ description: 'Termination date of the deal' })
+  @ApiPropertyOptional({
+    description:
+      'Termination date of the deal (ISO 8601). Must be strictly after effectiveDate if provided.',
+  })
   @IsOptional()
   @IsDateString()
+  @IsAfterDate('effectiveDate', {
+    message: 'terminationDate must be after effectiveDate',
+  })
   terminationDate?: string;
 
   @ApiPropertyOptional({ description: 'Additional metadata' })
   @IsOptional()
   metadata?: Record<string, unknown>;
 }
+
+// ─── Update ───────────────────────────────────────────────────────────────────
 
 export class UpdateDealDto {
   @ApiPropertyOptional({ description: 'Name of the deal', maxLength: 255 })
@@ -70,20 +103,43 @@ export class UpdateDealDto {
   @IsEnum(DealStatusDto)
   status?: DealStatusDto;
 
-  @ApiPropertyOptional({ description: 'Effective date of the deal' })
+  @ApiPropertyOptional({ enum: DealCurrencyDto })
+  @IsOptional()
+  @IsEnum(DealCurrencyDto)
+  currency?: DealCurrencyDto;
+
+  @ApiPropertyOptional({ description: 'Effective date of the deal (ISO 8601)' })
   @IsOptional()
   @IsDateString()
   effectiveDate?: string;
 
-  @ApiPropertyOptional({ description: 'Termination date of the deal' })
+  @ApiPropertyOptional({
+    description:
+      'Termination date of the deal (ISO 8601). Must be after effectiveDate if both provided.',
+  })
   @IsOptional()
   @IsDateString()
+  @IsAfterDate('effectiveDate', {
+    message: 'terminationDate must be after effectiveDate',
+  })
   terminationDate?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-form notes on the deal. Currently only collected by the FE in the Suspend Deal confirmation modal — service auto-clears this when status moves out of SUSPENDED.',
+    maxLength: 1000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
 
   @ApiPropertyOptional({ description: 'Additional metadata' })
   @IsOptional()
   metadata?: Record<string, unknown>;
 }
+
+// ─── Response ─────────────────────────────────────────────────────────────────
 
 export class DealResponseDto {
   @ApiProperty()
@@ -98,11 +154,20 @@ export class DealResponseDto {
   @ApiProperty({ enum: DealStatusDto })
   status!: DealStatusDto;
 
+  @ApiProperty({ enum: DealCurrencyDto })
+  currency!: DealCurrencyDto;
+
   @ApiProperty()
   effectiveDate!: Date;
 
   @ApiPropertyOptional()
   terminationDate?: Date | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-form notes on the deal. In the current FE flow this is only set from the Suspend Deal modal and is cleared automatically when status moves out of SUSPENDED.',
+  })
+  notes?: string | null;
 
   @ApiPropertyOptional()
   metadata?: Record<string, unknown> | null;
@@ -112,7 +177,42 @@ export class DealResponseDto {
 
   @ApiProperty()
   updatedAt!: Date;
+
+  // ─── Aggregated counts (populated on findOne and list endpoints) ────────────
+
+  @ApiPropertyOptional({
+    description: 'Number of participants attached to this deal',
+    example: 5,
+  })
+  participantsCount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of rule snapshot versions for this deal',
+    example: 3,
+  })
+  ruleSnapshotsCount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of revenue batches associated with this deal',
+    example: 12,
+  })
+  revenueBatchesCount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Number of settlement runs created for this deal',
+    example: 2,
+  })
+  settlementRunsCount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Sum of RevenueBatch.totalAmount across all batches for this deal (only on findOne)',
+    example: 200000000,
+  })
+  totalRevenue?: number;
 }
+
+// ─── List Query ───────────────────────────────────────────────────────────────
 
 export class PaginationQueryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -139,4 +239,42 @@ export class PaginationQueryDto {
   @IsOptional()
   @IsString()
   sortOrder?: 'asc' | 'desc' = 'desc';
+}
+
+export class DealListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    enum: DealStatusDto,
+    description: 'Filter deals by status',
+  })
+  @IsOptional()
+  @IsEnum(DealStatusDto)
+  status?: DealStatusDto;
+
+  @ApiPropertyOptional({
+    description: 'Case-insensitive search on deal name and description',
+    example: 'horizon',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  search?: string;
+}
+
+// ─── Counts ───────────────────────────────────────────────────────────────────
+
+export class DealCountsResponseDto {
+  @ApiProperty({ description: 'Total number of deals across all statuses', example: 18 })
+  all!: number;
+
+  @ApiProperty({ description: 'Deals in DRAFT status', example: 6 })
+  draft!: number;
+
+  @ApiProperty({ description: 'Deals in ACTIVE status', example: 6 })
+  active!: number;
+
+  @ApiProperty({ description: 'Deals in SUSPENDED status', example: 0 })
+  suspended!: number;
+
+  @ApiProperty({ description: 'Deals in CLOSED status', example: 6 })
+  closed!: number;
 }

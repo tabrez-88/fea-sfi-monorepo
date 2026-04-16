@@ -1,21 +1,31 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
   Param,
-  Query,
   ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
 } from '@nestjs/common';
 import {
-  ApiTags,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
-import { CreateDealDto, DealResponseDto, PaginationQueryDto } from '../dto';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/types/jwt-payload';
+import {
+  CreateDealDto,
+  DealCountsResponseDto,
+  DealListQueryDto,
+  DealResponseDto,
+  DealStatusDto,
+  UpdateDealDto,
+} from '../dto';
 import { DealsService } from '../services/deals.service';
 
 @ApiTags('deals')
@@ -31,33 +41,88 @@ export class DealsController {
     type: DealResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid input' })
-  async create(@Body() createDealDto: CreateDealDto): Promise<DealResponseDto> {
-    const deal = await this.dealsService.create(createDealDto);
-    return deal;
+  async create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() createDealDto: CreateDealDto,
+  ): Promise<DealResponseDto> {
+    return this.dealsService.create(user.id, createDealDto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all deals' })
+  @ApiOperation({
+    summary: 'List deals (paginated, filterable, searchable)',
+    description:
+      'Returns deals owned by the authenticated user with `_count.participants` joined for the FE Recent Deals and Deals List tables.',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'status', required: false, enum: DealStatusDto })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Case-insensitive search on name and description',
+  })
+  @ApiResponse({ status: 200, description: 'Paginated list of deals' })
+  async findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: DealListQueryDto,
+  ) {
+    return this.dealsService.findAll(user.id, query);
+  }
+
+  @Get('counts')
+  @ApiOperation({
+    summary: 'Get deal counts grouped by status',
+    description:
+      'Powers the Deals List status tabs (All / Active / Draft / Closed). Scoped to the authenticated user.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'List of deals',
+    description: 'Counts per status bucket',
+    type: DealCountsResponseDto,
   })
-  async findAll(@Query() query: PaginationQueryDto) {
-    return this.dealsService.findAll(query);
+  async getCounts(@CurrentUser() user: AuthenticatedUser): Promise<DealCountsResponseDto> {
+    return this.dealsService.getCounts(user.id);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a deal by ID' })
+  @ApiOperation({
+    summary: 'Get a deal by ID',
+    description:
+      'Returns the deal with aggregate counts (participants, ruleSnapshots, revenueBatches, settlementRuns) and totalRevenue. Returns 404 if deal does not belong to the authenticated user.',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Deal found', type: DealResponseDto })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async findOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DealResponseDto> {
+    return this.dealsService.findOne(user.id, id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a deal',
+    description:
+      'Partial update. Status changes to/from SUSPENDED can include `notes`. Returns 404 if deal does not belong to the authenticated user.',
+  })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({
     status: 200,
-    description: 'Deal found',
+    description: 'Deal updated',
     type: DealResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid input or date validation failed' })
   @ApiResponse({ status: 404, description: 'Deal not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<DealResponseDto> {
-    return this.dealsService.findOne(id);
+  async update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateDealDto: UpdateDealDto,
+  ): Promise<DealResponseDto> {
+    return this.dealsService.update(user.id, id, updateDealDto);
   }
 }

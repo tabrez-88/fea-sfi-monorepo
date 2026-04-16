@@ -177,7 +177,7 @@ Let's walk through "Agak Laen 2: Menyala Pantiku" from start to finish.
 
 ## Who Uses This Portal?
 
-The **FEA Admin Portal** is the web interface where people interact with all of this. Different people use it for different things:
+The **FEA-SFI Admin Portal** is the web interface where people interact with all of this. Different people use it for different things:
 
 | Person           | What They Do                                               |
 | ---------------- | ---------------------------------------------------------- |

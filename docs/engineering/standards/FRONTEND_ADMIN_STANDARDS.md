@@ -82,6 +82,7 @@ apps/sfi-admin/
 ### Rules
 
 ✅ **Do:**
+
 - Pages (`app/`) only import components and call hooks — no direct service calls in page files
 - `hooks/` owns all React Query calls — no `useQuery` or `useMutation` outside `hooks/`
 - `services/` are pure async functions — no React, no hooks, no side effects beyond the HTTP call
@@ -89,6 +90,7 @@ apps/sfi-admin/
 - `constants/` are runtime values — routes, API paths, query keys, UI tokens
 
 ❌ **Don't:**
+
 - Don't put `useQuery` / `useMutation` directly inside page or component files
 - Don't call `axios` directly from components or pages — always go through `services/`
 - Don't define types inline inside component props unless they are truly one-off and local
@@ -124,12 +126,14 @@ apps/sfi-admin/
 ### Rules
 
 ✅ **Do:**
+
 - `strict: true` — enables `strictNullChecks`, `strictFunctionTypes`, etc.
 - `noUncheckedIndexedAccess: true` — array access returns `T | undefined`, not `T`
 - `noUnusedLocals / noUnusedParameters` — unused code is a compile error
 - `paths` alias `@/*` → `src/*` — use `@/components/...` not `../../components/...`
 
 ❌ **Don't:**
+
 - Never use `// @ts-ignore` or `// @ts-expect-error` — fix the type instead
 - Never use `as any` — use `as unknown as T` if you must cast, with a comment explaining why
 - Never disable strict checks for a file via `// @ts-nocheck`
@@ -445,7 +449,7 @@ import { QueryClient } from '@tanstack/react-query';
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,     // 5 minutes
+      staleTime: 1000 * 60 * 5, // 5 minutes
       retry: (failureCount, error) => {
         // Don't retry on 4xx errors
         if (error instanceof Error && 'response' in error) {
@@ -629,12 +633,14 @@ export function DealsTable() {
 ### Component rules
 
 ✅ **Do:**
+
 - Mark components that use hooks or browser APIs with `'use client'`
 - Keep page files (`app/*/page.tsx`) as server components unless they directly use hooks
 - Export components as named exports (not default) from `components/` — default only in `app/` pages
 - Use Tailwind classes — no inline `style` objects, no CSS modules
 
 ❌ **Don't:**
+
 - Don't fetch data in page components — delegate to a `<FeatureContainer>` client component
 - Don't define new color values inline — use tokens from `constants/ui.ts` or Tailwind config
 - Don't use `React.FC<Props>` — use plain function components with explicit `props: Props` parameter
@@ -655,10 +661,9 @@ import type { PaginatedResponse, ListParams } from '@/types/api.types';
 
 export const dealsService = {
   async list(params?: ListParams): Promise<PaginatedResponse<Deal>> {
-    const { data } = await apiClient.get<PaginatedResponse<Deal>>(
-      API_ENDPOINTS.DEALS.LIST,
-      { params },
-    );
+    const { data } = await apiClient.get<PaginatedResponse<Deal>>(API_ENDPOINTS.DEALS.LIST, {
+      params,
+    });
     return data;
   },
 
@@ -752,36 +757,36 @@ export function isDateAfter(a: string, b: string): boolean {
 
 ## 12. Naming conventions
 
-| Artifact | Convention | Example |
-|---|---|---|
-| Page file | `page.tsx` (Next.js) | `app/deals/page.tsx` |
-| Component file | `PascalCase.tsx` | `DealStatusBadge.tsx` |
-| Hook file | `camelCase.ts`, `use` prefix | `useDeals.ts`, `useCreateDeal.ts` |
-| Service file | `camelCase.service.ts` | `deals.service.ts` |
-| Type file | `camelCase.types.ts` | `deal.types.ts` |
-| Constants file | `kebab-case.ts` | `query-keys.ts`, `routes.ts` |
-| Constant values | `SCREAMING_SNAKE_CASE` | `QUERY_KEYS`, `API_ENDPOINTS`, `ROUTES` |
-| Component exports | Named (not default) | `export function DealCard()` |
-| Page exports | Default | `export default function DealsPage()` |
-| Interface names | `PascalCase`, no `I` prefix | `Deal`, `CreateDealInput` |
-| Type names | `PascalCase` | `DealStatus`, `PaginatedResponse<T>` |
+| Artifact          | Convention                   | Example                                 |
+| ----------------- | ---------------------------- | --------------------------------------- |
+| Page file         | `page.tsx` (Next.js)         | `app/deals/page.tsx`                    |
+| Component file    | `PascalCase.tsx`             | `DealStatusBadge.tsx`                   |
+| Hook file         | `camelCase.ts`, `use` prefix | `useDeals.ts`, `useCreateDeal.ts`       |
+| Service file      | `camelCase.service.ts`       | `deals.service.ts`                      |
+| Type file         | `camelCase.types.ts`         | `deal.types.ts`                         |
+| Constants file    | `kebab-case.ts`              | `query-keys.ts`, `routes.ts`            |
+| Constant values   | `SCREAMING_SNAKE_CASE`       | `QUERY_KEYS`, `API_ENDPOINTS`, `ROUTES` |
+| Component exports | Named (not default)          | `export function DealCard()`            |
+| Page exports      | Default                      | `export default function DealsPage()`   |
+| Interface names   | `PascalCase`, no `I` prefix  | `Deal`, `CreateDealInput`               |
+| Type names        | `PascalCase`                 | `DealStatus`, `PaginatedResponse<T>`    |
 
 ---
 
 ## 13. Anti-patterns
 
-| Anti-pattern | Why it's bad | What to do instead |
-|---|---|---|
-| `useQuery` inside a page or component | Bypasses hook layer, can't be reused | Create a hook in `hooks/<feature>/` |
-| `axios.get(...)` in a component | Bypasses interceptors, no auth header | Go through `services/` → `apiClient` |
-| Hardcoded route strings (`href="/deals"`) | Breaks on rename | Use `ROUTES.DEALS.LIST` |
-| Hardcoded API paths in service files | Breaks on base URL change | Use `API_ENDPOINTS.DEALS.LIST` |
-| Inline query keys `['deals', id]` in hooks | Invalidation mismatch risk | Use `QUERY_KEYS.DEALS.DETAIL(id)` |
-| TypeScript `enum` | Runtime footgun, poor tree-shaking | Use `const` object + `type` derivation |
-| `as any` | Disables type checking | Use `as unknown as T` with a comment |
-| Mutable `let` for constants | Signals the value might change | Use `const` |
-| Fetching data in `useEffect` | Bypasses caching, double-fetch race | Use `useQuery` hook |
-| Mutation without `invalidateQueries` | Stale data shown after write | Always invalidate on `onSuccess` |
-| `console.log` in components | Leaks to production | Use a proper logger or remove before commit |
-| Default exports from `components/` | Hard to trace in imports, IDEs struggle | Named exports only (except pages) |
-| `style={{}}` inline objects | Creates new object on every render | Use Tailwind classes |
+| Anti-pattern                               | Why it's bad                            | What to do instead                          |
+| ------------------------------------------ | --------------------------------------- | ------------------------------------------- |
+| `useQuery` inside a page or component      | Bypasses hook layer, can't be reused    | Create a hook in `hooks/<feature>/`         |
+| `axios.get(...)` in a component            | Bypasses interceptors, no auth header   | Go through `services/` → `apiClient`        |
+| Hardcoded route strings (`href="/deals"`)  | Breaks on rename                        | Use `ROUTES.DEALS.LIST`                     |
+| Hardcoded API paths in service files       | Breaks on base URL change               | Use `API_ENDPOINTS.DEALS.LIST`              |
+| Inline query keys `['deals', id]` in hooks | Invalidation mismatch risk              | Use `QUERY_KEYS.DEALS.DETAIL(id)`           |
+| TypeScript `enum`                          | Runtime footgun, poor tree-shaking      | Use `const` object + `type` derivation      |
+| `as any`                                   | Disables type checking                  | Use `as unknown as T` with a comment        |
+| Mutable `let` for constants                | Signals the value might change          | Use `const`                                 |
+| Fetching data in `useEffect`               | Bypasses caching, double-fetch race     | Use `useQuery` hook                         |
+| Mutation without `invalidateQueries`       | Stale data shown after write            | Always invalidate on `onSuccess`            |
+| `console.log` in components                | Leaks to production                     | Use a proper logger or remove before commit |
+| Default exports from `components/`         | Hard to trace in imports, IDEs struggle | Named exports only (except pages)           |
+| `style={{}}` inline objects                | Creates new object on every render      | Use Tailwind classes                        |

@@ -1,6 +1,6 @@
-# FEA Admin — Engineering Execution Workflow
+# FEA-SFI Admin — Engineering Execution Workflow
 
-This folder is the **operating manual** for executing each sprint of the FEA Admin Portal build. It enforces a strict **Notion → Backend → Frontend** sequence so we never start a screen whose endpoints don't exist yet.
+This folder is the **operating manual** for executing each sprint of the FEA-SFI Admin Portal build. It enforces a strict **Notion → Backend → Frontend** sequence so we never start a screen whose endpoints don't exist yet.
 
 The goal is simple: **before any FE work begins on a sprint, every backend dependency for every ticket in that sprint must be confirmed in writing.**
 
@@ -29,12 +29,12 @@ Every sprint passes through three gates. You cannot skip a gate. Each gate produ
 
 **What to verify in Notion** (Engineering Tasks DB, filtered by Sprint):
 
-| Check | Pass criteria |
-|-------|---------------|
-| Status | All tickets are in **"Ready for dev"** (or **"Done"** for design phase) |
-| Screen field | Every ticket has a `Screen` value matching the design spec |
-| Sprint relation | Ticket is correctly linked to the target Sprint page |
-| Priority | Must-Have tickets are not blocked or rejected |
+| Check           | Pass criteria                                                           |
+| --------------- | ----------------------------------------------------------------------- |
+| Status          | All tickets are in **"Ready for dev"** (or **"Done"** for design phase) |
+| Screen field    | Every ticket has a `Screen` value matching the design spec              |
+| Sprint relation | Ticket is correctly linked to the target Sprint page                    |
+| Priority        | Must-Have tickets are not blocked or rejected                           |
 
 **If any ticket is still in `Design Review`, `Design Rejected`, `Blocked`, or `Not Started` → STOP.** Resolve with the design owner before opening Gate 2.
 
@@ -58,11 +58,11 @@ Every sprint passes through three gates. You cannot skip a gate. Each gate produ
    - Prisma schema has every column referenced?
 4. Mark the endpoint with one of three statuses:
 
-| Status | Meaning |
-|--------|---------|
-| ✅ **Ready** | Endpoint exists, returns real data, DTO matches screen needs |
+| Status         | Meaning                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| ✅ **Ready**   | Endpoint exists, returns real data, DTO matches screen needs         |
 | ⚠️ **Partial** | Endpoint exists but DTO/filter/field is missing or returns mock data |
-| ❌ **Missing** | No controller route, no service method, or no DB support at all |
+| ❌ **Missing** | No controller route, no service method, or no DB support at all      |
 
 5. For every ⚠️ or ❌, write a **gap note** that says exactly what is missing and where it would live (file path + intended method signature).
 
@@ -99,7 +99,7 @@ One file per sprint. Never edit a closed sprint's file — corrections go to a f
 
 Copy this template into a new file under `sprints/` when starting a sprint.
 
-````markdown
+```markdown
 # Sprint N — MS-N: <Milestone Name> — BE Verification
 
 **Sprint Page:** <Notion URL>
@@ -113,7 +113,7 @@ Copy this template into a new file under `sprints/` when starting a sprint.
 ## Gate 1 — Notion Readiness
 
 | Task ID | Task Name | Notion Status | Pass |
-|---------|-----------|---------------|------|
+| ------- | --------- | ------------- | ---- |
 | FEA-1   | …         | Ready for dev | ✅   |
 | FEA-2   | …         | Design Review | ❌   |
 
@@ -129,10 +129,10 @@ Copy this template into a new file under `sprints/` when starting a sprint.
 **Notion:** <URL>
 **Design spec endpoints:**
 
-| Method | Path | Status | Implementation | Notes |
-|--------|------|--------|----------------|-------|
-| POST | /auth/login | ❌ Missing | — | No auth module exists |
-| GET  | /deals      | ✅ Ready   | apps/sfi-api/src/modules/deals/controllers/deals.controller.ts:39 | — |
+| Method | Path        | Status     | Implementation                                                    | Notes                 |
+| ------ | ----------- | ---------- | ----------------------------------------------------------------- | --------------------- |
+| POST   | /auth/login | ❌ Missing | —                                                                 | No auth module exists |
+| GET    | /deals      | ✅ Ready   | apps/sfi-api/src/modules/deals/controllers/deals.controller.ts:39 | —                     |
 
 **Field-level checks** (only when an endpoint is ⚠️ Partial):
 
@@ -160,9 +160,9 @@ Copy this template into a new file under `sprints/` when starting a sprint.
 
 ### Consolidated gap list (drives follow-up work)
 
-| # | Gap | Type | Owner | Notion ticket |
-|---|-----|------|-------|---------------|
-| 1 | POST /auth/login does not exist | Missing module | BE | <create one> |
+| #   | Gap                             | Type           | Owner | Notion ticket |
+| --- | ------------------------------- | -------------- | ----- | ------------- |
+| 1   | POST /auth/login does not exist | Missing module | BE    | <create one>  |
 
 ---
 
@@ -172,21 +172,21 @@ Copy this template into a new file under `sprints/` when starting a sprint.
 - [ ] Gate 2 status communicated to FE lead
 - [ ] FE execution authorized to begin
 
-**Authorized by:** _________________  **Date:** _____________
-````
+**Authorized by:** ********\_******** **Date:** ******\_******
+```
 
 ---
 
 ## Status Legend (used everywhere in this folder)
 
-| Symbol | Meaning |
-|--------|---------|
-| ✅ | Ready — fully implemented, real data, matches screen needs |
-| ⚠️ | Partial — exists but incomplete (missing field, mock data, missing filter) |
-| ❌ | Missing — no implementation at all |
-| 🟢 | Sprint is FE-ready |
-| 🟡 | Sprint is FE-ready with tracked gaps |
-| 🔴 | Sprint is blocked, FE must not start |
+| Symbol | Meaning                                                                    |
+| ------ | -------------------------------------------------------------------------- |
+| ✅     | Ready — fully implemented, real data, matches screen needs                 |
+| ⚠️     | Partial — exists but incomplete (missing field, mock data, missing filter) |
+| ❌     | Missing — no implementation at all                                         |
+| 🟢     | Sprint is FE-ready                                                         |
+| 🟡     | Sprint is FE-ready with tracked gaps                                       |
+| 🔴     | Sprint is blocked, FE must not start                                       |
 
 ---
 

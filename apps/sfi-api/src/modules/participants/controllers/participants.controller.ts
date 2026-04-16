@@ -6,17 +6,35 @@ import {
   Param,
   Query,
   ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFile,
+  ParseBoolPipe,
+  DefaultValuePipe,
+  Res,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiConsumes,
+  ApiBody,
+  ApiProduces,
 } from '@nestjs/swagger';
+import { Response } from 'express';
 
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../../auth/types/jwt-payload';
 import { PaginationQueryDto } from '../../deals/dto';
-import { CreateParticipantDto, ParticipantResponseDto } from '../dto';
+import {
+  BulkImportResultDto,
+  CreateParticipantDto,
+  ParticipantResponseDto,
+} from '../dto';
 import { ParticipantsService } from '../services/participants.service';
 
 @ApiTags('participants')
@@ -35,10 +53,11 @@ export class ParticipantsController {
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async create(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('dealId', ParseUUIDPipe) dealId: string,
     @Body() createParticipantDto: CreateParticipantDto,
   ): Promise<ParticipantResponseDto> {
-    return this.participantsService.create(dealId, createParticipantDto);
+    return this.participantsService.create(user.id, dealId, createParticipantDto);
   }
 
   @Get()
@@ -46,15 +65,70 @@ export class ParticipantsController {
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiResponse({
-    status: 200,
-    description: 'List of participants',
-  })
+  @ApiResponse({ status: 200, description: 'List of participants' })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async findAll(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('dealId', ParseUUIDPipe) dealId: string,
     @Query() query: PaginationQueryDto,
   ) {
-    return this.participantsService.findAllByDeal(dealId, query);
+    return this.participantsService.findAllByDeal(user.id, dealId, query);
+  }
+
+  @Post('import')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({
+    summary: 'Bulk import participants from a CSV file',
+    description:
+      'Expected CSV columns (header required): name,roleName,behaviorType,email,externalId. ' +
+      'behaviorType must be one of: FEE_DEDUCTION, RECOUPMENT, NET_PROFIT_SHARE, FLAT_FEE, PASS_THROUGH.',
+  })
+  @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'CSV file to import' },
+        skipErrors: { type: 'boolean', description: 'Continue on row errors (default: false)' },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiQuery({ name: 'skipErrors', required: false, type: Boolean })
+  @ApiResponse({ status: 200, description: 'Import result', type: BulkImportResultDto })
+  @ApiResponse({ status: 400, description: 'Invalid CSV or validation error' })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async importCsv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('dealId', ParseUUIDPipe) dealId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('skipErrors', new DefaultValuePipe(false), ParseBoolPipe) skipErrors: boolean,
+  ): Promise<BulkImportResultDto> {
+    if (!file) {
+      throw new Error('No file uploaded');
+    }
+    return this.participantsService.importFromCsv(user.id, dealId, file.buffer, skipErrors);
+  }
+
+  @Get('export')
+  @ApiOperation({
+    summary: 'Export all participants for a deal as CSV',
+    description: 'Returns a downloadable CSV file with columns: name,roleName,behaviorType,email,externalId.',
+  })
+  @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
+  @ApiProduces('text/csv')
+  @ApiResponse({ status: 200, description: 'CSV file download' })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async exportCsv(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('dealId', ParseUUIDPipe) dealId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const csv = await this.participantsService.exportToCsv(user.id, dealId);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="participants-${dealId}.csv"`);
+    res.send(csv);
   }
 }

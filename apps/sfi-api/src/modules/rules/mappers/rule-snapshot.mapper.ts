@@ -10,7 +10,6 @@ import {
   RuleSnapshotParticipantResponseDto,
   RuleConfigurationDto,
   RuleSummaryDto,
-  ParticipantRoleEnum,
 } from '../dto';
 
 type RuleSnapshotWithCount = RuleSnapshot & {
@@ -47,7 +46,8 @@ export class RuleSnapshotMapper {
         id: rsp.id,
         participantId: rsp.participantId,
         participantName: rsp.participant.name,
-        participantRole: rsp.participant.role as ParticipantRoleEnum,
+        participantRoleName: rsp.participant.roleName,
+        participantBehaviorType: rsp.participant.behaviorType,
         participantData: rsp.participantData as Record<string, unknown> | undefined,
         createdAt: rsp.createdAt.toISOString(),
       }),
@@ -75,8 +75,8 @@ export class RuleSnapshotMapper {
 
     const roleBreakdown: Record<string, number> = {};
     for (const p of participants) {
-      roleBreakdown[p.participantRole] =
-        (roleBreakdown[p.participantRole] ?? 0) + 1;
+      roleBreakdown[p.participantRoleName] =
+        (roleBreakdown[p.participantRoleName] ?? 0) + 1;
     }
 
     let totalDistributionFeePercent = 0;

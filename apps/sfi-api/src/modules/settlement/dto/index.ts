@@ -22,6 +22,7 @@ export enum SettlementStatusEnum {
   PREVIEWED = 'PREVIEWED',
   FINALIZED = 'FINALIZED',
   VOIDED = 'VOIDED',
+  CANCELLED = 'CANCELLED',
 }
 
 export enum SettlementPhaseEnum {
@@ -220,6 +221,19 @@ export class SettlementRunResponseDto {
   ruleSnapshotId!: string;
 
   @ApiProperty({
+    description:
+      'Sequential per-deal run number, assigned at creation under a row-level lock. Persistent — does not change with list ordering.',
+    example: 2,
+  })
+  runNumber!: number;
+
+  @ApiProperty({
+    description: 'Pre-formatted label for the FE timeline / Latest Settlement card.',
+    example: 'Run #2',
+  })
+  runLabel!: string;
+
+  @ApiProperty({
     description: 'Type of settlement run',
     enum: RunTypeEnum,
     example: RunTypeEnum.NORMAL,
@@ -257,11 +271,48 @@ export class SettlementRunResponseDto {
   })
   executedAt?: string | null;
 
+  @ApiPropertyOptional({
+    description:
+      'Alias for executedAt — the moment the run transitioned to FINALIZED. Same value as executedAt; provided as a clearer name for the FE.',
+    example: '2024-01-15T10:30:00.000Z',
+  })
+  finalizedAt?: string | null;
+
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   createdAt!: string;
 
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   updatedAt!: string;
+
+  // ─── Latest Settlement card enrichments (Deal Overview, FEA-7) ──────────────
+
+  @ApiPropertyOptional({
+    description:
+      'Version of the rule snapshot used for this run. Joined from RuleSnapshot.version.',
+    example: 3,
+  })
+  ruleSnapshotVersion?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Number of revenue batches linked to this run via SettlementRevenueLink.',
+    example: 2,
+  })
+  revenueBatchCount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Sum of totalAmount across all linked revenue batches. Convenient for the Latest Settlement card.',
+    example: 200000000,
+  })
+  totalRevenue?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Latest proof hash for this run (only present after preview/finalize). Used by the Latest Settlement card on Deal Overview.',
+    example: 'sha256:a3f8b2c1d4e5...',
+  })
+  proofHash?: string | null;
 }
 
 export class SettlementRunDetailResponseDto extends SettlementRunResponseDto {

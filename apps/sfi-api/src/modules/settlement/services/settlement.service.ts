@@ -32,7 +32,7 @@ import { SettlementEngine } from '../engine/settlement-engine';
 import {
   SettlementInput,
   SettlementOutput,
-  ParticipantRole as EngineParticipantRole,
+  ParticipantBehavior as EngineParticipantBehavior,
 } from '../engine/types';
 
 @Injectable()
@@ -45,20 +45,34 @@ export class SettlementService {
     private readonly auditLog: AuditLogService,
   ) {}
 
+  private async assertDealOwner(dealId: string, userId: string): Promise<void> {
+    const deal = await this.prisma.deal.findUnique({
+      where: { id: dealId },
+      select: { id: true, userId: true },
+    });
+    if (!deal || deal.userId !== userId) {
+      throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
+  }
+
+  private async assertRunOwner(runId: string, userId: string): Promise<void> {
+    const run = await this.prisma.settlementRun.findUnique({
+      where: { id: runId },
+      select: { id: true, deal: { select: { userId: true } } },
+    });
+    if (!run || run.deal.userId !== userId) {
+      throw new NotFoundException(`Settlement run with ID ${runId} not found`);
+    }
+  }
+
   async createRun(
+    userId: string,
     dealId: string,
     createDto: CreateSettlementRunDto,
   ): Promise<SettlementRunResponseDto> {
     this.logger.log(`Creating settlement run for deal: ${dealId}`);
 
-    // Validate deal exists
-    const deal = await this.prisma.deal.findUnique({
-      where: { id: dealId },
-      select: { id: true },
-    });
-    if (!deal) {
-      throw new NotFoundException(`Deal with ID ${dealId} not found`);
-    }
+    await this.assertDealOwner(dealId, userId);
 
     // Validate rule snapshot exists and belongs to deal
     const snapshot = await this.prisma.ruleSnapshot.findUnique({
@@ -71,9 +85,7 @@ export class SettlementService {
       );
     }
     if (snapshot.dealId !== dealId) {
-      throw new BadRequestException(
-        'Rule snapshot does not belong to this deal',
-      );
+      throw new BadRequestException('Rule snapshot does not belong to this deal');
     }
 
     // Validate all revenue batches exist, belong to deal, and are VALIDATED
@@ -99,42 +111,63 @@ export class SettlementService {
       }
     }
 
-    // Create run in DRAFT status
-    const run = await this.prisma.settlementRun.create({
-      data: {
-        dealId,
-        ruleSnapshotId: createDto.ruleSnapshotId,
-        status: SettlementRunStatus.DRAFT,
-        currency: 'USD',
-        notes: createDto.notes,
-        totalAllocated: 0,
-        settlementRevenueLinks: {
-          create: createDto.revenueBatchIds.map((batchId) => ({
-            revenueBatchId: batchId,
-          })),
+    const run = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM deals WHERE id = ${dealId}::uuid FOR UPDATE`;
+
+      const lastRun = await tx.settlementRun.findFirst({
+        where: { dealId },
+        orderBy: { runNumber: 'desc' },
+        select: { runNumber: true },
+      });
+      const nextRunNumber = (lastRun?.runNumber ?? 0) + 1;
+
+      return tx.settlementRun.create({
+        data: {
+          dealId,
+          ruleSnapshotId: createDto.ruleSnapshotId,
+          runNumber: nextRunNumber,
+          status: SettlementRunStatus.DRAFT,
+          currency: 'USD',
+          notes: createDto.notes,
+          totalAllocated: 0,
+          settlementRevenueLinks: {
+            create: createDto.revenueBatchIds.map((batchId) => ({
+              revenueBatchId: batchId,
+            })),
+          },
         },
-      },
+      });
     });
 
-    this.logger.log(`Settlement run created: ${run.id}`);
+    this.logger.log(`Settlement run created: ${run.id} (Run #${run.runNumber})`);
 
     await this.auditLog.create({
-      actor: 'system',
+      actor: userId,
       action: 'CREATED',
       entityType: 'SettlementRun',
       entityId: run.id,
       dealId,
-      metadata: { ruleSnapshotId: createDto.ruleSnapshotId, revenueBatchCount: createDto.revenueBatchIds.length },
+      metadata: {
+        runLabel: `Run #${run.runNumber}`,
+        runNumber: run.runNumber,
+        status: 'DRAFT',
+        ruleSnapshotId: createDto.ruleSnapshotId,
+        revenueBatchCount: createDto.revenueBatchIds.length,
+      },
     });
 
     return this.mapRunToResponse(run);
   }
 
   async listRuns(
+    userId: string,
     dealId: string,
     query: PaginationQueryDto,
   ): Promise<SettlementRunListResponseDto> {
     this.logger.log(`Listing settlement runs for deal: ${dealId}`);
+
+    await this.assertDealOwner(dealId, userId);
+
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
@@ -144,28 +177,52 @@ export class SettlementService {
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
+        include: {
+          ruleSnapshot: { select: { version: true } },
+          _count: { select: { settlementRevenueLinks: true } },
+          proofRecords: {
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+            select: { proofHash: true },
+          },
+          settlementRevenueLinks: {
+            select: {
+              revenueBatch: { select: { totalAmount: true } },
+            },
+          },
+        },
       }),
       this.prisma.settlementRun.count({ where: { dealId } }),
     ]);
 
     return {
-      data: runs.map((run) => this.mapRunToResponse(run)),
+      data: runs.map((run) => {
+        const totalRevenue = run.settlementRevenueLinks.reduce(
+          (sum, link) => sum + Number(link.revenueBatch.totalAmount),
+          0,
+        );
+        return this.mapRunToResponse(run, {
+          ruleSnapshotVersion: run.ruleSnapshot.version,
+          revenueBatchCount: run._count.settlementRevenueLinks,
+          totalRevenue,
+          proofHash: run.proofRecords[0]?.proofHash ?? null,
+        });
+      }),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async getRun(id: string): Promise<SettlementRunDetailResponseDto> {
+  async getRun(userId: string, id: string): Promise<SettlementRunDetailResponseDto> {
     this.logger.log(`Getting settlement run: ${id}`);
+
+    await this.assertRunOwner(id, userId);
 
     const run = await this.prisma.settlementRun.findUnique({
       where: { id },
       include: {
-        settlementRevenueLinks: {
-          include: { revenueBatch: true },
-        },
-        settlementAllocations: {
-          include: { participant: true },
-        },
+        ruleSnapshot: { select: { version: true } },
+        settlementRevenueLinks: { include: { revenueBatch: true } },
+        settlementAllocations: { include: { participant: true } },
         proofRecords: { take: 1, orderBy: { createdAt: 'desc' } },
         ledgerJournals: {
           include: { _count: { select: { ledgerPostings: true } } },
@@ -182,9 +239,18 @@ export class SettlementService {
       (sum, j) => sum + j._count.ledgerPostings,
       0,
     );
+    const totalRevenue = run.settlementRevenueLinks.reduce(
+      (sum, link) => sum + Number(link.revenueBatch.totalAmount),
+      0,
+    );
 
     return {
-      ...this.mapRunToResponse(run),
+      ...this.mapRunToResponse(run, {
+        ruleSnapshotVersion: run.ruleSnapshot.version,
+        revenueBatchCount: run.settlementRevenueLinks.length,
+        totalRevenue,
+        proofHash: proof?.proofHash ?? null,
+      }),
       revenueBatches: run.settlementRevenueLinks.map((link) => ({
         id: link.revenueBatch.id,
         batchNumber: link.revenueBatch.batchNumber,
@@ -220,8 +286,10 @@ export class SettlementService {
     };
   }
 
-  async previewRun(id: string): Promise<PreviewSettlementResponseDto> {
+  async previewRun(userId: string, id: string): Promise<PreviewSettlementResponseDto> {
     this.logger.log(`Previewing settlement run: ${id}`);
+
+    await this.assertRunOwner(id, userId);
 
     const run = await this.prisma.settlementRun.findUnique({
       where: { id },
@@ -248,32 +316,37 @@ export class SettlementService {
       );
     }
 
-    // Build engine input from database data
     const engineInput = this.buildEngineInput(run);
-
-    // Calculate allocations using pure engine
     const result = this.engine.calculate(engineInput);
 
-    // Update status to PREVIEWED
     await this.prisma.settlementRun.update({
       where: { id },
       data: { status: SettlementRunStatus.PREVIEWED },
     });
 
     await this.auditLog.create({
-      actor: 'system',
+      actor: userId,
       action: 'PREVIEWED',
       entityType: 'SettlementRun',
       entityId: id,
       dealId: run.dealId,
-      metadata: { previousStatus: run.status, newStatus: 'PREVIEWED', totalAllocated: result.totalAllocated },
+      metadata: {
+        runLabel: `Run #${run.runNumber}`,
+        runNumber: run.runNumber,
+        previousStatus: run.status,
+        newStatus: 'PREVIEWED',
+        totalAllocated: result.totalAllocated,
+        allocationCount: result.allocations.length,
+      },
     });
 
     return this.mapEngineOutputToPreview(id, result);
   }
 
-  async finalizeRun(id: string): Promise<FinalizeSettlementResponseDto> {
+  async finalizeRun(userId: string, id: string): Promise<FinalizeSettlementResponseDto> {
     this.logger.log(`Finalizing settlement run: ${id}`);
+
+    await this.assertRunOwner(id, userId);
 
     const run = await this.prisma.settlementRun.findUnique({
       where: { id },
@@ -292,16 +365,13 @@ export class SettlementService {
       throw new NotFoundException(`Settlement run with ID ${id} not found`);
     }
 
-    // Idempotency: if already finalized, return existing results
     if (run.status === SettlementRunStatus.FINALIZED) {
       this.logger.log(`Settlement run ${id} already finalized (idempotent)`);
-      return this.buildFinalizedResponse(id);
+      return this.buildFinalizedResponse(userId, id);
     }
 
     if (run.status === SettlementRunStatus.VOIDED) {
-      throw new ConflictException(
-        'Cannot finalize a voided settlement run',
-      );
+      throw new ConflictException('Cannot finalize a voided settlement run');
     }
 
     if (run.status !== SettlementRunStatus.PREVIEWED) {
@@ -310,15 +380,11 @@ export class SettlementService {
       );
     }
 
-    // Re-calculate via engine (determinism check)
     const engineInput = this.buildEngineInput(run);
     const result = this.engine.calculate(engineInput);
-
     const now = new Date();
 
-    // Persist everything in a transaction
     await this.prisma.$transaction(async (tx) => {
-      // 1. Persist allocations
       for (const alloc of result.allocations) {
         await tx.settlementAllocation.create({
           data: {
@@ -332,7 +398,6 @@ export class SettlementService {
         });
       }
 
-      // 2. Create proof record
       await tx.proofRecord.create({
         data: {
           settlementRunId: id,
@@ -343,7 +408,6 @@ export class SettlementService {
         },
       });
 
-      // 3. Create ledger journal and postings
       const journalNumber = `JNL-${now.getFullYear()}-${Date.now()}`;
       const journal = await tx.ledgerJournal.create({
         data: {
@@ -355,7 +419,6 @@ export class SettlementService {
         },
       });
 
-      // Credit: Revenue account
       await tx.ledgerPosting.create({
         data: {
           ledgerJournalId: journal.id,
@@ -368,7 +431,6 @@ export class SettlementService {
         },
       });
 
-      // Debit: Participant allocations
       for (const alloc of result.allocations) {
         await tx.ledgerPosting.create({
           data: {
@@ -384,16 +446,12 @@ export class SettlementService {
         });
       }
 
-      // 4. Update revenue batches to PROCESSED
-      const batchIds = run.settlementRevenueLinks.map(
-        (link) => link.revenueBatchId,
-      );
+      const batchIds = run.settlementRevenueLinks.map((link) => link.revenueBatchId);
       await tx.revenueBatch.updateMany({
         where: { id: { in: batchIds } },
         data: { status: RevenueBatchStatus.PROCESSED },
       });
 
-      // 5. Update run status to FINALIZED
       await tx.settlementRun.update({
         where: { id },
         data: {
@@ -407,31 +465,39 @@ export class SettlementService {
     this.logger.log(`Settlement run finalized: ${id}`);
 
     await this.auditLog.create({
-      actor: 'system',
+      actor: userId,
       action: 'FINALIZED',
       entityType: 'SettlementRun',
       entityId: id,
       dealId: run.dealId,
-      metadata: { totalAllocated: result.totalAllocated, allocationCount: result.allocations.length },
+      metadata: {
+        runLabel: `Run #${run.runNumber}`,
+        runNumber: run.runNumber,
+        previousStatus: 'PREVIEWED',
+        newStatus: 'FINALIZED',
+        totalAllocated: result.totalAllocated,
+        allocationCount: result.allocations.length,
+      },
     });
 
-    return this.buildFinalizedResponse(id);
+    return this.buildFinalizedResponse(userId, id);
   }
 
   async createCorrectionRun(
+    userId: string,
     originalRunId: string,
     createDto: CreateCorrectionRunDto,
   ): Promise<SettlementRunResponseDto> {
     this.logger.log(`Creating correction run for: ${originalRunId}`);
+
+    await this.assertRunOwner(originalRunId, userId);
 
     const originalRun = await this.prisma.settlementRun.findUnique({
       where: { id: originalRunId },
     });
 
     if (!originalRun) {
-      throw new NotFoundException(
-        `Settlement run with ID ${originalRunId} not found`,
-      );
+      throw new NotFoundException(`Settlement run with ID ${originalRunId} not found`);
     }
 
     if (originalRun.status !== SettlementRunStatus.FINALIZED) {
@@ -440,42 +506,64 @@ export class SettlementService {
       );
     }
 
-    const correctionRun = await this.prisma.settlementRun.create({
-      data: {
-        dealId: originalRun.dealId,
-        ruleSnapshotId: originalRun.ruleSnapshotId,
-        runType: 'CORRECTION',
-        status: SettlementRunStatus.DRAFT,
-        originalSettlementRunId: originalRunId,
-        currency: originalRun.currency,
-        notes: createDto.notes,
-        totalAllocated: 0,
-        settlementRevenueLinks: createDto.adjustmentRevenueBatchIds
-          ? {
-              create: createDto.adjustmentRevenueBatchIds.map((batchId) => ({
-                revenueBatchId: batchId,
-              })),
-            }
-          : undefined,
-      },
+    const correctionRun = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM deals WHERE id = ${originalRun.dealId}::uuid FOR UPDATE`;
+
+      const lastRun = await tx.settlementRun.findFirst({
+        where: { dealId: originalRun.dealId },
+        orderBy: { runNumber: 'desc' },
+        select: { runNumber: true },
+      });
+      const nextRunNumber = (lastRun?.runNumber ?? 0) + 1;
+
+      return tx.settlementRun.create({
+        data: {
+          dealId: originalRun.dealId,
+          ruleSnapshotId: originalRun.ruleSnapshotId,
+          runNumber: nextRunNumber,
+          runType: 'CORRECTION',
+          status: SettlementRunStatus.DRAFT,
+          originalSettlementRunId: originalRunId,
+          currency: originalRun.currency,
+          notes: createDto.notes,
+          totalAllocated: 0,
+          settlementRevenueLinks: createDto.adjustmentRevenueBatchIds
+            ? {
+                create: createDto.adjustmentRevenueBatchIds.map((batchId) => ({
+                  revenueBatchId: batchId,
+                })),
+              }
+            : undefined,
+        },
+      });
     });
 
-    this.logger.log(`Correction run created: ${correctionRun.id}`);
+    this.logger.log(
+      `Correction run created: ${correctionRun.id} (Run #${correctionRun.runNumber})`,
+    );
 
     await this.auditLog.create({
-      actor: 'system',
+      actor: userId,
       action: 'CORRECTION_CREATED',
       entityType: 'SettlementRun',
       entityId: correctionRun.id,
       dealId: originalRun.dealId,
-      metadata: { originalRunId: originalRunId, notes: createDto.notes },
+      metadata: {
+        runLabel: `Run #${correctionRun.runNumber}`,
+        runNumber: correctionRun.runNumber,
+        originalRunId,
+        originalRunLabel: `Run #${originalRun.runNumber}`,
+        notes: createDto.notes,
+      },
     });
 
     return this.mapRunToResponse(correctionRun);
   }
 
-  async verifyRun(id: string): Promise<ProofVerificationResponseDto> {
+  async verifyRun(userId: string, id: string): Promise<ProofVerificationResponseDto> {
     this.logger.log(`Verifying settlement run: ${id}`);
+
+    await this.assertRunOwner(id, userId);
 
     const run = await this.prisma.settlementRun.findUnique({
       where: { id },
@@ -505,24 +593,16 @@ export class SettlementService {
 
     const storedProof = run.proofRecords[0];
     if (!storedProof) {
-      throw new NotFoundException(
-        `No proof record found for settlement run ${id}`,
-      );
+      throw new NotFoundException(`No proof record found for settlement run ${id}`);
     }
 
-    // Re-compute using the same engine with the stored timestamp
     const engineInput = this.buildEngineInput(run);
-    const result = this.engine.calculate(
-      engineInput,
-      storedProof.timestamp.toISOString(),
-    );
+    const result = this.engine.calculate(engineInput, storedProof.timestamp.toISOString());
 
     const verified = storedProof.proofHash === result.proof.proofHash;
     const now = new Date().toISOString();
 
-    this.logger.log(
-      `Verification result for run ${id}: ${verified ? 'MATCH' : 'MISMATCH'}`,
-    );
+    this.logger.log(`Verification result for run ${id}: ${verified ? 'MATCH' : 'MISMATCH'}`);
 
     return {
       settlementRunId: id,
@@ -550,7 +630,7 @@ export class SettlementService {
       ruleSnapshotParticipants: {
         participantId: string;
         participantData: unknown;
-        participant: { id: string; name: string; role: string };
+        participant: { id: string; name: string; roleName: string; behaviorType: string };
       }[];
     };
     settlementRevenueLinks: {
@@ -564,8 +644,6 @@ export class SettlementService {
     currency: string;
   }): SettlementInput {
     const rules = run.ruleSnapshot.rules as Record<string, unknown>;
-
-    // Extract settlement rules from the flexible JSON structure
     const settlementRules = this.extractSettlementRules(
       rules,
       run.ruleSnapshot.ruleSnapshotParticipants,
@@ -584,7 +662,8 @@ export class SettlementService {
       participants: run.ruleSnapshot.ruleSnapshotParticipants.map((rsp) => ({
         id: rsp.participant.id,
         name: rsp.participant.name,
-        role: rsp.participant.role as EngineParticipantRole,
+        roleName: rsp.participant.roleName,
+        behaviorType: rsp.participant.behaviorType as EngineParticipantBehavior,
       })),
       rules: settlementRules,
     };
@@ -595,15 +674,13 @@ export class SettlementService {
     participants: {
       participantId: string;
       participantData: unknown;
-      participant: { role: string };
+      participant: { roleName: string; behaviorType: string };
     }[],
   ): SettlementInput['rules'] {
-    // If rules already has our engine format, use directly
     if (rules.distributionFees && rules.recoupment && rules.netProfitSplit) {
       return rules as unknown as SettlementInput['rules'];
     }
 
-    // Otherwise, build from participant data
     const distributionFees: SettlementInput['rules']['distributionFees'] = [];
     const recoupment: SettlementInput['rules']['recoupment'] = [];
     const netProfitSplit: SettlementInput['rules']['netProfitSplit'] = [];
@@ -639,33 +716,59 @@ export class SettlementService {
     return { distributionFees, recoupment, netProfitSplit };
   }
 
-  private mapRunToResponse(run: {
-    id: string;
-    dealId: string;
-    ruleSnapshotId: string;
-    runType: string;
-    status: string;
-    originalSettlementRunId: string | null;
-    totalAllocated: Prisma.Decimal;
-    currency: string;
-    notes: string | null;
-    executedAt: Date | null;
-    createdAt: Date;
-    updatedAt: Date;
-  }): SettlementRunResponseDto {
+  private mapRunToResponse(
+    run: {
+      id: string;
+      dealId: string;
+      ruleSnapshotId: string;
+      runNumber: number;
+      runType: string;
+      status: string;
+      originalSettlementRunId: string | null;
+      totalAllocated: Prisma.Decimal;
+      currency: string;
+      notes: string | null;
+      executedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+    enrichments?: {
+      ruleSnapshotVersion?: number;
+      revenueBatchCount?: number;
+      totalRevenue?: number;
+      proofHash?: string | null;
+    },
+  ): SettlementRunResponseDto {
+    const executedAtIso = run.executedAt?.toISOString() ?? null;
+
     return {
       id: run.id,
       dealId: run.dealId,
       ruleSnapshotId: run.ruleSnapshotId,
+      runNumber: run.runNumber,
+      runLabel: `Run #${run.runNumber}`,
       runType: run.runType as RunTypeEnum,
       status: run.status as SettlementStatusEnum,
       originalSettlementRunId: run.originalSettlementRunId,
       totalAllocated: Number(run.totalAllocated),
       currency: run.currency as CurrencyEnum,
       notes: run.notes,
-      executedAt: run.executedAt?.toISOString() ?? null,
+      executedAt: executedAtIso,
+      finalizedAt: executedAtIso,
       createdAt: run.createdAt.toISOString(),
       updatedAt: run.updatedAt.toISOString(),
+      ...(enrichments?.ruleSnapshotVersion !== undefined && {
+        ruleSnapshotVersion: enrichments.ruleSnapshotVersion,
+      }),
+      ...(enrichments?.revenueBatchCount !== undefined && {
+        revenueBatchCount: enrichments.revenueBatchCount,
+      }),
+      ...(enrichments?.totalRevenue !== undefined && {
+        totalRevenue: enrichments.totalRevenue,
+      }),
+      ...(enrichments?.proofHash !== undefined && {
+        proofHash: enrichments.proofHash,
+      }),
     };
   }
 
@@ -695,9 +798,10 @@ export class SettlementService {
   }
 
   private async buildFinalizedResponse(
+    userId: string,
     id: string,
   ): Promise<FinalizeSettlementResponseDto> {
-    const detail = await this.getRun(id);
+    const detail = await this.getRun(userId, id);
 
     return {
       settlementRunId: id,

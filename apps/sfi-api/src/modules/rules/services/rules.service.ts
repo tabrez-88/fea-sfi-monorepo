@@ -26,20 +26,34 @@ export class RulesService {
     private readonly auditLog: AuditLogService,
   ) {}
 
+  private async assertDealOwner(dealId: string, userId: string): Promise<void> {
+    const deal = await this.prisma.deal.findUnique({
+      where: { id: dealId },
+      select: { id: true, userId: true },
+    });
+    if (!deal || deal.userId !== userId) {
+      throw new NotFoundException(`Deal with ID ${dealId} not found`);
+    }
+  }
+
+  private async assertSnapshotOwner(snapshotId: string, userId: string): Promise<void> {
+    const snapshot = await this.prisma.ruleSnapshot.findUnique({
+      where: { id: snapshotId },
+      select: { id: true, deal: { select: { userId: true } } },
+    });
+    if (!snapshot || snapshot.deal.userId !== userId) {
+      throw new NotFoundException(`Rule snapshot with ID ${snapshotId} not found`);
+    }
+  }
+
   async createSnapshot(
+    userId: string,
     dealId: string,
     createDto: CreateRuleSnapshotDto,
   ): Promise<RuleSnapshotResponseDto> {
     this.logger.log(`Creating rule snapshot for deal: ${dealId}`);
 
-    // Validate deal exists
-    const deal = await this.prisma.deal.findUnique({
-      where: { id: dealId },
-      select: { id: true },
-    });
-    if (!deal) {
-      throw new NotFoundException(`Deal with ID ${dealId} not found`);
-    }
+    await this.assertDealOwner(dealId, userId);
 
     // Validate participants exist and belong to this deal
     const participantIds = createDto.participants.map((p) => p.participantId);
@@ -71,17 +85,14 @@ export class RulesService {
         );
       }
 
-      const recoupCap = (data.recoupCap ?? data.recoupAmount) as
-        | number
-        | undefined;
+      const recoupCap = (data.recoupCap ?? data.recoupAmount) as number | undefined;
       if (recoupCap !== undefined && recoupCap < 0) {
         errors.push(
           `Participant ${p.participantId}: recoupCap must be positive (got ${recoupCap})`,
         );
       }
 
-      const profitPercent = (data.netProfitPercentage ??
-        data.allocationPercentage) as number | undefined;
+      const profitPercent = (data.netProfitPercentage ?? data.allocationPercentage) as number | undefined;
       if (profitPercent !== undefined) {
         if (profitPercent < 0 || profitPercent > 100) {
           errors.push(
@@ -100,10 +111,7 @@ export class RulesService {
     }
 
     if (errors.length > 0) {
-      throw new BadRequestException({
-        message: 'Rule validation failed',
-        errors,
-      });
+      throw new BadRequestException({ message: 'Rule validation failed', errors });
     }
 
     // Get next version number
@@ -118,7 +126,6 @@ export class RulesService {
       ? new Date(createDto.effectiveFrom)
       : new Date();
 
-    // Update previous snapshot's effectiveTo
     if (lastSnapshot) {
       await this.prisma.ruleSnapshot.update({
         where: { id: lastSnapshot.id },
@@ -126,7 +133,6 @@ export class RulesService {
       });
     }
 
-    // Create snapshot with participants
     const snapshot = await this.prisma.ruleSnapshot.create({
       data: {
         dealId,
@@ -147,27 +153,33 @@ export class RulesService {
       },
     });
 
-    this.logger.log(
-      `Rule snapshot created: ${snapshot.id} (version ${nextVersion})`,
-    );
+    this.logger.log(`Rule snapshot created: ${snapshot.id} (version ${nextVersion})`);
 
     await this.auditLog.create({
-      actor: 'system',
+      actor: userId,
       action: 'CREATED',
       entityType: 'RuleSnapshot',
       entityId: snapshot.id,
       dealId,
-      metadata: { version: nextVersion, participantCount: createDto.participants.length },
+      metadata: {
+        version: nextVersion,
+        effectiveFrom: effectiveFrom.toISOString(),
+        participantCount: createDto.participants.length,
+      },
     });
 
     return RuleSnapshotMapper.toResponse(snapshot);
   }
 
   async listSnapshots(
+    userId: string,
     dealId: string,
     query: PaginationQueryDto,
   ): Promise<RuleSnapshotListResponseDto> {
     this.logger.log(`Listing rule snapshots for deal: ${dealId}`);
+
+    await this.assertDealOwner(dealId, userId);
+
     const { page = 1, limit = 20, sortBy = 'version', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
@@ -186,17 +198,14 @@ export class RulesService {
 
     return {
       data: snapshots.map(RuleSnapshotMapper.toResponse),
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async getSnapshot(id: string): Promise<RuleSnapshotDetailResponseDto> {
+  async getSnapshot(userId: string, id: string): Promise<RuleSnapshotDetailResponseDto> {
     this.logger.log(`Getting rule snapshot: ${id}`);
+
+    await this.assertSnapshotOwner(id, userId);
 
     const snapshot = await this.prisma.ruleSnapshot.findUnique({
       where: { id },
@@ -215,9 +224,12 @@ export class RulesService {
   }
 
   async getCurrentSnapshot(
+    userId: string,
     dealId: string,
   ): Promise<RuleSnapshotResponseDto | null> {
     this.logger.log(`Getting current snapshot for deal: ${dealId}`);
+
+    await this.assertDealOwner(dealId, userId);
 
     const snapshot = await this.prisma.ruleSnapshot.findFirst({
       where: {

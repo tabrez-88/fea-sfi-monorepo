@@ -17,15 +17,12 @@ export enum Phase {
   NET_PROFITS = 'NET_PROFITS',
 }
 
-export enum ParticipantRole {
-  PRODUCER = 'PRODUCER',
-  DISTRIBUTOR = 'DISTRIBUTOR',
-  INVESTOR = 'INVESTOR',
-  TALENT = 'TALENT',
-  STUDIO = 'STUDIO',
-  LICENSOR = 'LICENSOR',
-  LICENSEE = 'LICENSEE',
-  COLLECTION_AGENT = 'COLLECTION_AGENT',
+export enum ParticipantBehavior {
+  FEE_DEDUCTION = 'FEE_DEDUCTION',
+  RECOUPMENT = 'RECOUPMENT',
+  NET_PROFIT_SHARE = 'NET_PROFIT_SHARE',
+  FLAT_FEE = 'FLAT_FEE',
+  PASS_THROUGH = 'PASS_THROUGH',
 }
 
 // ============================================
@@ -86,7 +83,8 @@ export interface SettlementRules {
 export interface ParticipantInput {
   id: string;
   name: string;
-  role: ParticipantRole;
+  roleName: string;
+  behaviorType: ParticipantBehavior;
 }
 
 /**

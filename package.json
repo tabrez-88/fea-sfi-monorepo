@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "dev:api": "turbo run dev --filter=@sfi-fea/api",
+    "dev:sfi-admin": "turbo run dev --filter=@sfi-fea/sfi-admin",
     "dev:fea": "turbo run dev --filter=@sfi-fea/fea",
     "build": "turbo run build",
     "build:api": "turbo run build --filter=@sfi-fea/api",

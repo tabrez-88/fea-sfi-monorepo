@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 
 import { CommonModule } from './common/common.module';
 import { ConfigModule } from './config';
+import { AuditLogModule } from './modules/audit-log/audit-log.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { DealsModule } from './modules/deals/deals.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
@@ -9,7 +12,6 @@ import { ParticipantsModule } from './modules/participants/participants.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { RulesModule } from './modules/rules/rules.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
-import { AuditLogModule } from './modules/audit-log/audit-log.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -20,6 +22,9 @@ import { PrismaModule } from './prisma/prisma.module';
     // Infrastructure
     PrismaModule,
     CommonModule,
+
+    // Auth (registers the global JwtAuthGuard via APP_GUARD; @Public() opts out)
+    AuthModule,
 
     // Domain Modules
     DealsModule,
@@ -32,6 +37,7 @@ import { PrismaModule } from './prisma/prisma.module';
     LedgerModule,
     DocumentsModule,
     AuditLogModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

@@ -27,15 +27,12 @@ enum Currency {
   AUD
 }
 
-enum ParticipantRole {
-  PRODUCER
-  DISTRIBUTOR
-  INVESTOR
-  TALENT
-  STUDIO
-  LICENSOR
-  LICENSEE
-  COLLECTION_AGENT
+enum ParticipantBehavior {
+  FEE_DEDUCTION
+  RECOUPMENT
+  NET_PROFIT_SHARE
+  FLAT_FEE
+  PASS_THROUGH
 }
 
 enum RunType {
@@ -87,6 +84,7 @@ enum SettlementRunStatus {
   PREVIEWED
   FINALIZED
   VOIDED
+  CANCELLED
 }
 
 // ===========================================
@@ -94,17 +92,21 @@ enum SettlementRunStatus {
 // ===========================================
 
 model Deal {
-  id              String    @id @default(uuid())
-  name            String    @db.VarChar(255)
-  description     String?   @db.Text
-  status          DealStatus @default(DRAFT)
-  effectiveDate   DateTime  @map("effective_date")
-  terminationDate DateTime? @map("termination_date")
-  metadata        Json?
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id               String    @id @default(uuid())
+  name             String    @db.VarChar(255)
+  description      String?   @db.Text
+  status           DealStatus @default(DRAFT)
+  currency         Currency  @default(USD)
+  effectiveDate    DateTime  @map("effective_date")
+  terminationDate  DateTime? @map("termination_date")
+  notes            String?   @db.Text // free-form notes on the deal; FE currently only collects this from the Suspend Deal modal, so service-level logic auto-clears it when status moves out of SUSPENDED
+  metadata         Json?
+  userId           String    @map("user_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  user            User            @relation(fields: [userId], references: [id])
   participants    Participant[]
   ruleSnapshots   RuleSnapshot[]
   revenueBatches  RevenueBatch[]
@@ -112,19 +114,22 @@ model Deal {
   ledgerJournals  LedgerJournal[]
   documents       Document[]
 
+  @@index([status])
+  @@index([userId])
   @@map("deals")
 }
 
 model Participant {
-  id         String          @id @default(uuid())
-  dealId     String          @map("deal_id")
-  name       String          @db.VarChar(255)
-  role       ParticipantRole
-  externalId String?         @map("external_id") @db.VarChar(100)
-  email      String?         @db.VarChar(255)
-  metadata   Json?
-  createdAt  DateTime        @default(now()) @map("created_at")
-  updatedAt  DateTime        @updatedAt @map("updated_at")
+  id           String              @id @default(uuid())
+  dealId       String              @map("deal_id")
+  name         String              @db.VarChar(255)
+  roleName     String              @map("role_name") @db.VarChar(100)
+  behaviorType ParticipantBehavior @map("behavior_type")
+  externalId   String?             @map("external_id") @db.VarChar(100)
+  email        String?             @db.VarChar(255)
+  metadata     Json?
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
 
   // Relations
   deal                     Deal                       @relation(fields: [dealId], references: [id], onDelete: Cascade)
@@ -212,6 +217,7 @@ model SettlementRun {
   id                       String              @id @default(uuid())
   dealId                   String              @map("deal_id")
   ruleSnapshotId           String              @map("rule_snapshot_id")
+  runNumber                Int                 @map("run_number") // sequential per deal — assigned in createRun() under SELECT FOR UPDATE; powers "Run #N" labels (FE Latest Settlement card + audit log timeline)
   runType                  RunType             @default(NORMAL) @map("run_type")
   status                   SettlementRunStatus @default(DRAFT)
   originalSettlementRunId  String?             @map("original_settlement_run_id")
@@ -234,6 +240,7 @@ model SettlementRun {
   proofRecords            ProofRecord[]
   documents               Document[]
 
+  @@unique([dealId, runNumber])
   @@index([dealId])
   @@index([ruleSnapshotId])
   @@index([runType])
@@ -390,4 +397,68 @@ model Document {
   @@index([settlementRunId])
   @@index([docType])
   @@map("documents")
+}
+
+// ===========================================
+// 8) Auth — Users, Refresh Tokens, Password Reset
+// ===========================================
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  name          String    @db.VarChar(255)
+  avatarUrl     String?   @map("avatar_url") @db.VarChar(1000)
+  role          UserRole  @default(USER)
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  deals               Deal[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  replacedBy String?   @map("replaced_by") // rotation chain — id of the token that replaced this one
+  userAgent  String?   @map("user_agent") @db.VarChar(500)
+  ipAddress  String?   @map("ip_address") @db.VarChar(45)
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(255)
+  expiresAt  DateTime  @map("expires_at")
+  usedAt     DateTime? @map("used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }

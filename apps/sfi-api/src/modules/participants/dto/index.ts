@@ -8,27 +8,44 @@ import {
   MinLength,
 } from 'class-validator';
 
-export enum ParticipantRoleDto {
-  PRODUCER = 'PRODUCER',
-  DISTRIBUTOR = 'DISTRIBUTOR',
-  INVESTOR = 'INVESTOR',
-  TALENT = 'TALENT',
-  STUDIO = 'STUDIO',
-  LICENSOR = 'LICENSOR',
-  LICENSEE = 'LICENSEE',
-  COLLECTION_AGENT = 'COLLECTION_AGENT',
+// ============================================
+// Enums
+// ============================================
+
+export enum ParticipantBehaviorDto {
+  FEE_DEDUCTION = 'FEE_DEDUCTION',
+  RECOUPMENT = 'RECOUPMENT',
+  NET_PROFIT_SHARE = 'NET_PROFIT_SHARE',
+  FLAT_FEE = 'FLAT_FEE',
+  PASS_THROUGH = 'PASS_THROUGH',
 }
 
+// ============================================
+// Create / Update DTOs
+// ============================================
+
 export class CreateParticipantDto {
-  @ApiProperty({ description: 'Name of the participant', maxLength: 255 })
+  @ApiProperty({ description: 'Display name of the participant', maxLength: 255 })
   @IsString()
   @MinLength(1)
   @MaxLength(255)
   name!: string;
 
-  @ApiProperty({ enum: ParticipantRoleDto, description: 'Role of the participant' })
-  @IsEnum(ParticipantRoleDto)
-  role!: ParticipantRoleDto;
+  @ApiProperty({
+    description: 'Custom role label, free-form (e.g. "Hotel Investor", "Music Label", "Lead Actor")',
+    maxLength: 100,
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  roleName!: string;
+
+  @ApiProperty({
+    enum: ParticipantBehaviorDto,
+    description: 'Behavior type that drives settlement logic',
+  })
+  @IsEnum(ParticipantBehaviorDto)
+  behaviorType!: ParticipantBehaviorDto;
 
   @ApiPropertyOptional({ description: 'External ID reference', maxLength: 100 })
   @IsOptional()
@@ -47,17 +64,27 @@ export class CreateParticipantDto {
 }
 
 export class UpdateParticipantDto {
-  @ApiPropertyOptional({ description: 'Name of the participant', maxLength: 255 })
+  @ApiPropertyOptional({ description: 'Display name of the participant', maxLength: 255 })
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(255)
   name?: string;
 
-  @ApiPropertyOptional({ enum: ParticipantRoleDto, description: 'Role of the participant' })
+  @ApiPropertyOptional({ description: 'Custom role label', maxLength: 100 })
   @IsOptional()
-  @IsEnum(ParticipantRoleDto)
-  role?: ParticipantRoleDto;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  roleName?: string;
+
+  @ApiPropertyOptional({
+    enum: ParticipantBehaviorDto,
+    description: 'Behavior type that drives settlement logic',
+  })
+  @IsOptional()
+  @IsEnum(ParticipantBehaviorDto)
+  behaviorType?: ParticipantBehaviorDto;
 
   @ApiPropertyOptional({ description: 'External ID reference', maxLength: 100 })
   @IsOptional()
@@ -75,6 +102,10 @@ export class UpdateParticipantDto {
   metadata?: Record<string, unknown>;
 }
 
+// ============================================
+// Response DTO
+// ============================================
+
 export class ParticipantResponseDto {
   @ApiProperty()
   id!: string;
@@ -85,8 +116,11 @@ export class ParticipantResponseDto {
   @ApiProperty()
   name!: string;
 
-  @ApiProperty({ enum: ParticipantRoleDto })
-  role!: ParticipantRoleDto;
+  @ApiProperty({ description: 'Custom role label provided at creation time' })
+  roleName!: string;
+
+  @ApiProperty({ enum: ParticipantBehaviorDto })
+  behaviorType!: ParticipantBehaviorDto;
 
   @ApiPropertyOptional()
   externalId?: string | null;
@@ -102,4 +136,33 @@ export class ParticipantResponseDto {
 
   @ApiProperty()
   updatedAt!: Date;
+}
+
+// ============================================
+// CSV Import / Export DTOs
+// ============================================
+
+export class ImportParticipantRowResultDto {
+  @ApiProperty({ description: 'Row number in the CSV (1-indexed, header row excluded)' })
+  row!: number;
+
+  @ApiProperty({ description: 'Whether this row was imported successfully' })
+  success!: boolean;
+
+  @ApiPropertyOptional({ description: 'Error message if the row failed validation or insert' })
+  error?: string;
+
+  @ApiPropertyOptional({ type: () => ParticipantResponseDto })
+  participant?: ParticipantResponseDto;
+}
+
+export class BulkImportResultDto {
+  @ApiProperty({ description: 'Number of rows successfully imported' })
+  imported!: number;
+
+  @ApiProperty({ description: 'Number of rows that failed' })
+  failed!: number;
+
+  @ApiProperty({ description: 'Per-row results', type: [ImportParticipantRowResultDto] })
+  rows!: ImportParticipantRowResultDto[];
 }

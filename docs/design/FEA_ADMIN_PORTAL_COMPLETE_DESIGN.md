@@ -1,6 +1,6 @@
-# FEA Admin Portal — Complete Design Concept
+# FEA-SFI Admin Portal — Complete Design Concept
 
-**Purpose:** Full design blueprint for the FEA Admin Console with integrated SFI settlement module
+**Purpose:** Full design blueprint for the FEA-SFI Admin Console with integrated SFI settlement module
 **Context:** "Admin" = Deal/Project Owner who manages deals, participants, revenue, and settlements. Can own multiple deals/projects.
 **Date:** March 2026
 **Supersedes:** `SFI_ADMIN_PORTAL_DESIGN_CONCEPT.md` (now a subset of this document)
@@ -9,10 +9,10 @@
 
 ## 1. Portal Overview
 
-The FEA Admin Portal is a **single web application** for deal owners to manage their entertainment deals end-to-end: from deal creation, through revenue intake, to automated settlement computation and financial reporting.
+The FEA-SFI Admin Portal is a **single web application** for deal owners to manage their entertainment deals end-to-end: from deal creation, through revenue intake, to automated settlement computation and financial reporting.
 
 ```
-FEA Admin Portal
+FEA-SFI Admin Portal
 │
 ├── Global: Auth (Login/Register), Top Navbar, Notifications
 │
@@ -41,49 +41,49 @@ This design covers all features delivered across Milestones 2A, 2B, 2C, and 3.
 
 ### Milestone 2A — Core Settlement Computation Engine
 
-| Feature | Screen(s) | Status |
-|---------|-----------|--------|
-| Recoup logic with caps | E10 (Settlement Run Detail — Phase 3 breakdown) | ✅ BE + Design |
-| Multi-tier waterfall | E10 (4-phase waterfall visualization) | ✅ BE + Design |
-| Carry-forward balances | E10 (recoupment balance tracking), F5 (Recoupment Report) | ✅ BE, ⚠️ Design expanded |
-| Multiple revenue batches | E11 (Create Settlement — multi-batch select) | ✅ BE + Design |
-| Deterministic outputs | J1 (Proof hash verification) | ✅ BE + Design |
+| Feature                  | Screen(s)                                                 | Status                    |
+| ------------------------ | --------------------------------------------------------- | ------------------------- |
+| Recoup logic with caps   | E10 (Settlement Run Detail — Phase 3 breakdown)           | ✅ BE + Design            |
+| Multi-tier waterfall     | E10 (4-phase waterfall visualization)                     | ✅ BE + Design            |
+| Carry-forward balances   | E10 (recoupment balance tracking), F5 (Recoupment Report) | ✅ BE, ⚠️ Design expanded |
+| Multiple revenue batches | E11 (Create Settlement — multi-batch select)              | ✅ BE + Design            |
+| Deterministic outputs    | J1 (Proof hash verification)                              | ✅ BE + Design            |
 
 ### Milestone 2B — Rule Snapshots & Revenue Structures
 
-| Feature | Screen(s) | Status |
-|---------|-----------|--------|
-| Rule snapshot model (immutable) | E3 (List), E4 (Detail + ruleSummary), E5 (Create) | ✅ BE + Design |
+| Feature                              | Screen(s)                                             | Status         |
+| ------------------------------------ | ----------------------------------------------------- | -------------- |
+| Rule snapshot model (immutable)      | E3 (List), E4 (Detail + ruleSummary), E5 (Create)     | ✅ BE + Design |
 | Revenue batch structure & validation | E6 (List), E7 (Detail + validate/reject), E8 (Create) | ✅ BE + Design |
-| Revenue → Rule → Engine binding | E11 (Create Settlement — select rule + batches) | ✅ BE + Design |
-| Rule versioning + effective dating | E3 (version list with effective dates) | ✅ BE + Design |
+| Revenue → Rule → Engine binding      | E11 (Create Settlement — select rule + batches)       | ✅ BE + Design |
+| Rule versioning + effective dating   | E3 (version list with effective dates)                | ✅ BE + Design |
 
 ### Milestone 2C — Settlement Runs & Result Storage
 
-| Feature | Screen(s) | Status |
-|---------|-----------|--------|
-| Settlement run lifecycle (Create → Preview → Finalize) | E10 (lifecycle stepper + actions) | ✅ BE, ⚠️ Design expanded below |
-| Persisted allocation results | E10 (allocation breakdown by phase) | ✅ BE + Design |
-| Settlement metadata & versioning | E10 (metadata panel), E9 (run list with versioning) | ✅ BE, ⚠️ Design expanded |
-| Re-run safely without altering history | E10 (re-preview action), E12a (Correction detail) | ✅ BE, ⚠️ Design expanded |
+| Feature                                                | Screen(s)                                           | Status                          |
+| ------------------------------------------------------ | --------------------------------------------------- | ------------------------------- |
+| Settlement run lifecycle (Create → Preview → Finalize) | E10 (lifecycle stepper + actions)                   | ✅ BE, ⚠️ Design expanded below |
+| Persisted allocation results                           | E10 (allocation breakdown by phase)                 | ✅ BE + Design                  |
+| Settlement metadata & versioning                       | E10 (metadata panel), E9 (run list with versioning) | ✅ BE, ⚠️ Design expanded       |
+| Re-run safely without altering history                 | E10 (re-preview action), E12a (Correction detail)   | ✅ BE, ⚠️ Design expanded       |
 
 ### Milestone 3 — Financial Ledger, Audit System & Settlement Verification
 
-| Feature | Screen(s) | Status |
-|---------|-----------|--------|
-| Double-entry financial ledger | F2 (Ledger Overview), F3 (Journal Detail) | ✅ BE + Design |
-| Journal entries (debit/credit) | F3 (posting-level debit/credit table) | ✅ BE + Design |
-| Participant balance tracking | F4 (Participant Ledger), F5 (Recoupment Report) | ✅ BE, ⚠️ Design expanded |
-| Settlement proof hashes | J1 (Proof & Audit Trail) | ✅ BE + Design |
-| Settlement verification (re-compute & compare) | J1 (Verify Integrity action) | ✅ BE, ⚠️ Design expanded |
-| Evidence linking (revenue → payout) | J1 (Audit Trace visualization) | ✅ BE, ⚠️ Design NEW |
-| Correction settlements | E12 (Create Correction), E12a (Correction Detail) | ✅ BE, ⚠️ Design NEW |
-| Reversal accounting entries | F3a (Correction Journal — reversal postings) | ✅ BE, ⚠️ Design NEW |
-| Historical correction tracking | J1 (Correction Chain visualization) | ✅ BE, ⚠️ Design expanded |
-| Participant payout history | F4 (Participant Ledger), F6 (Participant Statement) | ✅ BE, ⚠️ Design NEW |
-| Settlement records retrieval | E1 (All Settlements), E10 (Detail) | ✅ BE + Design |
-| Audit tracing support | J1 (full trace), I1 (Audit Log) | ⚠️ J1=BE ready, I1=needs BE |
-| Financial reporting data access | F5 (Recoupment Report), F6 (Participant Statement), F7 (Settlement Summary) | ⚠️ Design NEW, BE partial |
+| Feature                                        | Screen(s)                                                                   | Status                      |
+| ---------------------------------------------- | --------------------------------------------------------------------------- | --------------------------- |
+| Double-entry financial ledger                  | F2 (Ledger Overview), F3 (Journal Detail)                                   | ✅ BE + Design              |
+| Journal entries (debit/credit)                 | F3 (posting-level debit/credit table)                                       | ✅ BE + Design              |
+| Participant balance tracking                   | F4 (Participant Ledger), F5 (Recoupment Report)                             | ✅ BE, ⚠️ Design expanded   |
+| Settlement proof hashes                        | J1 (Proof & Audit Trail)                                                    | ✅ BE + Design              |
+| Settlement verification (re-compute & compare) | J1 (Verify Integrity action)                                                | ✅ BE, ⚠️ Design expanded   |
+| Evidence linking (revenue → payout)            | J1 (Audit Trace visualization)                                              | ✅ BE, ⚠️ Design NEW        |
+| Correction settlements                         | E12 (Create Correction), E12a (Correction Detail)                           | ✅ BE, ⚠️ Design NEW        |
+| Reversal accounting entries                    | F3a (Correction Journal — reversal postings)                                | ✅ BE, ⚠️ Design NEW        |
+| Historical correction tracking                 | J1 (Correction Chain visualization)                                         | ✅ BE, ⚠️ Design expanded   |
+| Participant payout history                     | F4 (Participant Ledger), F6 (Participant Statement)                         | ✅ BE, ⚠️ Design NEW        |
+| Settlement records retrieval                   | E1 (All Settlements), E10 (Detail)                                          | ✅ BE + Design              |
+| Audit tracing support                          | J1 (full trace), I1 (Audit Log)                                             | ⚠️ J1=BE ready, I1=needs BE |
+| Financial reporting data access                | F5 (Recoupment Report), F6 (Participant Statement), F7 (Settlement Summary) | ⚠️ Design NEW, BE partial   |
 
 ---
 
@@ -98,15 +98,15 @@ This design covers all features delivered across Milestones 2A, 2B, 2C, and 3.
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Nav Item | Sub-items | Description |
-|----------|-----------|-------------|
-| **Dashboard** | — | Global overview: stats, recent activity, alerts |
-| **Deals** | Active / Draft / Closed | Deal CRUD + participants management |
-| **Settlement** | All Runs / Pending Reviews / Per-Deal | SFI core — rules, revenue, runs, ledger, proof |
-| **Transactions** | Revenue / Ledger / Reports | Cross-deal financial tracking + reporting |
-| **Audit Log** | — | System-wide who-did-what tracking |
-| **🔔 Notifications** | — | Bell icon with unread count |
-| **👤 Profile** | Profile / Team / Settings / Logout | User menu dropdown |
+| Nav Item             | Sub-items                             | Description                                     |
+| -------------------- | ------------------------------------- | ----------------------------------------------- |
+| **Dashboard**        | —                                     | Global overview: stats, recent activity, alerts |
+| **Deals**            | Active / Draft / Closed               | Deal CRUD + participants management             |
+| **Settlement**       | All Runs / Pending Reviews / Per-Deal | SFI core — rules, revenue, runs, ledger, proof  |
+| **Transactions**     | Revenue / Ledger / Reports            | Cross-deal financial tracking + reporting       |
+| **Audit Log**        | —                                     | System-wide who-did-what tracking               |
+| **🔔 Notifications** | —                                     | Bell icon with unread count                     |
+| **👤 Profile**       | Profile / Team / Settings / Logout    | User menu dropdown                              |
 
 ### Secondary Navigation (inside a deal)
 
@@ -124,113 +124,113 @@ This design covers all features delivered across Milestones 2A, 2B, 2C, and 3.
 
 ### Section A: Authentication (3 screens)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| A1 | Login | Form | ❌ NOT BUILT |
-| A2 | Register / Invite Accept | Form | ❌ NOT BUILT |
-| A3 | Forgot Password | Form | ❌ NOT BUILT |
+| #   | Screen                   | Type | BE Status    |
+| --- | ------------------------ | ---- | ------------ |
+| A1  | Login                    | Form | ❌ NOT BUILT |
+| A2  | Register / Invite Accept | Form | ❌ NOT BUILT |
+| A3  | Forgot Password          | Form | ❌ NOT BUILT |
 
 ### Section B: Dashboard (1 screen)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| B1 | Global Dashboard | Read-only | ⚠️ PARTIAL — aggregatable from existing endpoints |
+| #   | Screen           | Type      | BE Status                                         |
+| --- | ---------------- | --------- | ------------------------------------------------- |
+| B1  | Global Dashboard | Read-only | ⚠️ PARTIAL — aggregatable from existing endpoints |
 
 ### Section C: Deals (5 screens)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| C1 | Deals List (tabs: Active/Draft/Closed) | List + Filter | ✅ GET /deals |
-| C2 | Create Deal | Form | ✅ POST /deals |
-| C3 | Deal Overview (per-deal dashboard) | Read | ✅ GET /deals/:id |
-| C4 | Edit Deal (modal) | Form | ❌ no PATCH /deals/:id |
-| C5 | Deal Status Transitions | Actions on C3 | ❌ no status transition endpoints |
+| #   | Screen                                 | Type          | BE Status                         |
+| --- | -------------------------------------- | ------------- | --------------------------------- |
+| C1  | Deals List (tabs: Active/Draft/Closed) | List + Filter | ✅ GET /deals                     |
+| C2  | Create Deal                            | Form          | ✅ POST /deals                    |
+| C3  | Deal Overview (per-deal dashboard)     | Read          | ✅ GET /deals/:id                 |
+| C4  | Edit Deal (modal)                      | Form          | ❌ no PATCH /deals/:id            |
+| C5  | Deal Status Transitions                | Actions on C3 | ❌ no status transition endpoints |
 
 ### Section D: Participants (3 screens)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| D1 | Participants List (per deal) | List | ✅ |
-| D2 | Add Participant (modal) | Form | ✅ |
-| D3 | Participant Detail (drawer) | Read | ⚠️ PARTIAL |
+| #   | Screen                       | Type | BE Status  |
+| --- | ---------------------------- | ---- | ---------- |
+| D1  | Participants List (per deal) | List | ✅         |
+| D2  | Add Participant (modal)      | Form | ✅         |
+| D3  | Participant Detail (drawer)  | Read | ⚠️ PARTIAL |
 
 ### Section E: Settlement — SFI Core (14 screens)
 
-| # | Screen | Type | Milestone | BE Status |
-|---|--------|------|-----------|-----------|
-| E1 | All Settlements (cross-deal) | List + Filter | — | ❌ no global listing |
-| E2 | Pending Reviews / Approval Queue | List + Actions | — | ❌ no approval model |
-| E3 | Rule Snapshots List (per deal) | List | 2B | ✅ |
-| E4 | Rule Snapshot Detail (ruleSummary) | Read | 2B | ✅ |
-| E5 | Create Rule Snapshot (multi-step) | Form | 2B | ✅ |
-| E6 | Revenue Batches List (per deal) | List + Filter | 2B | ✅ |
-| E7 | Revenue Batch Detail (validate/reject) | Read + Actions | 2B | ✅ |
-| E8 | Create Revenue Batch | Form | 2B | ✅ |
-| E9 | Settlement Runs List (per deal) | List | 2C | ✅ |
-| E10 | Settlement Run Detail (lifecycle + waterfall) | Read + Actions | 2C/3 | ✅ |
-| E11 | Create Settlement Run | Form | 2C | ✅ |
-| E12 | Create Correction Run | Form | 3 | ✅ |
-| E12a | **Correction Detail (reversal view)** | Read | 3 | ✅ **NEW** |
-| E13 | **Settlement Comparison (original vs correction)** | Read | 3 | ✅ **NEW** |
+| #    | Screen                                             | Type           | Milestone | BE Status            |
+| ---- | -------------------------------------------------- | -------------- | --------- | -------------------- |
+| E1   | All Settlements (cross-deal)                       | List + Filter  | —         | ❌ no global listing |
+| E2   | Pending Reviews / Approval Queue                   | List + Actions | —         | ❌ no approval model |
+| E3   | Rule Snapshots List (per deal)                     | List           | 2B        | ✅                   |
+| E4   | Rule Snapshot Detail (ruleSummary)                 | Read           | 2B        | ✅                   |
+| E5   | Create Rule Snapshot (multi-step)                  | Form           | 2B        | ✅                   |
+| E6   | Revenue Batches List (per deal)                    | List + Filter  | 2B        | ✅                   |
+| E7   | Revenue Batch Detail (validate/reject)             | Read + Actions | 2B        | ✅                   |
+| E8   | Create Revenue Batch                               | Form           | 2B        | ✅                   |
+| E9   | Settlement Runs List (per deal)                    | List           | 2C        | ✅                   |
+| E10  | Settlement Run Detail (lifecycle + waterfall)      | Read + Actions | 2C/3      | ✅                   |
+| E11  | Create Settlement Run                              | Form           | 2C        | ✅                   |
+| E12  | Create Correction Run                              | Form           | 3         | ✅                   |
+| E12a | **Correction Detail (reversal view)**              | Read           | 3         | ✅ **NEW**           |
+| E13  | **Settlement Comparison (original vs correction)** | Read           | 3         | ✅ **NEW**           |
 
 ### Section F: Transactions & Financial Reports (8 screens)
 
-| # | Screen | Type | Milestone | BE Status |
-|---|--------|------|-----------|-----------|
-| F1 | Revenue Batches (cross-deal) | List + Filter | — | ❌ no global listing |
-| F2 | Ledger Overview (per deal) | List | 3 | ✅ |
-| F3 | Journal Detail (debit/credit postings) | Read | 3 | ✅ |
-| F3a | **Correction Journal (reversal entries)** | Read | 3 | ✅ **NEW** |
-| F4 | Participant Ledger (per participant) | Read | 3 | ✅ |
-| F5 | **Recoupment Status Report** | Read | 2A/3 | ✅ **NEW** (data from settlement allocations) |
-| F6 | **Participant Statement** | Read + Export | 3 | ⚠️ **NEW** (data exists, needs export endpoint) |
-| F7 | **Settlement Summary Report** | Read | 3 | ⚠️ **NEW** (data exists, needs aggregation) |
+| #   | Screen                                    | Type          | Milestone | BE Status                                       |
+| --- | ----------------------------------------- | ------------- | --------- | ----------------------------------------------- |
+| F1  | Revenue Batches (cross-deal)              | List + Filter | —         | ❌ no global listing                            |
+| F2  | Ledger Overview (per deal)                | List          | 3         | ✅                                              |
+| F3  | Journal Detail (debit/credit postings)    | Read          | 3         | ✅                                              |
+| F3a | **Correction Journal (reversal entries)** | Read          | 3         | ✅ **NEW**                                      |
+| F4  | Participant Ledger (per participant)      | Read          | 3         | ✅                                              |
+| F5  | **Recoupment Status Report**              | Read          | 2A/3      | ✅ **NEW** (data from settlement allocations)   |
+| F6  | **Participant Statement**                 | Read + Export | 3         | ⚠️ **NEW** (data exists, needs export endpoint) |
+| F7  | **Settlement Summary Report**             | Read          | 3         | ⚠️ **NEW** (data exists, needs aggregation)     |
 
 ### Section G: Documents (2 screens)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| G1 | Documents List (per deal) | List + Filter | ✅ |
-| G2 | Upload Document (modal) | Form | ✅ |
+| #   | Screen                    | Type          | BE Status |
+| --- | ------------------------- | ------------- | --------- |
+| G1  | Documents List (per deal) | List + Filter | ✅        |
+| G2  | Upload Document (modal)   | Form          | ✅        |
 
 ### Section H: Users & Roles (3 screens)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| H1 | Team Members List | List | ❌ NOT BUILT |
-| H2 | Invite Member (modal) | Form | ❌ NOT BUILT |
-| H3 | Role & Permissions | Settings | ❌ NOT BUILT |
+| #   | Screen                | Type     | BE Status    |
+| --- | --------------------- | -------- | ------------ |
+| H1  | Team Members List     | List     | ❌ NOT BUILT |
+| H2  | Invite Member (modal) | Form     | ❌ NOT BUILT |
+| H3  | Role & Permissions    | Settings | ❌ NOT BUILT |
 
 ### Section I: Audit Log (2 screens)
 
-| # | Screen | Type | BE Status |
-|---|--------|------|-----------|
-| I1 | Audit Log List (filterable) | List | ❌ NOT BUILT |
-| I2 | Audit Entry Detail | Read | ❌ NOT BUILT |
+| #   | Screen                      | Type | BE Status    |
+| --- | --------------------------- | ---- | ------------ |
+| I1  | Audit Log List (filterable) | List | ❌ NOT BUILT |
+| I2  | Audit Entry Detail          | Read | ❌ NOT BUILT |
 
 ### Section J: Proof & Verification (1 screen, expanded)
 
-| # | Screen | Type | Milestone | BE Status |
-|---|--------|------|-----------|-----------|
-| J1 | Proof, Verification & Audit Trace | Read + Actions | 3 | ✅ (expanded) |
+| #   | Screen                            | Type           | Milestone | BE Status     |
+| --- | --------------------------------- | -------------- | --------- | ------------- |
+| J1  | Proof, Verification & Audit Trace | Read + Actions | 3         | ✅ (expanded) |
 
 ---
 
 ## 5. Screen Count Summary
 
-| Section | Screens | BE Ready | BE Needed |
-|---------|---------|----------|-----------|
-| A. Auth | 3 | 0 | 3 |
-| B. Dashboard | 1 | 0 (partial) | 1 |
-| C. Deals | 5 | 2 | 3 |
-| D. Participants | 3 | 2 | 1 |
-| E. Settlement (SFI) | 14 | 11 | 3 |
-| F. Transactions & Reports | 8 | 5 | 3 |
-| G. Documents | 2 | 2 | 0 |
-| H. Users & Roles | 3 | 0 | 3 |
-| I. Audit Log | 2 | 0 | 2 |
-| J. Proof & Verification | 1 | 1 | 0 |
-| **Total** | **42** | **23 (55%)** | **19 (45%)** |
+| Section                   | Screens | BE Ready     | BE Needed    |
+| ------------------------- | ------- | ------------ | ------------ |
+| A. Auth                   | 3       | 0            | 3            |
+| B. Dashboard              | 1       | 0 (partial)  | 1            |
+| C. Deals                  | 5       | 2            | 3            |
+| D. Participants           | 3       | 2            | 1            |
+| E. Settlement (SFI)       | 14      | 11           | 3            |
+| F. Transactions & Reports | 8       | 5            | 3            |
+| G. Documents              | 2       | 2            | 0            |
+| H. Users & Roles          | 3       | 0            | 3            |
+| I. Audit Log              | 2       | 0            | 2            |
+| J. Proof & Verification   | 1       | 1            | 0            |
+| **Total**                 | **42**  | **23 (55%)** | **19 (45%)** |
 
 ---
 
@@ -243,7 +243,7 @@ This design covers all features delivered across Milestones 2A, 2B, 2C, and 3.
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                                                         │
-│                    FEA Admin Console                    │
+│                    FEA-SFI Admin Console                    │
 │              Settlement & Financial Infrastructure      │
 │                                                         │
 │            ┌─────────────────────────────┐              │
@@ -260,6 +260,7 @@ This design covers all features delivered across Milestones 2A, 2B, 2C, and 3.
 ```
 
 **BE Required:**
+
 - POST `/auth/login` → JWT access + refresh tokens
 - POST `/auth/refresh` → token rotation
 - POST `/auth/logout` → invalidate tokens
@@ -309,6 +310,7 @@ This design covers all features delivered across Milestones 2A, 2B, 2C, and 3.
 ### C1–C5: Deals
 
 Refer to previous version — no changes needed. Summary:
+
 - **C1:** Deals List with status tabs ✅
 - **C2:** Create Deal form ✅
 - **C3:** Deal Overview (per-deal dashboard) ✅
@@ -320,6 +322,7 @@ Refer to previous version — no changes needed. Summary:
 ### D1–D3: Participants
 
 Refer to previous version — no changes needed. Summary:
+
 - **D1:** Participants List ✅
 - **D2:** Add Participant modal ✅
 - **D3:** Participant Detail drawer ⚠️
@@ -521,22 +524,24 @@ Refer to `SFI_ADMIN_PORTAL_DESIGN_CONCEPT.md` for full wireframes. All ✅ BE re
 
 **Lifecycle Stepper (Milestone 2C):**
 Shows exactly where the settlement is in its lifecycle with timestamps:
+
 - ⚪ DRAFT → ⚪ PREVIEWED → ⚪ FINALIZED
 - Each step shows when it happened
 - Current step highlighted
 
 **Action Buttons by Status (Milestone 2C):**
 
-| Status | Available Actions |
-|--------|-------------------|
-| DRAFT | [▶ Preview Settlement] |
-| PREVIEWED | [🔒 Finalize Settlement] [↻ Re-Preview] |
+| Status    | Available Actions                                       |
+| --------- | ------------------------------------------------------- |
+| DRAFT     | [▶ Preview Settlement]                                  |
+| PREVIEWED | [🔒 Finalize Settlement] [↻ Re-Preview]                 |
 | FINALIZED | [Create Correction Run] [View Ledger] [Download Report] |
-| VOIDED | No actions (read-only) |
+| VOIDED    | No actions (read-only)                                  |
 
 **Re-Preview (Milestone 2C):** When PREVIEWED, user can re-preview to recalculate without altering history. The old preview is overwritten (only finalized results are immutable).
 
 **Finalize Confirmation Modal:**
+
 ```
 ┌─────────────────────────────────────────────────┐
 │  ⚠ Finalize Settlement Run #2?                 │
@@ -779,6 +784,7 @@ Shows exactly where the settlement is in its lifecycle with timestamps:
 **Purpose:** Same layout as F3 but for correction journals. Emphasizes that this is an additive entry, not a modification.
 
 Identical to F3 but with:
+
 - Header shows "CORRECTION" type badge
 - Note: "This journal contains only the correction delta. Original journal JRN-2026-00002 is unchanged."
 - Link to original journal
@@ -1058,6 +1064,7 @@ No changes from previous version. ❌ Entire module needs BE.
 ```
 
 **Key Milestone 3 Features Shown:**
+
 1. **Proof hashes** per settlement with verification status
 2. **Verification workflow** — re-compute and compare hash (determinism proof)
 3. **Evidence linking** — visual trace from revenue inputs → rules → engine → outputs
@@ -1130,33 +1137,33 @@ Deal → Tab: Settlements → View runs chronologically
 
 ### TIER 1: Must-Have for Launch
 
-| # | Feature | Endpoints | Screens Unlocked |
-|---|---------|-----------|------------------|
-| 1 | **Auth Module** | POST `/auth/login`, `/refresh`, `/logout` | A1, A2, A3 |
-| 2 | **RBAC Guards** | Middleware + `@Roles()` decorator on all endpoints | All (security) |
-| 3 | **Deal Update** | PATCH `/deals/:id`, PATCH `/deals/:id/status` | C4, C5 |
-| 4 | **Cross-Deal Listings** | GET `/settlement-runs` (global), GET `/revenue-batches` (global) | E1, E2, F1 |
-| 5 | **Audit Log** | AuditLog model + middleware + GET `/audit-logs` | I1, I2 |
+| #   | Feature                 | Endpoints                                                        | Screens Unlocked |
+| --- | ----------------------- | ---------------------------------------------------------------- | ---------------- |
+| 1   | **Auth Module**         | POST `/auth/login`, `/refresh`, `/logout`                        | A1, A2, A3       |
+| 2   | **RBAC Guards**         | Middleware + `@Roles()` decorator on all endpoints               | All (security)   |
+| 3   | **Deal Update**         | PATCH `/deals/:id`, PATCH `/deals/:id/status`                    | C4, C5           |
+| 4   | **Cross-Deal Listings** | GET `/settlement-runs` (global), GET `/revenue-batches` (global) | E1, E2, F1       |
+| 5   | **Audit Log**           | AuditLog model + middleware + GET `/audit-logs`                  | I1, I2           |
 
 ### TIER 2: Should-Have
 
-| # | Feature | Endpoints | Screens Unlocked |
-|---|---------|-----------|------------------|
-| 6 | **User Management** | GET/POST/PATCH/DELETE `/users` | H1, H2, H3 |
-| 7 | **Participant CRUD** | GET/PATCH/DELETE `/participants/:id` | D3 (full) |
-| 8 | **Dashboard Aggregation** | GET `/dashboard/summary` | B1 (optimized) |
-| 9 | **Report Endpoints** | GET `/reports/statement`, `/reports/summary` | F6, F7 (export) |
-| 10 | **Notification System** | Notification model + GET `/notifications` | 🔔 bell icon |
+| #   | Feature                   | Endpoints                                    | Screens Unlocked |
+| --- | ------------------------- | -------------------------------------------- | ---------------- |
+| 6   | **User Management**       | GET/POST/PATCH/DELETE `/users`               | H1, H2, H3       |
+| 7   | **Participant CRUD**      | GET/PATCH/DELETE `/participants/:id`         | D3 (full)        |
+| 8   | **Dashboard Aggregation** | GET `/dashboard/summary`                     | B1 (optimized)   |
+| 9   | **Report Endpoints**      | GET `/reports/statement`, `/reports/summary` | F6, F7 (export)  |
+| 10  | **Notification System**   | Notification model + GET `/notifications`    | 🔔 bell icon     |
 
 ### TIER 3: Nice-to-Have
 
-| # | Feature |
-|---|---------|
-| 11 | Settlement approval workflow |
-| 12 | Bulk validate/reject revenue batches |
-| 13 | Ledger export (CSV/PDF) |
-| 14 | Document download/stream |
-| 15 | Deal archival (soft delete) |
+| #   | Feature                              |
+| --- | ------------------------------------ |
+| 11  | Settlement approval workflow         |
+| 12  | Bulk validate/reject revenue batches |
+| 13  | Ledger export (CSV/PDF)              |
+| 14  | Document download/stream             |
+| 15  | Deal archival (soft delete)          |
 
 ### New DB Models Required
 
@@ -1262,16 +1269,16 @@ FE Work:
 
 ### Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 14+ (App Router) |
-| UI | shadcn/ui + Tailwind CSS |
-| State | TanStack Query (React Query) |
-| Forms | React Hook Form + Zod |
-| Tables | TanStack Table |
-| Charts | Recharts |
-| Auth | NextAuth.js or custom JWT |
-| Icons | Lucide React |
+| Layer     | Technology                   |
+| --------- | ---------------------------- |
+| Framework | Next.js 14+ (App Router)     |
+| UI        | shadcn/ui + Tailwind CSS     |
+| State     | TanStack Query (React Query) |
+| Forms     | React Hook Form + Zod        |
+| Tables    | TanStack Table               |
+| Charts    | Recharts                     |
+| Auth      | NextAuth.js or custom JWT    |
+| Icons     | Lucide React                 |
 
 ### Route Structure
 
@@ -1309,39 +1316,39 @@ FE Work:
 
 ## 11. Status Color Coding
 
-| Color | Hex | Meaning | Used For |
-|-------|-----|---------|----------|
-| Gray | #6B7280 | Draft | DRAFT deals, DRAFT runs |
-| Yellow | #F59E0B | Awaiting action | PENDING batches, PREVIEWED runs |
-| Green | #10B981 | Active / Approved | ACTIVE deals, VALIDATED batches, FINALIZED runs |
-| Blue | #3B82F6 | Completed | PROCESSED batches, CLOSED deals |
-| Red | #EF4444 | Error / Rejected | REJECTED batches, VOIDED runs |
-| Purple | #8B5CF6 | Special | CORRECTION runs |
+| Color  | Hex     | Meaning           | Used For                                        |
+| ------ | ------- | ----------------- | ----------------------------------------------- |
+| Gray   | #6B7280 | Draft             | DRAFT deals, DRAFT runs                         |
+| Yellow | #F59E0B | Awaiting action   | PENDING batches, PREVIEWED runs                 |
+| Green  | #10B981 | Active / Approved | ACTIVE deals, VALIDATED batches, FINALIZED runs |
+| Blue   | #3B82F6 | Completed         | PROCESSED batches, CLOSED deals                 |
+| Red    | #EF4444 | Error / Rejected  | REJECTED batches, VOIDED runs                   |
+| Purple | #8B5CF6 | Special           | CORRECTION runs                                 |
 
 ---
 
 ## 12. Final Summary
 
-| Metric | Count |
-|--------|-------|
-| **Total Screens** | **42** |
-| Screens with BE Ready | 23 (55%) |
-| Screens needing new BE | 19 (45%) |
+| Metric                                | Count                              |
+| ------------------------------------- | ---------------------------------- |
+| **Total Screens**                     | **42**                             |
+| Screens with BE Ready                 | 23 (55%)                           |
+| Screens needing new BE                | 19 (45%)                           |
 | **New screens added (this revision)** | **6** (E12a, E13, F3a, F5, F6, F7) |
-| Navbar items | 6 |
-| FE Routes | 27 |
-| New BE Endpoints Needed | ~15-20 |
-| New DB Models Needed | 3 (User, AuditLog, Notification) |
+| Navbar items                          | 6                                  |
+| FE Routes                             | 27                                 |
+| New BE Endpoints Needed               | ~15-20                             |
+| New DB Models Needed                  | 3 (User, AuditLog, Notification)   |
 
 ### Milestone Coverage
 
-| Milestone | Features | Design Coverage |
-|-----------|----------|-----------------|
-| 2A — Computation Engine | Waterfall, recoup, carry-forward | ✅ 100% (E10, F5) |
-| 2B — Rules & Revenue | Snapshots, batches, binding | ✅ 100% (E3-E8, E11) |
-| 2C — Settlement Runs | Lifecycle, storage, re-run | ✅ 100% (E9-E11, lifecycle stepper) |
-| 3 — Ledger, Audit, Proof | Ledger, corrections, proof, reports | ✅ 100% (F2-F7, E12a, E13, J1) |
+| Milestone                | Features                            | Design Coverage                     |
+| ------------------------ | ----------------------------------- | ----------------------------------- |
+| 2A — Computation Engine  | Waterfall, recoup, carry-forward    | ✅ 100% (E10, F5)                   |
+| 2B — Rules & Revenue     | Snapshots, batches, binding         | ✅ 100% (E3-E8, E11)                |
+| 2C — Settlement Runs     | Lifecycle, storage, re-run          | ✅ 100% (E9-E11, lifecycle stepper) |
+| 3 — Ledger, Audit, Proof | Ledger, corrections, proof, reports | ✅ 100% (F2-F7, E12a, E13, J1)      |
 
 ---
 
-*This document maps every backend feature from Milestones 2A–3 to specific UI screens. Use as the complete blueprint for Figma wireframes and frontend implementation.*
+_This document maps every backend feature from Milestones 2A–3 to specific UI screens. Use as the complete blueprint for Figma wireframes and frontend implementation._

@@ -11,21 +11,6 @@ import {
 } from 'class-validator';
 
 // ============================================
-// Enums
-// ============================================
-
-export enum ParticipantRoleEnum {
-  PRODUCER = 'PRODUCER',
-  DISTRIBUTOR = 'DISTRIBUTOR',
-  INVESTOR = 'INVESTOR',
-  TALENT = 'TALENT',
-  STUDIO = 'STUDIO',
-  LICENSOR = 'LICENSOR',
-  LICENSEE = 'LICENSEE',
-  COLLECTION_AGENT = 'COLLECTION_AGENT',
-}
-
-// ============================================
 // Rule Snapshot Participant DTOs
 // ============================================
 
@@ -56,8 +41,15 @@ export class RuleSnapshotParticipantResponseDto {
   @ApiProperty({ example: 'Participant Name' })
   participantName!: string;
 
-  @ApiProperty({ enum: ParticipantRoleEnum, example: ParticipantRoleEnum.PRODUCER })
-  participantRole!: ParticipantRoleEnum;
+  @ApiProperty({ description: 'Custom role label of the participant', example: 'Hotel Investor' })
+  participantRoleName!: string;
+
+  @ApiProperty({
+    description: 'Behavior type driving settlement logic',
+    example: 'NET_PROFIT_SHARE',
+    enum: ['FEE_DEDUCTION', 'RECOUPMENT', 'NET_PROFIT_SHARE', 'FLAT_FEE', 'PASS_THROUGH'],
+  })
+  participantBehaviorType!: string;
 
   @ApiPropertyOptional({
     description: 'Snapshot of participant-specific rules at time of snapshot',
@@ -238,8 +230,8 @@ export class RuleSummaryDto {
   totalParticipants!: number;
 
   @ApiProperty({
-    description: 'Breakdown of participants by role',
-    example: { PRODUCER: 1, DISTRIBUTOR: 1, INVESTOR: 1, TALENT: 1 },
+    description: 'Breakdown of participants by role name',
+    example: { 'Hotel Investor': 3, 'Music Label': 1, 'Lead Actor': 2 },
   })
   roleBreakdown!: Record<string, number>;
 

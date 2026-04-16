@@ -10,8 +10,14 @@ import { Injectable, Logger } from '@nestjs/common';
 const SECRET_KEYS = [
   'DATABASE_URL',
   'DIRECT_URL',
-  'JWT_SECRET',
+  // Auth — JWT signing
+  'JWT_ACCESS_SECRET',
   'JWT_REFRESH_SECRET',
+  // Auth — Mailtrap SMTP (host/port are non-secret, set in env)
+  'MAILTRAP_USER',
+  'MAILTRAP_PASS',
+  // Auth — public-facing app URL used inside email links
+  'APP_URL',
   'CORS_ORIGIN',
   'LOG_LEVEL',
   'FRONTEND_URL',
