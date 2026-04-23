@@ -70,7 +70,7 @@ export class CreateSettlementRunDto {
 
   @ApiPropertyOptional({
     description: 'Optional notes for this settlement run',
-    example: 'Q1 2024 quarterly settlement',
+    example: 'Q1 2026 quarterly settlement',
   })
   @IsOptional()
   @IsString()
@@ -93,7 +93,7 @@ export class SettlementAllocationDto {
 
   @ApiProperty({
     description: 'Participant name for display',
-    example: 'Acme Productions LLC',
+    example: 'Bali Horizon Hotel Investors LLC',
   })
   participantName!: string;
 
@@ -262,7 +262,7 @@ export class SettlementRunResponseDto {
   @ApiProperty({ enum: CurrencyEnum, example: CurrencyEnum.USD })
   currency!: CurrencyEnum;
 
-  @ApiPropertyOptional({ example: 'Q1 2024 quarterly settlement' })
+  @ApiPropertyOptional({ example: 'Q1 2026 quarterly settlement' })
   notes?: string | null;
 
   @ApiPropertyOptional({
@@ -457,7 +457,7 @@ export class FinalizeSettlementResponseDto {
 export class CreateCorrectionRunDto {
   @ApiPropertyOptional({
     description: 'Explanation for why this correction is needed',
-    example: 'Revenue batch RB-2024-001 had incorrect amount; correcting with revised figures.',
+    example: 'Revenue batch RB-2026-001 had incorrect amount; correcting with revised figures.',
   })
   @IsOptional()
   @IsString()

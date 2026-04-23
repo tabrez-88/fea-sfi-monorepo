@@ -8,11 +8,12 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -27,6 +28,7 @@ import {
 import { RulesService } from '../services/rules.service';
 
 @ApiTags('rule-snapshots')
+@ApiBearerAuth('bearer')
 @Controller()
 export class RuleSnapshotsController {
   constructor(private readonly rulesService: RulesService) {}
@@ -50,6 +52,8 @@ export class RuleSnapshotsController {
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
   @ApiResponse({ status: 200, description: 'List of rule snapshots', type: RuleSnapshotListResponseDto })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async listSnapshots(

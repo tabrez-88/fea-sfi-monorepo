@@ -6,11 +6,12 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
 import {
@@ -21,6 +22,7 @@ import {
 import { AuditLogService } from '../services/audit-log.service';
 
 @ApiTags('audit-log')
+@ApiBearerAuth('bearer')
 @Controller('audit-logs')
 export class AuditLogController {
   constructor(private readonly auditLogService: AuditLogService) {}
@@ -31,11 +33,16 @@ export class AuditLogController {
     description: `
 Returns a paginated list of all audit log entries, ordered by most recent first.
 
+**Auth note:** Requires a valid JWT (global guard), but audit-log endpoints are **not
+user-scoped** — any authenticated user can query the system-wide audit log. Apply
+\`dealId\` or \`actor\` filters to narrow results to your context; user-level scoping
+is tracked as a follow-up.
+
 **Filters:**
-- actor: Filter by who performed the action
-- action: Filter by action type (CREATED, VALIDATED, FINALIZED, VOIDED, etc.)
-- entityType: Filter by entity type (Deal, RevenueBatch, SettlementRun, etc.)
-- dealId: Filter by associated deal
+- actor: Filter by who performed the action (user id or "system")
+- action: Filter by action type (CREATED, UPDATED, STATUS_CHANGED, VALIDATED, REJECTED, PREVIEWED, FINALIZED, VOIDED, BULK_IMPORTED, etc.)
+- entityType: Filter by entity type (Deal, RevenueBatch, SettlementRun, Participant, RuleSnapshot)
+- dealId: Filter by associated deal — most common usage, powers the Deal Overview Recent Activity timeline
 
 **Use Cases:**
 - Review all activity for a specific deal

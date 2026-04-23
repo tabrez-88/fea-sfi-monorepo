@@ -6,11 +6,12 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
 import { PaginationQueryDto } from '../../deals/dto';
@@ -22,6 +23,7 @@ import {
 import { LedgerService } from '../services/ledger.service';
 
 @ApiTags('ledger')
+@ApiBearerAuth('bearer')
 @Controller()
 export class LedgerController {
   constructor(private readonly ledgerService: LedgerService) {}
@@ -31,6 +33,10 @@ export class LedgerController {
     summary: 'Get ledger for a deal',
     description: `
 Returns all ledger journals and a summary for a deal.
+
+**Auth note:** Requires a valid JWT (global guard), but ledger endpoints are **not
+user-scoped** — any authenticated user can read any deal's ledger by ID. User-level
+ownership checks will be added alongside the participant-ledger refactor.
 
 **Purpose:**
 The ledger is the authoritative source of truth for all financial transactions
@@ -61,6 +67,8 @@ The ledger provides a complete, immutable record of:
   })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
   @ApiResponse({
     status: 200,
     description: 'Deal ledger with journals and summary',

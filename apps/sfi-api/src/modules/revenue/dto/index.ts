@@ -68,8 +68,9 @@ export class CreateRevenueBatchDto {
   currency!: CurrencyEnum;
 
   @ApiPropertyOptional({
-    description: 'Source of the revenue data (e.g., "Netflix Q1 2024", "Theatrical US")',
-    example: 'Netflix Streaming Q1 2024',
+    description:
+      'Free-form label for the upstream source of this revenue (e.g. operator, channel, or statement reference).',
+    example: 'Q1 2026 Operator Statement',
     maxLength: 255,
   })
   @IsOptional()
@@ -78,13 +79,15 @@ export class CreateRevenueBatchDto {
   source?: string;
 
   @ApiPropertyOptional({
-    description: 'Additional metadata about the revenue batch (line items, breakdowns, etc.)',
+    description:
+      'Free-form JSON metadata. Shape is not enforced — callers typically attach line items, ' +
+      'territory/platform breakdowns, or source-system references.',
     example: {
       territory: 'US',
-      platform: 'SVOD',
+      channel: 'hotel-operations',
       lineItems: [
-        { title: 'Film A', amount: 100000 },
-        { title: 'Film B', amount: 50000 },
+        { label: 'Room Revenue', amount: 100000 },
+        { label: 'F&B Revenue', amount: 50000 },
       ],
     },
   })
@@ -149,8 +152,8 @@ export class RevenueBatchResponseDto {
   status!: RevenueBatchStatusEnum;
 
   @ApiPropertyOptional({
-    description: 'Source of the revenue data',
-    example: 'Netflix Streaming Q1 2024',
+    description: 'Source of the revenue data (free-form label from the upstream operator/channel).',
+    example: 'Q1 2026 Operator Statement',
   })
   source?: string | null;
 

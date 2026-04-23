@@ -8,11 +8,12 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -31,6 +32,7 @@ import {
 import { SettlementService } from '../services/settlement.service';
 
 @ApiTags('settlement-runs')
+@ApiBearerAuth('bearer')
 @Controller()
 export class SettlementRunsController {
   constructor(private readonly settlementService: SettlementService) {}
@@ -50,10 +52,18 @@ export class SettlementRunsController {
   }
 
   @Get('deals/:dealId/settlement-runs')
-  @ApiOperation({ summary: 'List all settlement runs for a deal' })
+  @ApiOperation({
+    summary: 'List all settlement runs for a deal',
+    description:
+      'Response items include the Latest Settlement card enrichments — runNumber, runLabel, ' +
+      'ruleSnapshotVersion, revenueBatchCount, totalRevenue, proofHash, finalizedAt — so the FE ' +
+      'can render the Deal Overview card from a single request (typically with limit=1, sortBy=createdAt, sortOrder=desc).',
+  })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
   @ApiResponse({ status: 200, description: 'List of settlement runs', type: SettlementRunListResponseDto })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async listRuns(

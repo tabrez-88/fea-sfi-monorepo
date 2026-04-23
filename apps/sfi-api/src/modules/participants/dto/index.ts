@@ -32,7 +32,9 @@ export class CreateParticipantDto {
   name!: string;
 
   @ApiProperty({
-    description: 'Custom role label, free-form (e.g. "Hotel Investor", "Music Label", "Lead Actor")',
+    description:
+      'Custom role label, free-form (e.g. "Hotel Investor", "Operator", "Brand Partner", "Anchor Tenant"). ' +
+      'No fixed taxonomy — behavior is driven by `behaviorType`, not this label.',
     maxLength: 100,
   })
   @IsString()

@@ -677,6 +677,685 @@ The `shares` column is optional — only used if the deal uses share-weighted al
 
 ---
 
+### [FB-003] Flexible Rule Snapshot — Custom Names + % or $ Fees + Exit Conditions (Covers 2 Deal Types)
+
+**Date:** Apr 16, 2026 (original) • **Revised:** Apr 16, 2026 evening (Rev 2: detailed 4-question reply) • **Revised again:** Apr 16, 2026 late evening (**Rev 3: Liang's "1 pipeline, optional layers" simplification — current authoritative scope**)
+**Source:** Figma comment thread on Rule Snapshot Detail page ("Not Complete" frame, node 638:13425) + WhatsApp thread + PDF reply + WhatsApp "not 2 models, just options" clarification
+**Raised by:** Liangliang Lyu
+**Discussed with:** Tabrez Akhlaque (multiple rounds, direction now stable in Rev 3)
+**Status:** 🔄 **REVISED AGAIN Apr 16 late PM (Rev 3)** — scope simplified back. See [REV 3 block](#fb-003-rev-3-apr-16-late-evening--authoritative) below. No Deal Type field needed. Create Deal stays as deployed. Engine additions still required (pool, waterfall, recoup multiplier, hard cap, deadline, flat fee).
+
+---
+
+#### Context / Liang's Concern
+
+Over a 2-day thread (Apr 15–16), Liang raised three related questions on the Rule Snapshot Detail page that together describe her complete mental model for how SFI should express different deal structures.
+
+**Question 1 — Investment + Waterfall deal (Republic/Thorpe example):**
+> "What if a deal in RWA/FEA is like this:
+> Deal Type: Investment (Recoup + Waterfall)
+> Raise: $1M target, $1000 unit price, 10,000 total units
+> Revenue Source: 20% of project gross revenue, up to 5 years (or until exit condition met)
+> Investor Terms: Recoup 120% of invested capital, post-recoup waterfall applies
+> Exit: (A) Investor reaches 140% total return (hard cap), OR (B) 5-year term reached
+> How this showing and be able to adding in Snap shots?"
+> Reference: https://republic.com/thorpe
+
+> "different than project traditional revenue share, more like investor share. SO SFI will need able to cover traditional revenue share like what we have now, OR investor share with waterfall"
+
+**Question 2 — Her 2-type mental model (WhatsApp, Apr 16):**
+> "Is the rule snaps like 2 types?
+> Revenue 1: Take off ABCD (either number or %), then under ABCD how many Participants, then share revenue or the amount, hit the recoup exit or the deadline or waterfall
+> Revenue 2: the number $ need be shared like (20%/50% etc), how many Participants, Recoup/deadline exit, Recoup/waterfall exit, or keep going
+> ABCD like fees, studio, etc need to take off."
+
+GPT helped her formalize this as 4 layers:
+- **Layer 1: Deductions** (% or fixed, ordered) — reduces gross → net
+- **Layer 2: Allocation Mode** — A. Simple Split (fixed %, no recoup) OR B. Recoup/Waterfall (tier-based, condition-driven)
+- **Layer 3: Participants** — list with rules depending on mode
+- **Layer 4: Exit/Continuation** — recoup cap, deadline, perpetual
+
+**Question 3 — Final confirmation question (WhatsApp, Apr 16):**
+> "Got it. And saw your comment on Figma. I just have one question. Am I able to create new / edit all ABCD's name and % or $? If that's possible, then all pages will work."
+
+Accompanied by screenshot of the Payment Structure Breakdown section with Net Profit group expanded (Lead Creator, Studio, Director, etc.) — pointing at the exact UI elements she wants to be freely configurable.
+
+**Her conclusion:**
+> "But the good part to me is: I have the trust of you. As long as you say it will covers 2 types deals, then I just wait."
+
+---
+
+## FB-003 Rev 3 (Apr 16, late evening) — **AUTHORITATIVE**
+
+> **Most recent and final direction.** After Rev 2 (which added Deal Type selector + raise terms discussion), Liang sent a further WhatsApp clarification with GPT-assisted analysis, **dissolving the "2 deal types" framing** and replacing it with a single-pipeline model. Rev 3 supersedes Rev 2. The Rev 2 block is preserved below for history but its decisions are no longer current.
+
+### What Liang said (Rev 3)
+
+Direct quotes, consolidated:
+
+> "How about not 2 models. Just options:
+> A. Take off ABCD
+> B. Don't take off ABCD, just take % of revenue, then share to investors"
+>
+> "No need change deal part."
+>
+> "Just when rule — either go take off ABCD then same share to each party or investor. Or just take % of gross revenue, then pay investor. Same."
+>
+> "So no need to change deal page, follow your original design. Or even can be take off ABCD, the rest net revenue take %, then share to investor. It's all options."
+>
+> "Not 2 models, just: same pipeline, optional deduction layer ON/OFF. Everything else (split, waterfall, recoup) stays the same."
+
+**GPT-assisted architecture paragraph she pasted:**
+- **Participant Layer** (general roles): investor, creator, studio, platform, etc.
+- **Allocation Target Layer** (important): introduce **Investor Pool** as a single allocation target in waterfall tiers. Instead of listing every investor in waterfall.
+- Internally: Investor Pool distributes to individual investors based on units / contribution / ownership %
+- **Recoup and cap logic applies to individual investors inside the pool** — not all participants (e.g. actors, producers) should be part of recoup logic
+- This keeps system scalable; otherwise waterfall becomes too complex, recoup logic unclear, UI hard to manage
+
+### Rev 3 mental model
+
+```
+ONE pipeline. ONE engine. NO Deal Type classifier.
+
+Per rule snapshot:
+┌────────────────────────────────────────────────────────┐
+│ Layer 1 — Participants (broad roles)                   │
+│   investor / creator / studio / platform / actor / ... │
+│   (FB-002 roleName already delivers this ✅)           │
+└────────────────────────────────────────────────────────┘
+                          ↓
+┌────────────────────────────────────────────────────────┐
+│ Layer 2 — Allocation Targets (NEW first-class concept) │
+│   • Individual participants (1 row each)               │
+│   • Pool participants (1 row, aggregates many)         │
+│     └─ "Investor Pool" = the main pool pattern         │
+│   Waterfall tiers reference TARGETS, not individuals   │
+└────────────────────────────────────────────────────────┘
+                          ↓
+┌────────────────────────────────────────────────────────┐
+│ Layer 3 — Optional Deduction Layer (ON/OFF per deal)   │
+│   If any FEE_DEDUCTION participants exist → engine     │
+│   runs DISTRIBUTION_FEES phase. Otherwise it skips.    │
+│   (Engine already supports this — no code change.)     │
+└────────────────────────────────────────────────────────┘
+                          ↓
+┌────────────────────────────────────────────────────────┐
+│ Layer 4 — Tier / Waterfall / Recoup config             │
+│   Tier 1: 100% → Investor Pool until 120% recoup       │
+│   Tier 2: 20% → Investor Pool, 80% → Creator           │
+│           until 140% hard cap per-investor OR 3–5 yrs  │
+│   Individual hard cap + cumulative payout tracking     │
+│   applies within Investor Pool only                    │
+└────────────────────────────────────────────────────────┘
+```
+
+**Three equivalent "option" configurations she described:**
+- **Option A** (take off ABCD): deal has Fee Deduction participants + investor pool + tiers → fees deducted → remainder split
+- **Option B** (no ABCD): deal has NO Fee Deduction participants + investor pool gets % of gross directly
+- **Option C** (combo): deductions first, then tier split from remainder to pool + creator
+
+All three = same pipeline, different participant/target/tier configuration at snapshot level. No UI classifier needed.
+
+### Decisions reversed by Rev 3 (vs Rev 2)
+
+| Topic | Rev 2 (Apr 16 evening) | **Rev 3 (Apr 16 late evening) — AUTHORITATIVE** |
+|---|---|---|
+| `Deal.dealType` enum + migration | ✅ Add it | ❌ **NOT NEEDED** — no Deal Type classifier |
+| Deal Type dropdown on FEA-6 | ✅ Add it | ❌ **NOT NEEDED** — Create Deal stays as deployed |
+| FEA-7 Edit Deal mirror | ✅ Mirror Deal Type | ❌ **NOT NEEDED** |
+| Conditional Step 2 UX by Deal Type in FEA-14 | ✅ Branching | ❌ **NOT NEEDED** — single UX driven by "does deal have Fee Deduction participants? Pool? Tiers?" |
+| Scope-split "keep both models vs drop Revenue Share" (Liang's open Q) | ⏳ Open | ✅ **DISSOLVED** — there are no "2 models" anymore |
+
+### Decisions preserved from Rev 2 (still in scope)
+
+| Item | Status |
+|---|---|
+| Recoup Multiplier (120% Tier 1 cap on `RecoupmentRule`) | ✅ Still needed |
+| Hard Cap Multiplier per-investor (140%) + cross-phase cumulative tracking | ✅ Still needed — scoped to investors inside pool |
+| Recoup Deadline (ISO date) + run-date threaded into engine | ✅ Still needed |
+| 2-tier waterfall engine phase | ✅ Still needed |
+| Fixed $ fee deduction (complete FLAT_FEE wiring) | ✅ Still needed |
+| Investor Pool as a first-class allocation target | ✅ **Formalized in Rev 3** as the "Allocation Target Layer" — subsumes FB-002b share-weighted work |
+| CSV import with `units` column per investor | ✅ Still needed (FB-001 extension) |
+| Tier 3 (long-tail royalty) | ⏳ Still deferred to v2 |
+
+### New in Rev 3
+
+- **Explicit "Allocation Target Layer"** as a first-class data model concept in the Rule Snapshot
+  - A target is either an individual participant OR a pool
+  - Waterfall tiers reference targets
+  - Recoup/cap logic applies to individuals inside a pool (not at pool level)
+- **Non-pool participants are simple**: they just take a % from tier allocations, no recoup logic applied
+- This clarifies what was ambiguous in Rev 2 about where per-investor hard cap enforcement lives
+
+### Schema implications (Rev 3)
+
+- `Deal` model — **NO CHANGE** (no dealType field)
+- `RuleSnapshot.rules` JSON — structure updated to hold:
+  ```json
+  {
+    "allocationTargets": [
+      { "id": "target_creator", "type": "individual", "participantId": "..." },
+      { "id": "target_investor_pool", "type": "pool", "memberBehaviorFilter": "RECOUPMENT" }
+    ],
+    "deductions": [  /* optional — FEE_DEDUCTION participants */ ],
+    "tiers": [
+      { "tier": 1, "splits": [{ "targetId": "target_investor_pool", "percentage": 100 }], "recoupMultiplier": 1.2 },
+      { "tier": 2, "splits": [
+        { "targetId": "target_investor_pool", "percentage": 20 },
+        { "targetId": "target_creator", "percentage": 80 }
+      ], "hardCapMultiplier": 1.4, "deadline": "2031-04-16" }
+    ]
+  }
+  ```
+- Engine phases — new `allocateByTier()` phase replaces fixed RECOUPMENT + NET_PROFITS; pool breakdown runs after each tier allocation
+- `Participant` — unchanged (FB-002 `roleName + behaviorType` still the participant-level data model)
+
+### Open items for Tabrez after Rev 3
+
+| Item | Action |
+|---|---|
+| Upwork contract scope check | Confirm Rev 3 BE work (~5–6 dev days) is in-scope |
+| Reply to Liang confirming Rev 3 understanding | Draft ready (see CLIENT_DESIGN_FEEDBACK meta — not persisted) |
+| ~~Keep both models vs drop Revenue Share~~ | ✅ **No longer relevant** — dissolved by Rev 3 |
+| ~~Upwork vs dev driving Phase 1/2 split~~ | ⏳ Still useful to know but not blocking Rev 3 design |
+
+---
+
+## FB-003 REVISION (Apr 16, evening) — ⚠️ SUPERSEDED BY REV 3
+
+> **Note:** This Rev 2 block was the earlier direction. It is preserved for history. For current authoritative scope see [Rev 3 block above](#fb-003-rev-3-apr-16-late-evening--authoritative).
+
+### Decisions reversed by Liang's Apr 16 evening reply
+
+| Topic | Original FB-003 decision (morning) | Revised decision (Liang's PM reply) |
+|---|---|---|
+| Deal Type selector on FEA-6 | ❌ Not needed — flexible snapshot covers both | ✅ **Needed — Liang said "Agree"**. Classifies deal; drives conditional Rule Snapshot UX. |
+| Raise Terms section on FEA-6 | ⚠️ Ambiguous | ❌ **Not in SFI scope** — target raise, unit price, total units, duration cap live in FEA platform. SFI receives investor unit/share data via CSV (FB-001). |
+| Post-recoup waterfall tiers | ⏳ Deferred — no spec | ✅ **In scope for v1 with concrete 2-tier spec** (see below) |
+| Hard cap per-investor vs per-pool | Default per-investor (inferred) | ✅ **Confirmed per-investor** — each investor tracks own cumulative payouts and stops at own cap |
+| FB-002b (share-weighted investor pool) | ⏳ Deferred independently | ✅ **Promoted to CORE** — Rule Snapshot allocates to "Investor Pool" (one row); internal breakdown to individual investors uses share-weighted computation at settlement |
+| Phase split (Phase 1 vs Phase 2) | ⏳ Not decided | ✅ **Liang suggests: Phase 1 = Revenue Share (already built), Phase 2 = Investment (her primary use case)** |
+
+### Liang's concrete 2-tier waterfall spec (SFI v1)
+
+From her reply, referenced from the Upwork contract discussion:
+
+```
+Tier 1 — Recoup Phase
+  Allocation: 100% → Investor Pool
+  Condition:  Until investors reach 120% recoup (recoupMultiplier = 1.20)
+
+Tier 2 — Post-Recoup Participation
+  Allocation: 20% → Investor Pool, 80% → Creator
+  Condition:  Until 140–150% total payout (hardCapMultiplier = 1.40–1.50)
+              OR time-based (3–5 years, recoupDeadline)
+
+Tier 3 — DEFERRED for SFI v2
+  Reduced investor share (e.g., 10%) for long-tail royalty participation
+```
+
+**Key semantic:** Tier 1 is a **recoup multiplier** (120% of invested capital, not just 100% recoup). Tier 2 is a **post-recoup waterfall split** with a hard cap exit.
+
+### Liang's Investor Pool clarification (important model point)
+
+> "At the Rule Snapshot level: Allocation happens to **Investor Pool**.
+> Internally: Pool distributes to individual investors based on: units / contribution amount / ownership %"
+
+**Implication for data model:**
+- Rule Snapshot has ONE row labeled "Investor Pool" with a pool-level % (or tier config). NOT 200 rows for 200 investors.
+- Individual investor payouts are computed at settlement time using share-weighted breakdown (ex-FB-002b, now core).
+- Each investor's share = their units / total pool units × pool allocation.
+
+### Liang's "dynamic participant count" point
+
+> "Will this be able to edit? 'Recoupment 200 Participants'. Doesn't have to be 200 Participants, some deal will be 100 / 50 / 500 / 1000 just like Republic and stock."
+
+**Already supported:** the `200` in the Figma mock is just example data. Engine and DB accept any count. Confirm this to her explicitly in next reply.
+
+### Liang's open questions back to Tabrez
+
+| Liang asked | Tabrez's answer needed |
+|---|---|
+| "What is affecting Phase 1 and 2 now? Upwork contract or dev capacity?" | Confirm driver of phase split |
+| "Can we have SFI with both models or will it be extra for dev? If extra fee, let me know, or I can just keep investment model only (it's for FEA only at this point)." | Confirm: keep both is near-zero extra work (engine is generic), so both stay. Offer reassurance. |
+
+### Revised scope summary
+
+- ✅ **Add `dealType` field to Deal model** (REVENUE_SHARE | INVESTMENT)
+- ✅ **Add Deal Type selector to Create Deal (FEA-6)** — dropdown only, no raise terms section
+- ❌ **Do NOT add Raise Terms** (target raise / unit price / total units / duration cap) — stays in FEA
+- ✅ **Add `recoupMultiplier` to recoupment model** — e.g., 1.20 for 120% Tier 1 cap
+- ✅ **Add 2-tier waterfall engine phase** — Tier 1 (recoup to multiplier) + Tier 2 (post-recoup split until hard cap)
+- ✅ **Add `hardCapMultiplier` per-investor** + per-investor cumulative payout tracking
+- ✅ **Add `recoupDeadline`** (ISO date) + run-date threaded into engine
+- ✅ **Add fixed $ fee deduction** (complete FLAT_FEE wiring)
+- ✅ **Promote FB-002b** — share-weighted Investor Pool breakdown is now core to Investment flow
+- ⏳ **Defer Tier 3** — long-tail royalty, out of v1 scope
+
+---
+
+#### Key Insight — Scope Simplification  ⚠️ SUPERSEDED Apr 16 PM
+
+> **Note:** This section reflects the Apr 16 morning pivot which was reversed by Liang's detailed evening reply. See [REVISION block](#fb-003-revision-apr-16-evening) above for the current scope. Kept here for decision history only.
+
+**Initial FB-003 draft (Apr 15) proposed:** Add a new "Deal Type" dropdown to Create Deal form (FEA-6) with `Revenue Share` vs `Investment + Waterfall`, plus a conditional "Raise Terms" section (target raise, unit price, total units, duration cap).
+
+**After Liang's Apr 16 morning clarification, we pivoted:** No Deal Type selector needed. The Rule Snapshot itself is flexible enough to express BOTH deal structures through:
+1. **Custom group names** (✅ already handled by FB-002 `roleName` free text)
+2. **% OR fixed $ for deductions** (gap — partially stubbed)
+3. **Exit conditions per recoupment participant** (gap — recoup cap only, no hard cap / deadline)
+
+**Why this approach seemed better at the time:**
+- Simpler UX — no upfront classification, no conditional form sections
+- More flexible — admin can mix patterns in a single deal
+- Aligns with existing 4-phase engine architecture (Liang's 4 layers ≈ our 4 phases)
+- Avoids FEA-6 (Create Deal) changes entirely
+- Matched Liang's mental model (she arrived at it independently that morning)
+
+**Why it was reversed:** Liang's evening reply explicitly confirmed she wants the Deal Type selector ("Agree"), a concrete 2-tier waterfall, pool-level allocation with internal share breakdown, and per-investor cap tracking. The "flexibility-only" approach lacks the structural scaffolding she needs for Investment deals.
+
+---
+
+#### Gap Analysis — Mapped to Liang's 4 Layers  (⚠️ Rev 3 adjustments applied)
+
+##### Layer 0 — Deal-level classification — ❌ NO LONGER NEEDED (Rev 3)
+
+Rev 2 proposed `Deal.dealType` enum. **Rev 3 dissolved this need** — a single pipeline handles all configurations via Rule Snapshot composition. Deal model stays untouched.
+
+| Capability | Status | Note |
+|---|---|---|
+| `Deal.dealType` enum field | ❌ Not needed | Rev 3 removed the requirement |
+| Create Deal UI — Deal Type dropdown | ❌ Not needed | Deployed form stays as-is |
+| DTO: `CreateDealInput.dealType` | ❌ Not needed | No type changes |
+
+**Effort saved by Rev 3:** ~0.5 BE day + 0.5 FE day + migration risk + form redeploy avoided.
+
+##### Layer 1: Deductions (% or $)
+
+| Capability | Status | Code Location |
+|---|---|---|
+| Custom group naming (free text) | ✅ Done via FB-002 | `Participant.roleName` |
+| Percentage-based fee deduction | ✅ Done | [types.ts:46-49](apps/sfi-api/src/modules/settlement/engine/types.ts#L46-L49), [distribution-fees.ts:29](apps/sfi-api/src/modules/settlement/engine/phases/distribution-fees.ts#L29) |
+| `FLAT_FEE` enum value | ✅ Stubbed (unused) | [types.ts:24](apps/sfi-api/src/modules/settlement/engine/types.ts#L24) |
+| DTO hint for fixed method | ✅ Stubbed (metadata only) | [dto/index.ts:79](apps/sfi-api/src/modules/rules/dto/index.ts#L79) — `method: 'percentage' \| 'fixed' \| 'tiered' \| 'waterfall'` |
+| **Fixed $ amount fee deduction — wired** | ❌ **GAP** | No `feeAmount` field on `DistributionFeeRule`; `processDistributionFees()` hardcoded to `mulPercent` |
+| **FE toggle (% vs $) in Create Rule Snapshot** | ❌ **GAP** | — |
+
+**To close gap:**
+- [types.ts](apps/sfi-api/src/modules/settlement/engine/types.ts): Add `feeAmount?: number` to `DistributionFeeRule`
+- [distribution-fees.ts](apps/sfi-api/src/modules/settlement/engine/phases/distribution-fees.ts): Branch on `feeAmount` presence → deduct flat amount; else use `feePercentage`
+- DTO + mapper updates
+- Engine spec tests for flat fee case
+- **Effort: ~0.5 BE day**
+
+##### Layer 2: Allocation Mode (Simple Split vs Recoup/Waterfall)  ⚠️ EXPANDED Apr 16 PM
+
+| Capability | Status | Code Location |
+|---|---|---|
+| Simple Split (flat %) | ✅ Done | `NET_PROFIT_SHARE` behavior + [net-profits.ts](apps/sfi-api/src/modules/settlement/engine/phases/net-profits.ts) |
+| Recoup + priority-ordered waterfall (basic) | ✅ Done | `RECOUPMENT` behavior + [recoupment.ts:40](apps/sfi-api/src/modules/settlement/engine/phases/recoupment.ts#L40) |
+| Carry-forward across runs | ✅ Done | `RecoupmentRule.previouslyRecouped` |
+| **Recoup Multiplier (Tier 1)** — e.g., pay 120% of invested capital before Tier 2 starts | ❌ **GAP (NEW)** | No `recoupMultiplier` field on `RecoupmentRule`; engine recoups to `recoupCap` only |
+| **2-tier post-recoup waterfall** — Tier 2 splits remaining revenue (e.g., 20% pool / 80% creator) until hard cap | ❌ **GAP (NEW, was deferred)** | No waterfall tier structure in engine |
+| **Explicit "Allocation Mode" selector in UI** | ❌ Driven by `dealType` (Layer 0) | Conditional form branches in FEA-14 |
+
+**To close gap:**
+- Add `recoupMultiplier?: number` to `RecoupmentRule` (default 1.0 = recoup 100%; 1.2 = recoup 120%)
+- Modify `processRecoupment()`: instead of stopping at `recoupAmount`, stop at `recoupAmount × recoupMultiplier`
+- Add new `WaterfallTierRule` concept for Tier 2, e.g.:
+  ```ts
+  interface WaterfallTierRule {
+    tier: number;              // 2 (Tier 1 is built-in recoup)
+    splits: { participantId: string; percentage: number }[];  // e.g., pool 20%, creator 80%
+    hardCapMultiplier?: number; // stop when investor reaches 140% of invested
+    deadline?: string;          // stop at this date
+  }
+  ```
+- Add new phase processor `processWaterfallTier2()` OR extend recoupment phase
+- Engine spec tests for Tier 1 (120% recoup) and Tier 2 (post-recoup split with hard cap exit)
+- **Effort: ~2 BE days**
+
+**Liang's concrete v1 spec:**
+- Tier 1: 100% → Investor Pool until 120% recoup reached
+- Tier 2: 20% → Investor Pool, 80% → Creator, until 140–150% hard cap OR 3–5 year deadline
+- Tier 3 (reduced investor share): deferred to v2
+
+##### Layer 3: Participants / Investor Pool  ⚠️ EXPANDED Apr 16 PM
+
+| Capability | Status | Code Location |
+|---|---|---|
+| Flexible participants with custom names + behavior | ✅ Done via FB-002 | `Participant.roleName + behaviorType` |
+| CSV bulk import (200+ investors) | ✅ BE done via FB-001 | [participants module](apps/sfi-api/src/modules/participants/) |
+| **"Investor Pool" as a single row in Rule Snapshot** | ❌ **GAP (NEW)** | Currently each investor is its own row; Liang wants pool-level abstraction at snapshot layer |
+| **Share-weighted internal breakdown at settlement time** (ex-FB-002b) | ❌ **GAP (PROMOTED from deferred to CORE)** | No share → % computation in engine |
+| **Per-investor unit / ownership tracking** | ⚠️ Partial | `Participant.metadata` JSON can hold unit info; no typed field or engine-level computation |
+
+**Liang's model** (exact words):
+> "At the Rule Snapshot level: Allocation happens to Investor Pool.
+> Internally: Pool distributes to individual investors based on units / contribution amount / ownership %."
+
+**To close gap:**
+- Rule Snapshot participant row for `INVESTOR_POOL` behavior — one row per pool, carries pool-level %
+- At settlement time: pool allocation × (individual_units / total_pool_units) = individual payout
+- Units/shares imported via FB-001 CSV (unified `name, roleName, behaviorType, email, externalId, units` format)
+- **See FB-002b implementation checklist (promoted from deferred to core)**
+- **Effort: already scoped in FB-002b (~2 BE days + FE) — no new effort beyond promoting it**
+
+##### Layer 4: Exit / Continuation Rules  ⚠️ EXPANDED Apr 16 PM
+
+| Capability | Status | Code Location |
+|---|---|---|
+| Recoup Cap (per-investor ceiling, absolute $) | ✅ Done | `RecoupmentRule.recoupCap` |
+| Priority ordering (basic waterfall) | ✅ Done | `RecoupmentRule.priority` |
+| **Hard Cap Multiplier** (per-investor, e.g., stop at 140% of each investor's `recoupAmount`) | ❌ **GAP** | No `hardCapMultiplier` field |
+| **Time-based Deadline** | ❌ **GAP** | No `recoupDeadline` field; no run-date signal into phase |
+| **Per-investor cumulative payout tracking across ALL phases (Tier 1 + Tier 2)** | ❌ **GAP (NEW)** | `previouslyRecouped` tracks only recoupment phase; hard cap requires tracking Tier 2 payouts too for correct stop condition |
+| **Perpetual flag** (explicit "keep going forever" marker) | ⚠️ Implicit | Absence of cap = perpetual; no explicit signal |
+
+**Liang's exact spec:**
+> "Hard Cap (140%) per-investor. Each investor must: Have their own investment amount / Track their own cumulative payouts / Stop receiving payouts once they hit the cap."
+
+**To close gap:**
+- [types.ts](apps/sfi-api/src/modules/settlement/engine/types.ts): Add to `RecoupmentRule`:
+  - `hardCapMultiplier?: number` (e.g., `1.4` → stop at 140% × `recoupAmount`)
+  - `recoupDeadline?: string` (ISO date)
+- [types.ts](apps/sfi-api/src/modules/settlement/engine/types.ts): Extend `RecoupmentBalance` (or similar) to track **total cumulative payout across all phases** per investor, not just recoupment phase:
+  - `totalPayoutsAllPhases: number` (used for hard cap check)
+- [recoupment.ts](apps/sfi-api/src/modules/settlement/engine/phases/recoupment.ts) + new `waterfall-tier2.ts`: Before allocating, check:
+  - If `hardCapMultiplier` set AND `totalPayoutsAllPhases >= recoupAmount × hardCapMultiplier` → skip
+  - If `recoupDeadline` set AND `runDate > recoupDeadline` → skip
+- Pass settlement run date into engine input
+- Persist per-investor cumulative balances across settlement runs (DB + carry-forward)
+- DTO + mapper updates
+- Engine spec tests for Tier 2 hard cap exit, deadline exit, and cross-phase cumulative tracking
+- **Effort: ~1.5 BE days** (was 1 day; extra 0.5 for cross-phase tracking)
+
+**Note on `FLAT_FEE` and `PASS_THROUGH`:** Both are stubbed in `ParticipantBehavior` enum but unused. `FLAT_FEE` gets wired as part of Layer 1 fix. `PASS_THROUGH` stays stubbed (no known use case yet). A new `INVESTOR_POOL` behavior may be added in Layer 3 for the pool row concept.
+
+---
+
+#### Decision Log — What Liang's replies resolved (Apr 16 morning → evening → late evening)
+
+| Question | Morning (Rev 1 pivot) | Evening (Rev 2) | **Late evening (Rev 3 — AUTHORITATIVE)** |
+|---|---|---|---|
+| Phase 1 or Phase 2? | "I trust you, I'll wait" | "Phase 1 = Revenue Share, Phase 2 = Investment (flagship)" | Framing dissolved — single pipeline, no "phase split" by model |
+| % of deals Investment vs Revenue Share? | N/A | "Investment = primary" | Framing dissolved |
+| Waterfall tiers count / split? | N/A | Concrete 2-tier (Tier 1 = 100% pool until 120%; Tier 2 = 20/80 until 140–150% or 3–5 yrs) | ✅ **Same spec still applies** — now as tier config on allocation targets |
+| Hard cap per-investor or per-pool? | N/A | Per-investor | ✅ **Per-investor, inside pool only** (non-pool participants have no cap logic) |
+| % OR $ for fees? | "both" (implied) | Confirmed | ✅ **Still needed** (FLAT_FEE wiring) |
+| Deal Type dropdown on Create Deal? | ❌ Not needed | ✅ "Agree — add it" | ❌ **REVERSED AGAIN — not needed** ("no need change deal page, follow your original design") |
+| Raise Terms on Create Deal? | Ambiguous | ❌ Not in SFI | ❌ Still not in SFI |
+| FB-002b share-weighted allocation? | Deferred | ✅ Promoted to core | ✅ **Formalized as "Allocation Target Layer — Pool"** |
+| "Keep both models or drop Revenue Share"? | — | Open Q to Tabrez | ✅ **Dissolved by Rev 3** — no "2 models" exist anymore |
+| "Upwork or dev driving phase split"? | — | Open Q to Tabrez | ⏳ Still useful to know but no longer blocking design |
+
+---
+
+#### Design Changes Needed
+
+##### 🎨 Screen 5.2: Rule Snapshot Detail (FEA-13) — already `Design Rejected` from FB-002
+
+**Current Figma state** ([node 638:13425 "Not Complete"](https://www.figma.com/design/Tk5nFtkvsbrDWo7dhIEHm0/FEA-Admin?node-id=638-14061)):
+- Rule Summary cards: Total Participants / Total Dist. Fee (%) / Recoupment Cap
+- Payment Structure Breakdown (FB-002 behavior groups): Fee Deduction / Recoupment / Net Profit
+- Net Profit Split bar chart
+- Participant Terms table: Name / Role / Fee % / Recoup Cap / Priority / Net %
+
+**Updates needed for FB-003:**
+
+1. **"Total Dist. Fee" summary card** — show either "12%" or "$50,000" depending on fee type; add `%`/`$` suffix dynamically
+2. **Participant Terms table header** — rename "Fee %" → "Fee (% / $)". Cell shows `12%` or `$50,000`.
+3. **Add columns to Participant Terms table** (only for rows with RECOUPMENT behavior — empty/`—` for others):
+   - `Hard Cap` — e.g., `140%` or `$1,400,000` or `—`
+   - `Deadline` — e.g., `2031-04-16` or `Perpetual`
+4. **Rule Summary card** — add two optional summary rows when any participant has them set:
+   - "Hard Cap Range: 120% – 150%" (min-max across participants)
+   - "Earliest Deadline: 2031-04-16"
+5. **Keep FB-002 behavior grouping UI unchanged** — no conflict
+
+##### 🎨 Screen 5.3: Create Rule Snapshot — Step 2 (FEA-14) — already `Design Rejected` from FB-002
+
+**Current Figma state** (node 437:10762):
+- Participant checklist with role-specific fields per role type
+- Running totals footer
+
+**Updates needed for FB-003:**
+
+1. **Fee input — toggle between % and $:**
+   ```
+   ☑ Global Cinema Partners (Fee Deduction)
+   ┌────────────────────────────────────────────────┐
+   │  Fee Type:  ( ● % )  ( ○ $ )                   │
+   │  [   12   ] %           OR          $ [ 50,000 ]│
+   └────────────────────────────────────────────────┘
+   ```
+
+2. **Recoupment participant fields — add two new sections:**
+   ```
+   ☑ Horizon Ventures Fund (Recoupment)
+   ┌────────────────────────────────────────────────┐
+   │  Recoupment Cap:  $ [ 45,000,000 ]              │
+   │  Priority:        [  1  ]                       │
+   │  Net Profit %:    [  15  ]                      │
+   │                                                 │
+   │  ─── Exit Conditions (optional) ───             │
+   │  Hard Cap:                                      │
+   │    ○ None   ● Multiplier   ○ Fixed amount       │
+   │    [  1.4  ] × invested   (= stop at 140%)      │
+   │                                                 │
+   │  Deadline:                                      │
+   │    [ Date picker ]   or   ☑ Perpetual           │
+   └────────────────────────────────────────────────┘
+   ```
+
+3. **Running totals footer** — unchanged (hard cap / deadline are per-participant, not aggregable)
+
+4. **Step 2 UX — single unified flow (Rev 3 replaces the Deal Type branching)**
+
+   No branching based on Deal Type. Instead, Step 2 shows four optional config sections, each conditionally visible based on snapshot composition:
+
+   ```
+   ┌─ (Optional) Deductions — ABCD fees off the top ─────────┐
+   │  ℹ Shows only if any Fee Deduction participant exists.  │
+   │  ☑ Global Cinema Partners (Fee Deduction)                │
+   │    Fee Type: ( ● % )  ( ○ $ )                            │
+   │    [ 12 ]%  OR  $ [ 50,000 ]                             │
+   └──────────────────────────────────────────────────────────┘
+
+   ┌─ Allocation Targets ────────────────────────────────────┐
+   │  Add individual participants AND/OR pools as targets.    │
+   │  ● Individual: Creator / Studio / Actor                  │
+   │  ● Pool:       Investor Pool (aggregates recoup-enabled  │
+   │                participants with share-weighted breakdown)│
+   └──────────────────────────────────────────────────────────┘
+
+   ┌─ Tier 1: Recoup Phase (optional) ───────────────────────┐
+   │  Allocation: 100% → Investor Pool                        │
+   │  Recoup Multiplier: [ 1.20 ] × invested (= 120%)          │
+   │  ℹ Only shows if a pool with recoup exists.              │
+   └──────────────────────────────────────────────────────────┘
+
+   ┌─ Tier 2: Post-Recoup Split ─────────────────────────────┐
+   │  Investor Pool: [ 20 ] %                                 │
+   │  Creator:       [ 80 ] %                                 │
+   │  (must total 100%)                                       │
+   │                                                           │
+   │  Exit Conditions:                                         │
+   │  Hard Cap:   [ 1.40 ] × invested (per-investor inside pool)│
+   │  Deadline:   [ 2031-04-16 ]  or  ☑ No deadline            │
+   └──────────────────────────────────────────────────────────┘
+
+   ┌─ Investor Pool Detail ──────────────────────────────────┐
+   │  Pool participants (auto-counted): 200                   │
+   │  Total units (auto-summed from CSV): 10,000              │
+   │  [View participant list] [Re-import CSV]                 │
+   └──────────────────────────────────────────────────────────┘
+   ```
+
+   **Configuration maps to Liang's 3 options:**
+   - **Option A** (take off ABCD): Deductions section filled + tiers defined
+   - **Option B** (no ABCD): Deductions section empty, tiers allocate directly from gross
+   - **Option C** (both): Deductions filled + tiers on net remainder
+
+   Same UI, same engine — admin just fills or skips sections as the deal needs.
+
+##### 🎨 Screen 1.6: Create Deal (FEA-6) — **NO CHANGE** (Rev 3 final)
+
+Rev 2 proposed a Deal Type dropdown after Liang's "Agree" reply. **Rev 3 (her late-evening WhatsApp)** walked this back explicitly:
+
+> "So no need to change deal page, follow your original design."
+> "Not 2 models, just: same pipeline, optional deduction layer ON/OFF."
+
+**Deployed Create Deal form stays as-is** — Name / Description / Status / Effective Date / Termination Date. No Deal Type field. No Raise Terms. No schema migration.
+
+##### 🎨 Screen 1.7: Edit Deal (FEA-7) — **NO CHANGE** (Rev 3 final)
+
+Mirror of Create Deal. No Deal Type field to mirror. Stays as-is.
+
+---
+
+#### Ticket Changes Needed
+
+> **Per Tabrez's instruction: no new Notion tickets created yet. Recorded here for later ticket creation/update pass.**
+
+##### 🎫 FEA-6: Create Deal — **NO CHANGE** (Rev 3 final)
+
+No schema changes, no UI changes. Deployed form stays as-is. Keep `Status: Ready for dev` (shipped).
+
+##### 🎫 FEA-7: Edit Deal — **NO CHANGE** (Rev 3 final)
+
+Mirror of Create Deal. No changes.
+
+##### 🎫 FEA-13: Rule Snapshot Detail — UPDATE spec (already `Design Rejected` from FB-002)
+
+Append to ticket description:
+- Fee column header and cells support `%` or `$` (new — FB-003)
+- Participant Terms table gains `Hard Cap` + `Deadline` columns (new — FB-003)
+- Rule Summary card gains optional `Hard Cap Range` + `Earliest Deadline` rows (new — FB-003)
+- Keep all FB-002 behavior grouping updates unchanged
+
+##### 🎫 FEA-14: Create Rule Snapshot — UPDATE spec (already `Design Rejected` from FB-002)
+
+Append to ticket description:
+- Step 2: Fee input gains `%` / `$` toggle per FEE_DEDUCTION participant (new — FB-003)
+- Step 2: Recoupment participants gain `Hard Cap` + `Deadline / Perpetual` exit condition fields (new — FB-003)
+- Optional: Step 1 gains `Allocation Mode` toggle (Simple vs Recoup+NP) — can defer
+- Keep all FB-002 investor group allocation updates unchanged
+
+##### 🎫 New BE tickets to create later  (⚠️ Adjusted Rev 3 — no Deal Type ticket)
+
+1. ~~**Backend: Add `Deal.dealType` enum + migration**~~ — ❌ **DROPPED in Rev 3** (no Deal Type field needed)
+
+2. **Backend: Complete FLAT_FEE wiring (fixed $ fee deduction)**
+   - Files: [types.ts](apps/sfi-api/src/modules/settlement/engine/types.ts), [distribution-fees.ts](apps/sfi-api/src/modules/settlement/engine/phases/distribution-fees.ts), rules DTO, rules mapper, settlement engine spec
+   - Add `feeAmount?: number` to `DistributionFeeRule`, branch processor
+   - Epic: Rules • Milestone: MS-2 • Priority: 1 — Must Have • Type: Backend
+   - Effort: ~0.5 dev day
+
+3. **Backend: Recoup Multiplier (Tier 1 cap @ 120%)** (NEW)
+   - Files: [types.ts](apps/sfi-api/src/modules/settlement/engine/types.ts), [recoupment.ts](apps/sfi-api/src/modules/settlement/engine/phases/recoupment.ts), rules DTO, mapper, engine spec
+   - Add `recoupMultiplier?: number` (default 1.0) to `RecoupmentRule`; modify phase to stop at `recoupAmount × recoupMultiplier` instead of `recoupCap` alone
+   - Epic: Rules • Milestone: MS-2 • Priority: 1 — Must Have (Investment flow) • Type: Backend
+   - Effort: ~0.5 dev day
+
+4. **Backend: Recoupment Hard Cap + Deadline + cross-phase cumulative tracking**
+   - Files: [types.ts](apps/sfi-api/src/modules/settlement/engine/types.ts), [recoupment.ts](apps/sfi-api/src/modules/settlement/engine/phases/recoupment.ts), new waterfall-tier2.ts, settlement input, rules DTO, mapper, engine spec
+   - Add `hardCapMultiplier?` + `recoupDeadline?` to relevant rules; thread run-date; enforce stop
+   - **Extend `RecoupmentBalance` (or new balance type) to track total cumulative payouts across BOTH recoupment phase and Tier 2 waterfall payouts** — required for correct per-investor hard cap enforcement
+   - Epic: Rules • Milestone: MS-2 • Priority: 1 — Must Have (Investment flow) • Type: Backend
+   - Effort: ~1.5 dev days
+
+5. **Backend: Tier 2 Post-Recoup Waterfall Phase** (NEW, PROMOTED from deferred)
+   - New phase processor (`waterfall-tier2.ts`) OR extension to `processNetProfits`
+   - Input: `WaterfallTierRule` with splits (e.g., pool 20% / creator 80%)
+   - Stop conditions: hard cap OR deadline reached
+   - Settlement output includes Tier 1 + Tier 2 allocations separately
+   - Engine spec tests for 2-tier flow end-to-end
+   - Epic: Rules • Milestone: MS-2 • Priority: 1 — Must Have (Investment flow) • Type: Backend
+   - Effort: ~2 dev days
+
+6. **Backend: Share-weighted Investor Pool allocation** (PROMOTED from FB-002b deferred)
+   - See FB-002b spec — now core, not deferred
+   - Pool row in Rule Snapshot → per-investor breakdown at settlement
+   - Epic: Rules • Milestone: MS-2 • Priority: 1 — Must Have (Investment flow) • Type: Backend
+   - Effort: ~2 dev days (as previously scoped)
+
+7. **Backend: Allocation Target Layer in Rule Snapshot schema** (NEW Rev 3)
+   - Introduce first-class "allocation target" concept in `RuleSnapshot.rules` JSON (individual OR pool)
+   - Waterfall tiers reference targets, not participant IDs directly
+   - Supports Liang's Options A / B / C via composition (optional deductions, optional pool, optional tiers)
+   - Covers both "same split to each party" and "all to investor pool" configurations in one model
+   - Epic: Rules • Milestone: MS-2 • Priority: 1 — Must Have • Type: Backend
+   - Effort: ~1 dev day (schema + DTO + validator; engine wiring rolls into ticket 5/6)
+
+8. **Backend: Tier 3 (long-tail royalty) — DEFERRED to SFI v2**
+   - Per Liang's explicit statement: "no need for SFI v1"
+
+---
+
+#### Figma Frames To Update  (⚠️ Rev 3 final)
+
+| Frame | Node | Change | Blocks |
+|---|---|---|---|
+| Create Deal | 384:1709 | **NO CHANGE** (Rev 3 final) — deployed form stays as-is | — |
+| Edit Deal | (mirror) | **NO CHANGE** (Rev 3 final) | — |
+| Rule Snapshot Detail | 638:13425 (current "Not Complete" WIP) | Fee cell % or $, Recoup Multiplier, Tier 1/2 waterfall visualization, Investor Pool row with member count + total units, Hard Cap + Deadline summary rows, per-investor cap tracking (inside pool) | FB-002 Design |
+| Create Rule Snapshot Step 2 | 437:10762 (FEA-14) | Single unified UX (no Deal Type branching): Deductions section (optional, auto-shows if Fee Deduction participants exist), Allocation Targets (individuals + pools), Tier 1 / Tier 2 waterfall config, Investor Pool detail card | FB-002 Design |
+
+---
+
+#### Summary of Impact  (⚠️ Rev 3 — AUTHORITATIVE)
+
+| Item | Status | Owner |
+|---|---|---|
+| ✅ DECISION (Rev 3 — Apr 16 late PM): NO Deal Type selector / field — single pipeline with optional layers | ✅ | Liang |
+| ✅ DECISION (Rev 3): Create Deal + Edit Deal — NO CHANGE (deployed forms stay as-is) | ✅ | Liang |
+| ✅ DECISION (Rev 3): "Allocation Target Layer" is first-class — pools (e.g. Investor Pool) sit alongside individual participants as waterfall targets | ✅ | Liang |
+| ✅ DECISION (Rev 3): Recoup + hard cap logic applies ONLY to individuals inside Investor Pool (not to non-pool participants) | ✅ | Liang |
+| ✅ DECISION (Rev 3): Optional deduction layer ON/OFF — driven by whether Fee Deduction participants exist | ✅ | Liang |
+| ✅ DECISION (Rev 2 kept): Hard cap per-investor (140%), 2-tier waterfall v1, Tier 3 deferred to v2 | ✅ | Liang |
+| ✅ DECISION (Rev 2 kept): Raise Terms NOT in SFI — lives in FEA | ✅ | Liang |
+| ✅ DECISION (Rev 2 kept): FB-002b (share-weighted allocation) PROMOTED — now formalized as the Pool Target in Rev 3 | ✅ | Liang |
+| ✅ DECISION (Apr 14): Custom group naming shipped via FB-002 `roleName` | ✅ | Backend |
+| ⏳ **OPEN (Rev 3 still useful):** Confirm Upwork contract scope covers Rev 3 BE work (~5–6 dev days) | ⏳ | Tabrez |
+| ❌ ~~**OPEN:** Keep both models vs Investment-only~~ | ✅ Dissolved by Rev 3 | — |
+| BE: `DistributionFeeRule.feeAmount` + branch processor (complete FLAT_FEE) | ⏳ | Backend |
+| BE: `RecoupmentRule.recoupMultiplier` + enforcement (Tier 1 cap at 120%) | ⏳ | Backend |
+| BE: Tier 2 waterfall phase (`WaterfallTierRule`, `processWaterfallTier2`) | ⏳ | Backend |
+| BE: Per-investor `hardCapMultiplier` + cross-phase cumulative tracking (inside pool) | ⏳ | Backend |
+| BE: `recoupDeadline` + run-date threaded into engine | ⏳ | Backend |
+| BE: Allocation Target Layer — first-class pool concept in `RuleSnapshot.rules` JSON + DTO | ⏳ | Backend |
+| BE: Share-weighted pool → individual breakdown at settlement time (FB-002b) | ⏳ | Backend |
+| BE: Engine spec tests (2-tier flow, per-investor hard cap, deadline, pool breakdown) | ⏳ | Backend |
+| ~~BE: `Deal.dealType` enum + migration~~ | ❌ Dropped by Rev 3 | — |
+| BE: Tier 3 (long-tail royalty) | ⏳ Deferred (SFI v2) | Backend |
+| Figma: Create Deal — **NO CHANGE** (Rev 3 final) | ✅ | — |
+| Figma: Edit Deal — **NO CHANGE** (Rev 3 final) | ✅ | — |
+| Figma: Rule Snapshot Detail — fee % or $, Recoup Multiplier, Hard Cap, Deadline, Tier 1/2 breakdown, Investor Pool row | ⏳ | Design |
+| Figma: Create Rule Snapshot Step 2 — single unified UX (optional deductions + targets + tiers + pool detail) | ⏳ | Design |
+| Update FEA-6 ticket — NO CHANGE note (Rev 3) | ⏳ | PM/Dev |
+| Update FEA-7 ticket — NO CHANGE note (Rev 3) | ⏳ | PM/Dev |
+| Update FEA-13 ticket description with FB-003 Rev 3 additions | ⏳ | PM/Dev |
+| Update FEA-14 ticket description with FB-003 Rev 3 additions (single unified UX) | ⏳ | PM/Dev |
+| New Notion ticket: BE Allocation Target Layer + Pool concept | ⏳ | PM |
+| New Notion ticket: BE Complete FLAT_FEE wiring | ⏳ | PM |
+| New Notion ticket: BE Recoup Multiplier + Tier 2 Waterfall + Hard Cap + Deadline + cross-phase tracking | ⏳ | PM |
+| New Notion ticket: BE Share-weighted pool allocation (FB-002b, now formalized as pool target) | ⏳ | PM |
+| Reply to Liang confirming Rev 3 understanding | ⏳ | Tabrez |
+
+---
+
+#### Connection to FB-001 and FB-002  (⚠️ UPDATED Apr 16 PM)
+
+- **FB-001** (CSV import, BE ✅ Apr 14) → unchanged; still the correct onboarding path for 200+ investors. **CSV template extended:** add `units` column for Investor Pool share-weighted distribution (replaces earlier `shares` naming).
+- **FB-002a** (custom roleName + behavior, ✅ Apr 14) → **directly enables** Liang's "name groups freely" requirement. A new `INVESTOR_POOL` behavior value may be added to represent the pool row concept.
+- **FB-002b** (share-weighted investor allocation) → ⚠️ **PROMOTED from deferred to CORE** (Apr 16 PM). Now a required building block for Investment deals: Rule Snapshot allocates to pool at snapshot layer; at settlement time the engine breaks the pool allocation down to individual investors using their unit counts. Implementation checklist already exists — just promote priority and schedule for Phase 2.
+
+**FB-003 is now largely additive** (no rework of prior feedback) but **expands scope** by promoting FB-002b and reversing the "no Deal Type field" decision.
+
+---
+
 <!-- Template for new entries — copy and fill in -->
 
 <!--
@@ -713,7 +1392,7 @@ What did Liang say? What problem are they trying to solve?
 
 ## Implementation Checklist
 
-> Last updated: Apr 14, 2026. Update status when work completes.
+> Last updated: Apr 16, 2026. Update status when work completes.
 
 ### FB-001: CSV Import / Export for Participants
 
@@ -757,12 +1436,151 @@ What did Liang say? What problem are they trying to solve?
 
 ### FB-002b: Investor Group Allocation (Share-weighted, 200+ investors)
 
-> Deferred — needs design finalization before implementation.
+> ⚠️ **PROMOTED from deferred to CORE Apr 16 PM** — required for Investor Pool breakdown in Investment deals (see FB-003 Rev 2). Schedule alongside FB-003 Phase 2 work.
 
 | Task | Type | Status | Date |
 |------|------|--------|------|
-| Design: investor group concept in Rule Snapshot Step 2 | Design | ⏳ | — |
-| BE: share-weighted allocation in settlement engine | Backend | ⏳ | — |
-| FE: investor group allocation UI in Create Rule Snapshot Step 2 | Frontend | ⏳ | — |
-| Notion: New ticket for investor group allocation | PM | ⏳ | — |
+| Design: investor pool concept in Rule Snapshot Step 2 (Investment mode) | Design | ⏳ | — |
+| BE: share-weighted allocation in settlement engine (units → %) | Backend | ⏳ | — |
+| BE: new `INVESTOR_POOL` behavior value (optional, or reuse `RECOUPMENT` with pool flag) | Backend | ⏳ | — |
+| BE: CSV template extended with `units` column (extends FB-001 import) | Backend | ⏳ | — |
+| FE: investor pool summary card in Create Rule Snapshot Step 2 (Investment mode) | Frontend | ⏳ | — |
+| Notion: New ticket for share-weighted pool allocation | PM | ⏳ | — |
+
+### FB-003 (Rev 3): Single Pipeline + Allocation Target Layer + 2-Tier Waterfall
+
+> ⚠️ **Rev 3 — AUTHORITATIVE** (Apr 16 late PM). Liang simplified back from "2 models" to "1 pipeline with optional layers."
+
+**Scope decisions locked (Rev 3):**
+- ❌ **NO Deal Type selector** — Create Deal stays as deployed (dropped from Rev 2)
+- ❌ **NO `Deal.dealType` field** — no schema migration (dropped from Rev 2)
+- ✅ **Single pipeline** with optional deduction layer (ON if Fee Deduction participants exist)
+- ✅ **"Allocation Target Layer"** — pools (e.g. Investor Pool) are first-class waterfall targets alongside individual participants
+- ✅ **Recoup + hard cap** applies only to individuals inside the pool — not to non-pool participants
+- ✅ Custom group naming already shipped (FB-002 `roleName`)
+- ✅ 2-tier waterfall in v1 (100% → pool until 120% recoup; 20/80 until 140–150% or 3–5 yrs)
+- ✅ FB-002b = the "Pool Target" — formalized and still core
+- ⏳ Tier 3 deferred to SFI v2
+
+**Open items after Rev 3:**
+- ⏳ Tabrez confirms Upwork contract covers Rev 3 scope (~5–6 BE days total)
+- ~~Keep both models vs drop Revenue Share~~ ✅ dissolved by Rev 3
+
+**Layer 0 — Deal Type on Deal model — ❌ DROPPED in Rev 3:**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| ~~BE: Prisma `enum DealType`~~ | — | ❌ Dropped (Rev 3) | — |
+| ~~BE: `Deal.dealType` field + migration~~ | — | ❌ Dropped (Rev 3) | — |
+| ~~FE: Deal Type `<Select>` in DealForm~~ | — | ❌ Dropped (Rev 3) | — |
+| ~~Deal Type badge in list/detail views~~ | — | ❌ Dropped (Rev 3) | — |
+
+**Layer 2 — Allocation Target Layer (NEW Rev 3):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| BE: Design `AllocationTarget` structure in `RuleSnapshot.rules` JSON (individual OR pool) | Backend | ⏳ | — |
+| BE: Tier config references `targetId` instead of `participantId` for waterfall splits | Backend | ⏳ | — |
+| BE: DTO + validator for allocation targets array | Backend | ⏳ | — |
+| BE: Rules mapper — expose targets in response DTOs | Backend | ⏳ | — |
+| FE: Create Rule Snapshot Step 2 — "Add allocation target" UI (individual vs pool) | Frontend | ⏳ | — |
+| FE: Rule Snapshot Detail — visualize targets in waterfall tier breakdown | Frontend | ⏳ | — |
+
+**Layer 1 — Fixed $ fee deduction (complete FLAT_FEE wiring):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| BE: `FLAT_FEE` enum in `ParticipantBehavior` | Backend | ✅ Stubbed (already exists) | — |
+| BE: DTO hint `method: 'fixed'` in `AllocationRuleDto` | Backend | ✅ Stubbed (already exists) | — |
+| BE: Add `feeAmount?: number` to `DistributionFeeRule` (types.ts) | Backend | ⏳ | — |
+| BE: Branch `processDistributionFees()` — flat amount vs percentage | Backend | ⏳ | — |
+| BE: Update rules DTO + mapper to accept `feeAmount` | Backend | ⏳ | — |
+| BE: Engine spec tests for flat $ fee case | Backend | ⏳ | — |
+
+**Layer 2 — Recoup Multiplier + 2-Tier Waterfall (NEW Apr 16 PM):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| BE: Add `recoupMultiplier?: number` to `RecoupmentRule` (default 1.0) | Backend | ⏳ | — |
+| BE: Modify `processRecoupment()` to cap at `recoupAmount × recoupMultiplier` | Backend | ⏳ | — |
+| BE: New `WaterfallTierRule` interface in types.ts | Backend | ⏳ | — |
+| BE: New `processWaterfallTier2()` phase processor (or extend net-profits) | Backend | ⏳ | — |
+| BE: Output structure includes Tier 1 + Tier 2 allocations separately | Backend | ⏳ | — |
+| BE: Settlement input / rules JSON shape for Tier 2 splits | Backend | ⏳ | — |
+| BE: End-to-end engine spec test: Tier 1 (120% recoup) → Tier 2 (20/80 with hard cap exit) | Backend | ⏳ | — |
+
+**Layer 4 — Exit conditions (Hard Cap + Deadline + cross-phase tracking):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| BE: Add `hardCapMultiplier?: number` to `RecoupmentRule` / `WaterfallTierRule` | Backend | ⏳ | — |
+| BE: Add `recoupDeadline?: string` (ISO date) | Backend | ⏳ | — |
+| BE: Thread settlement run date into engine input (not just proof) | Backend | ⏳ | — |
+| BE: Enforce hard cap stop in `processRecoupment()` AND `processWaterfallTier2()` | Backend | ⏳ | — |
+| BE: Enforce deadline stop in all relevant phases | Backend | ⏳ | — |
+| BE: **Cross-phase cumulative payout tracking per investor** (Tier 1 + Tier 2) — required for correct hard cap enforcement | Backend | ⏳ | — |
+| BE: Persist per-investor cumulative balances across settlement runs (DB schema) | Backend | ⏳ | — |
+| BE: Update rules DTO + mapper for all new fields | Backend | ⏳ | — |
+| BE: Engine spec tests for hard cap exit + deadline exit + cross-phase cumulative | Backend | ⏳ | — |
+
+**Design (Rev 3):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| Figma: Create Deal — **NO CHANGE** (Rev 3 final) | Design | ✅ Confirmed Rev 3 | Apr 16 |
+| Figma: Edit Deal — **NO CHANGE** (Rev 3 final) | Design | ✅ Confirmed Rev 3 | Apr 16 |
+| Figma: Rule Snapshot Detail — Fee cell `%` or `$`, Recoup Multiplier, Hard Cap + Deadline columns | Design | ⏳ | — |
+| Figma: Rule Snapshot Detail — Tier 1/2 waterfall breakdown, Investor Pool row with unit totals | Design | ⏳ | — |
+| Figma: Rule Snapshot Detail — Rule Summary Hard Cap + Deadline summary rows | Design | ⏳ | — |
+| Figma: Create Rule Snapshot Step 2 — single unified UX (no Deal Type branching) | Design | ⏳ | — |
+| Figma: Create Rule Snapshot Step 2 — Deductions section (optional, shown when Fee Deduction participants exist) | Design | ⏳ | — |
+| Figma: Create Rule Snapshot Step 2 — Allocation Targets section (add individual OR pool) | Design | ⏳ | — |
+| Figma: Create Rule Snapshot Step 2 — Tier 1 / Tier 2 waterfall config + Investor Pool detail card | Design | ⏳ | — |
+
+**Frontend (Rev 3):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| FE: Create Deal — **NO CHANGE** | Frontend | ✅ Confirmed Rev 3 | Apr 16 |
+| FE: Edit Deal — **NO CHANGE** | Frontend | ✅ Confirmed Rev 3 | Apr 16 |
+| FE: Rule Snapshot Detail — render fee as `%` or `$` | Frontend | ⏳ | — |
+| FE: Rule Snapshot Detail — Recoup Multiplier, Hard Cap, Deadline columns | Frontend | ⏳ | — |
+| FE: Rule Snapshot Detail — Tier 1/2 waterfall visualization | Frontend | ⏳ | — |
+| FE: Rule Snapshot Detail — Investor Pool row (member count + total units) | Frontend | ⏳ | — |
+| FE: Create Rule Snapshot Step 2 — single unified flow (no Deal Type branching) | Frontend | ⏳ | — |
+| FE: Create Rule Snapshot Step 2 — Deductions section (auto-visible when Fee Deduction participants exist) | Frontend | ⏳ | — |
+| FE: Create Rule Snapshot Step 2 — Allocation Target picker (individual vs pool) | Frontend | ⏳ | — |
+| FE: Create Rule Snapshot Step 2 — Tier 1 + Tier 2 waterfall config forms | Frontend | ⏳ | — |
+| FE: Create Rule Snapshot Step 2 — Investor Pool detail card with unit totals | Frontend | ⏳ | — |
+
+**Notion / PM (Rev 3):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| Update FEA-6 ticket — NO CHANGE note (Rev 3 final) | PM | ⏳ | — |
+| Update FEA-7 ticket — NO CHANGE note (Rev 3 final) | PM | ⏳ | — |
+| Update FEA-13 ticket description with FB-003 Rev 3 additions | PM | ⏳ | — |
+| Update FEA-14 ticket description with FB-003 Rev 3 additions (single unified UX) | PM | ⏳ | — |
+| ~~New ticket: BE Deal Type enum + migration~~ | — | ❌ Dropped (Rev 3) | — |
+| New ticket: BE Allocation Target Layer + Pool concept in RuleSnapshot | PM | ⏳ | — |
+| New ticket: BE Complete FLAT_FEE wiring | PM | ⏳ | — |
+| New ticket: BE Recoup Multiplier + Tier 1 cap enforcement | PM | ⏳ | — |
+| New ticket: BE Tier 2 Waterfall Phase | PM | ⏳ | — |
+| New ticket: BE Hard Cap + Deadline + cross-phase cumulative tracking (inside pool only) | PM | ⏳ | — |
+| New ticket: BE Share-weighted Investor Pool breakdown at settlement (FB-002b formalized) | PM | ⏳ | — |
+
+**Open items for Tabrez (Rev 3):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| Reply to Liang confirming Rev 3 understanding (single pipeline + pool + optional deductions) | Tabrez | ⏳ | — |
+| Confirm with boss: Upwork contract scope covers Rev 3 BE work (~5–6 dev days) | Tabrez | ⏳ | — |
+| ~~Keep both models or drop Revenue Share?~~ | — | ✅ Dissolved by Rev 3 | — |
+
+**Deferred (not in v1):**
+
+| Task | Type | Status | Date |
+|------|------|--------|------|
+| BE: Tier 3 (long-tail royalty, reduced investor share) | Backend | ⏳ Deferred to SFI v2 | Per Liang explicit |
+| BE: `PASS_THROUGH` behavior wiring | Backend | ⏳ Deferred | No known use case |
 

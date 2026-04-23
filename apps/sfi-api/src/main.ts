@@ -71,16 +71,32 @@ async function bootstrap() {
   if (nodeEnv !== 'production') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('SFI-FEA API')
-      .setDescription('Settlement and Financial Infrastructure API')
+      .setDescription(
+        'Settlement and Financial Infrastructure API for real-world-asset (RWA) deals. ' +
+          'All endpoints except those tagged `auth` require a valid JWT in the ' +
+          '`Authorization: Bearer <token>` header. Obtain a token via `POST /auth/login`.',
+      )
       .setVersion('1.0.0')
-      .addTag('deals', 'Deal management operations')
-      .addTag('participants', 'Participant management operations')
-      .addTag('rule-snapshots', 'Rule snapshot management')
-      .addTag('revenue-batches', 'Revenue batch management')
-      .addTag('settlement-runs', 'Settlement run operations')
-      .addTag('ledger', 'Ledger and journal entries')
-      .addTag('documents', 'Document management')
-      .addTag('health', 'Health check endpoints')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT access token issued by POST /auth/login or /auth/refresh',
+        },
+        'bearer',
+      )
+      .addTag('auth', 'Authentication, registration, password reset, and session management')
+      .addTag('deals', 'Deal CRUD, counts, and list filters (user-scoped)')
+      .addTag('dashboard', 'Dashboard summary stats and pending-review items (user-scoped)')
+      .addTag('participants', 'Participant CRUD and CSV bulk import/export per deal')
+      .addTag('rule-snapshots', 'Immutable rule snapshots that freeze allocation rules per deal')
+      .addTag('revenue-batches', 'Revenue intake: create, list, validate, reject batches')
+      .addTag('settlement-runs', 'Settlement execution: create, preview, finalize, verify, correction runs')
+      .addTag('ledger', 'Double-entry ledger journals and postings (requires auth; not user-scoped)')
+      .addTag('documents', 'Document evidence storage (stubbed — pending real storage integration)')
+      .addTag('audit-log', 'System-wide audit log entries (requires auth; not user-scoped)')
+      .addTag('health', 'Health / readiness / liveness endpoints')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

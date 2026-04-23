@@ -154,7 +154,7 @@ export class CreateRuleSnapshotDto {
 
   @ApiPropertyOptional({
     description: 'Optional notes or description for this snapshot',
-    example: 'Q1 2024 rule update - increased producer share',
+    example: 'Q1 2026 rule update — increased operator fee after amendment',
   })
   @IsOptional()
   @IsString()
@@ -205,7 +205,7 @@ export class RuleSnapshotResponseDto {
 
   @ApiPropertyOptional({
     description: 'Notes or description for this snapshot',
-    example: 'Q1 2024 rule update',
+    example: 'Q1 2026 rule update',
   })
   notes?: string;
 
@@ -230,8 +230,9 @@ export class RuleSummaryDto {
   totalParticipants!: number;
 
   @ApiProperty({
-    description: 'Breakdown of participants by role name',
-    example: { 'Hotel Investor': 3, 'Music Label': 1, 'Lead Actor': 2 },
+    description:
+      'Breakdown of participants by `roleName` (free-text, user-defined — no fixed taxonomy).',
+    example: { 'Hotel Investor': 3, 'Operator': 1, 'Brand Partner': 2 },
   })
   roleBreakdown!: Record<string, number>;
 
@@ -249,7 +250,7 @@ export class RuleSummaryDto {
 
   @ApiPropertyOptional({
     description: 'Net profit split breakdown by participant name',
-    example: { 'Studio A': 50, 'Investor Group': 30, 'Lead Actors': 20 },
+    example: { 'Sponsor Fund': 50, 'Operator Group': 30, 'Brand Partners': 20 },
   })
   netProfitSplit?: Record<string, number>;
 

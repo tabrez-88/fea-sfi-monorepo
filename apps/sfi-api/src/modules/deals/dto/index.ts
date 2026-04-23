@@ -178,35 +178,38 @@ export class DealResponseDto {
   @ApiProperty()
   updatedAt!: Date;
 
-  // ─── Aggregated counts (populated on findOne and list endpoints) ────────────
+  // ─── Aggregated counts ──────────────────────────────────────────────────────
+  //   participantsCount:  included on BOTH list (GET /deals) and detail (GET /deals/:id)
+  //   all other counts + totalRevenue: detail only (GET /deals/:id)
 
   @ApiPropertyOptional({
-    description: 'Number of participants attached to this deal',
+    description:
+      'Number of participants attached to this deal. Populated on both list and detail responses.',
     example: 5,
   })
   participantsCount?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of rule snapshot versions for this deal',
+    description: 'Number of rule snapshot versions for this deal. Detail endpoint only.',
     example: 3,
   })
   ruleSnapshotsCount?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of revenue batches associated with this deal',
+    description: 'Number of revenue batches associated with this deal. Detail endpoint only.',
     example: 12,
   })
   revenueBatchesCount?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of settlement runs created for this deal',
+    description: 'Number of settlement runs created for this deal. Detail endpoint only.',
     example: 2,
   })
   settlementRunsCount?: number;
 
   @ApiPropertyOptional({
     description:
-      'Sum of RevenueBatch.totalAmount across all batches for this deal (only on findOne)',
+      'Sum of RevenueBatch.totalAmount across all batches for this deal. Detail endpoint only.',
     example: 200000000,
   })
   totalRevenue?: number;

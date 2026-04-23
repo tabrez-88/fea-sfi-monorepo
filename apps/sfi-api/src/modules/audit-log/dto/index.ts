@@ -11,8 +11,10 @@ export class AuditLogEntryDto {
   id!: string;
 
   @ApiProperty({
-    description: 'Who performed the action (user ID or system)',
-    example: 'user-123',
+    description:
+      "Who performed the action. In the current code all domain services pass the authenticated " +
+      "user's id (from @CurrentUser()). Older rows written before user-scoping was added (pre-April 14) may still carry 'system'.",
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   actor!: string;
 
@@ -85,15 +87,17 @@ export class AuditLogQueryDto {
   limit?: number = 20;
 
   @ApiPropertyOptional({
-    description: 'Filter by actor',
-    example: 'user-123',
+    description: 'Filter by actor (user id). Older entries may carry "system".',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsOptional()
   @IsString()
   actor?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by action type',
+    description:
+      'Filter by action type. Common values: CREATED, UPDATED, STATUS_CHANGED, VALIDATED, ' +
+      'REJECTED, PREVIEWED, FINALIZED, VOIDED, BULK_IMPORTED.',
     example: 'FINALIZED',
   })
   @IsOptional()
@@ -101,7 +105,8 @@ export class AuditLogQueryDto {
   action?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by entity type',
+    description:
+      'Filter by entity type. Common values: Deal, Participant, RuleSnapshot, RevenueBatch, SettlementRun.',
     example: 'SettlementRun',
   })
   @IsOptional()
@@ -109,7 +114,8 @@ export class AuditLogQueryDto {
   entityType?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by deal ID',
+    description:
+      'Filter by deal ID. Used by the FE Deal Overview Recent Activity timeline.',
   })
   @IsOptional()
   @IsString()

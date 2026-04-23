@@ -47,7 +47,7 @@ export class LedgerPostingDto {
 
   @ApiPropertyOptional({
     description: 'Participant name for display',
-    example: 'Acme Productions LLC',
+    example: 'Bali Horizon Hotel Investors LLC',
   })
   participantName?: string | null;
 
@@ -124,7 +124,7 @@ export class LedgerJournalDto {
 
   @ApiPropertyOptional({
     description: 'Description of the journal entry',
-    example: 'Settlement run SR-2024-001 - Q1 2024 quarterly settlement',
+    example: 'Settlement run SR-2026-001 — Q1 2026 quarterly settlement',
   })
   description?: string | null;
 

@@ -165,13 +165,17 @@ export class DocumentResponseDto {
   checksum!: string;
 
   @ApiProperty({
-    description: 'File size in bytes',
+    description:
+      'File size in bytes. NOTE: Not yet persisted in the Document schema — currently synthesized ' +
+      'by the stub service. Will be populated from the upload stream once real storage ships.',
     example: 1024000,
   })
   fileSize!: number;
 
   @ApiProperty({
-    description: 'MIME type of the file',
+    description:
+      'MIME type of the file. NOTE: Not yet persisted in the Document schema — currently synthesized ' +
+      'by the stub service. Will be detected and stored once real storage ships.',
     example: 'application/pdf',
   })
   mimeType!: string;

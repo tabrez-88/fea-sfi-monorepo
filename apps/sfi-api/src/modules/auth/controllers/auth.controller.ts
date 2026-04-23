@@ -111,7 +111,7 @@ export class AuthController {
   }
 
   @Get('me')
-  @ApiBearerAuth()
+  @ApiBearerAuth('bearer')
   @ApiOperation({ summary: 'Get the currently authenticated user' })
   @ApiResponse({ status: 200, type: AuthUserDto })
   @ApiResponse({ status: 401, description: 'Not authenticated' })

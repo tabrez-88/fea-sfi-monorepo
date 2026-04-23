@@ -12,13 +12,14 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
-  ApiConsumes,
-  ApiBody,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
 import { PaginationQueryDto } from '../../deals/dto';
@@ -32,6 +33,7 @@ import {
 import { DocumentsService } from '../services/documents.service';
 
 @ApiTags('documents')
+@ApiBearerAuth('bearer')
 @Controller()
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
@@ -42,21 +44,27 @@ export class DocumentsController {
   @ApiOperation({
     summary: 'Upload a document',
     description: `
+**⚠ Not yet implemented — stub endpoint.**
+The current service returns a synthesized \`DocumentResponseDto\` with a dummy checksum and
+a placeholder storage URL. No file is persisted anywhere. This is the documented contract
+that will hold once real object storage + DB persistence ship.
+
+**Intended behavior (pending implementation):**
 Uploads a document to the system with optional associations to deals, revenue batches, or settlement runs.
 
 **Purpose:**
 Documents provide evidence and supporting materials for:
 - Contracts and amendments
-- Revenue reports from distribution sources
+- Revenue reports from upstream operators
 - Settlement reports and statements
 - Audit reports
 - Proof records for settlements
 
-**File Handling:**
-- Files are stored in secure object storage
-- SHA-256 checksum is computed for integrity verification
-- Original file name is preserved in metadata
-- MIME type is detected and stored
+**File Handling (planned):**
+- Files will be stored in object storage (GCS)
+- SHA-256 checksum computed for integrity verification
+- Original file name preserved
+- MIME type detected and stored
 
 **Associations:**
 Documents can be associated with:
@@ -65,9 +73,8 @@ Documents can be associated with:
 - A settlement run (settlement reports, proofs)
 - Multiple associations are allowed
 
-**Storage:**
-Documents are stored as-is without modification. The checksum allows
-verification that the stored document matches the original upload.
+**Storage (planned):**
+Documents stored as-is; checksum verifies stored-vs-original integrity.
     `,
   })
   @ApiBody({
@@ -208,6 +215,10 @@ settlement run.
   @ApiOperation({
     summary: 'List documents for a deal',
     description: `
+**⚠ Not yet implemented — stub endpoint.** Currently returns two synthesized
+\`DocumentResponseDto\` rows regardless of input. Real DB-backed listing is pending.
+
+**Intended behavior (pending implementation):**
 Returns all documents associated with a deal.
 
 **Includes:**
@@ -253,6 +264,9 @@ Returns all documents associated with a deal.
   @ApiOperation({
     summary: 'List documents for a revenue batch',
     description: `
+**⚠ Not yet implemented — stub endpoint.** Returns synthesized rows.
+
+**Intended behavior (pending implementation):**
 Returns all documents associated with a revenue batch.
 
 **Common Document Types:**
@@ -292,6 +306,9 @@ Returns all documents associated with a revenue batch.
   @ApiOperation({
     summary: 'List documents for a settlement run',
     description: `
+**⚠ Not yet implemented — stub endpoint.** Returns synthesized rows.
+
+**Intended behavior (pending implementation):**
 Returns all documents associated with a settlement run.
 
 **Common Document Types:**
@@ -333,6 +350,10 @@ Returns all documents associated with a settlement run.
   @ApiOperation({
     summary: 'Get document details',
     description: `
+**⚠ Not yet implemented — stub endpoint.** Returns a synthesized \`DocumentResponseDto\`
+built from the supplied id; no DB lookup is performed and a 404 is never thrown.
+
+**Intended behavior (pending implementation):**
 Returns metadata for a specific document.
 
 **Response includes:**
@@ -369,6 +390,10 @@ This endpoint returns metadata. Use the storageUrl to download the actual file.
   @ApiOperation({
     summary: 'Delete a document',
     description: `
+**⚠ Not yet implemented — stub endpoint.** Always returns \`{ success: true }\` without
+performing any deletion or existence check.
+
+**Intended behavior (pending implementation):**
 Deletes a document from the system.
 
 **Caution:**

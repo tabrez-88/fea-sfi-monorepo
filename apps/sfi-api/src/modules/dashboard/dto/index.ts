@@ -17,14 +17,17 @@ export class DashboardSummaryResponseDto {
 
   @ApiProperty({
     description:
-      'Number of items needing review (PENDING revenue batches + PREVIEWED settlement runs)',
+      "Count of items needing human review across the authenticated user's deals: " +
+      'PENDING revenue batches + PREVIEWED settlement runs.',
     example: 9,
   })
   pendingReview!: number;
 
   @ApiProperty({
     description:
-      'Sum of SettlementRun.totalAllocated across all FINALIZED runs (in the system default currency)',
+      "Sum of SettlementRun.totalAllocated across all FINALIZED runs for the authenticated user's deals. " +
+      'Raw numeric aggregate — summed across whatever currencies the runs used without conversion. ' +
+      'The FE renders this against the user\'s default display currency (USD in the current build).',
     example: 450000000,
   })
   totalSettled!: number;
@@ -70,7 +73,9 @@ export class PendingSettlementRunDto {
 
   @ApiProperty({
     description:
-      'Display label for the run. For now this is "Run #N" where N is the index of the run within the deal (1-based, oldest first).',
+      'Display label for the run. "Run #N" where N is the count of runs on the same deal created ' +
+      'up to and including this run, ordered by createdAt. Derived on-the-fly (not sourced from ' +
+      'SettlementRun.runNumber here — that persistent column is used by the settlement endpoints).',
     example: 'Run #3',
   })
   runLabel!: string;

@@ -9,11 +9,12 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -29,6 +30,7 @@ import {
 import { RevenueService } from '../services/revenue.service';
 
 @ApiTags('revenue-batches')
+@ApiBearerAuth('bearer')
 @Controller()
 export class RevenueBatchesController {
   constructor(private readonly revenueService: RevenueService) {}
@@ -52,6 +54,8 @@ export class RevenueBatchesController {
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
   @ApiResponse({ status: 200, description: 'List of revenue batches', type: RevenueBatchListResponseDto })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async listBatches(

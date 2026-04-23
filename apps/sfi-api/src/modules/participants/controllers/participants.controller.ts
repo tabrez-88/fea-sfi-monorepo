@@ -16,14 +16,15 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiParam,
-  ApiQuery,
-  ApiConsumes,
+  ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiParam,
   ApiProduces,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import { Response } from 'express';
 
@@ -38,6 +39,7 @@ import {
 import { ParticipantsService } from '../services/participants.service';
 
 @ApiTags('participants')
+@ApiBearerAuth('bearer')
 @Controller('deals/:dealId/participants')
 export class ParticipantsController {
   constructor(private readonly participantsService: ParticipantsService) {}
@@ -65,7 +67,9 @@ export class ParticipantsController {
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'List of participants' })
+  @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
+  @ApiResponse({ status: 200, description: 'Paginated list of participants', type: ParticipantResponseDto, isArray: true })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async findAll(
     @CurrentUser() user: AuthenticatedUser,
