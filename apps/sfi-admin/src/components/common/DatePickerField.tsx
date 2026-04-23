@@ -1,6 +1,6 @@
 'use client';
 
-import { Calendar as CalendarIcon, ChevronDown } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -111,6 +111,23 @@ export function DatePickerField({
             }}
             autoFocus
           />
+          {value && (
+            <div className="flex items-center justify-end border-t border-border p-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  onChange('');
+                  setOpen(false);
+                }}
+                className="gap-1.5 text-neutral hover:text-foreground"
+              >
+                <X aria-hidden className="size-3.5" strokeWidth={2} />
+                Clear
+              </Button>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
     );
@@ -167,6 +184,23 @@ export function DatePickerField({
           }}
           autoFocus
         />
+        {value && (
+          <div className="flex items-center justify-end border-t border-border p-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+              }}
+              className="gap-1.5 text-neutral hover:text-foreground"
+            >
+              <X aria-hidden className="size-3.5" strokeWidth={2} />
+              Clear
+            </Button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
