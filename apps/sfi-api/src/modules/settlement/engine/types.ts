@@ -11,10 +11,18 @@
 // ============================================
 
 export enum Phase {
+  // v1 phases — unchanged for proof-record back-compat
   GROSS_RECEIPTS = 'GROSS_RECEIPTS',
   DISTRIBUTION_FEES = 'DISTRIBUTION_FEES',
   RECOUPMENT = 'RECOUPMENT',
   NET_PROFITS = 'NET_PROFITS',
+
+  // FB-003 Run 3 — v2 phases (pool revenue source + waterfall tiers).
+  // Engine only emits these when the stored snapshot has `schemaVersion: 2`,
+  // so v1 settlement runs continue to emit only the 4 legacy phases.
+  POOL_REVENUE_SOURCE = 'POOL_REVENUE_SOURCE',
+  WATERFALL_TIER_1 = 'WATERFALL_TIER_1',
+  WATERFALL_TIER_2 = 'WATERFALL_TIER_2',
 }
 
 export enum ParticipantBehavior {
@@ -96,12 +104,41 @@ export interface SettlementRules {
 
 /**
  * Participant metadata included in input.
+ *
+ * FB-003 Run 3 — pool-member context is sourced from
+ * `RuleSnapshotParticipant.participantData` (frozen at snapshot creation)
+ * rather than the live `Participant.metadata`. This keeps finalized runs
+ * deterministic even if someone toggles the live flag later.
+ *
+ * All v2 pool fields are optional so v1 snapshots stay identical.
  */
 export interface ParticipantInput {
   id: string;
   name: string;
   roleName: string;
   behaviorType: ParticipantBehavior;
+
+  // FB-003 Run 3 — pool weighting inputs (v2 only). Read from the frozen
+  // snapshot, not live participant data.
+  poolMember?: boolean;
+  poolId?: string;
+  units?: number;
+  investmentAmount?: number;
+  pricePerUnit?: number;
+}
+
+/**
+ * Per-participant cumulative-payout record carried into a settlement run.
+ *
+ * FB-003 Run 3 (BE-FB003-HARDCAP) — the settlement service loads these
+ * from `participant_balances` keyed by `(dealId, participantId, ruleSnapshotId)`
+ * before invoking the engine, so the v2 waterfall-tier phase can enforce
+ * per-investor hard caps across multiple settlement runs (clip-not-skip on
+ * cap). For v1 snapshots this field is absent and ignored.
+ */
+export interface ParticipantBalanceInput {
+  participantId: string;
+  cumulativePayout: number;
 }
 
 /**
@@ -121,6 +158,35 @@ export interface SettlementInput {
   participants: ParticipantInput[];
   /** Settlement rules */
   rules: SettlementRules;
+
+  /**
+   * FB-003 Run 3 — ISO date threaded from `SettlementRun.createdAt`. Used
+   * by the v2 exit-condition evaluator for deadline checks; for preview
+   * determinism the engine must NOT call `new Date()` internally.
+   * Optional for v1 snapshots that don't carry deadlines.
+   */
+  runDate?: string;
+
+  /**
+   * FB-003 Run 3 — cumulative payouts carried forward from prior runs on
+   * the same `(deal, participant, ruleSnapshot)` triple. Only consulted by
+   * the v2 waterfall-tier phase for hard-cap enforcement. v1 snapshots
+   * don't use it.
+   */
+  priorBalances?: ParticipantBalanceInput[];
+
+  /**
+   * FB-003 Run 3 — when present, the engine takes the v2 orchestration
+   * path (mode-aware: revenue_share / recoup / waterfall). When absent,
+   * the engine runs the legacy 4-phase v1 path bit-identically.
+   *
+   * The flat `rules` field above stays populated either way (extracted
+   * by `extractV2SettlementRules` for v2 inputs) — this gives the v2
+   * orchestration backward-compatible access to the legacy phases when
+   * useful (e.g. distributing the creator-retained slice via the legacy
+   * net-profits phase).
+   */
+  rulesV2?: RuleSnapshotRulesV2;
 }
 
 // ============================================
@@ -163,6 +229,34 @@ export interface RecoupmentBalance {
 }
 
 /**
+ * FB-003 Run 3 — per-investor exit-condition chip for the FE Detail page
+ * (Round 3 Comment 14 r8). One row per active condition; multiple
+ * conditions can stack (Hard Cap + Deadline both set → both render).
+ * `firedAt` is populated when the condition triggered in THIS run.
+ */
+export type ExitConditionType = 'hard_cap' | 'deadline' | 'recoup_cap' | 'none';
+
+export interface ExitConditionChip {
+  type: ExitConditionType;
+  /** e.g. 1.40 for hard_cap, ISO date for deadline, 1.20 for recoup_cap */
+  value?: number | string;
+  /** ISO timestamp — set when the condition fires during this run */
+  firedAt?: string;
+}
+
+/**
+ * FB-003 Run 3 — updated cumulative balance output for a pool member,
+ * written back to `participant_balances` after each finalized run.
+ */
+export interface ParticipantBalanceOutput {
+  participantId: string;
+  cumulativePayout: number;
+  paidThisRun: number;
+  /** Per-investor exit conditions active for this participant */
+  exitConditions: ExitConditionChip[];
+}
+
+/**
  * Proof record for audit trail.
  */
 export interface ProofRecord {
@@ -194,8 +288,14 @@ export interface SettlementOutput {
   phaseResults: PhaseResult[];
   /** All individual allocations (flat list) */
   allocations: AllocationEntry[];
-  /** Recoupment balance tracking */
+  /** Recoupment balance tracking (v1 + v2 recoup mode) */
   recoupmentBalances: RecoupmentBalance[];
+  /**
+   * FB-003 Run 3 — per-investor cumulative balances after this run.
+   * Persisted by the settlement service to `participant_balances` for
+   * cross-run hard-cap enforcement. Empty for v1 snapshots.
+   */
+  participantBalances?: ParticipantBalanceOutput[];
   /** Proof record for determinism verification */
   proof: ProofRecord;
 }

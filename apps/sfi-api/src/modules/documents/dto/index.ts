@@ -1,10 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsEnum,
+  IsIn,
   IsObject,
   IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
+
+import { PaginationQueryDto } from '../../deals/dto';
 
 // ============================================
 // Enums
@@ -165,17 +170,13 @@ export class DocumentResponseDto {
   checksum!: string;
 
   @ApiProperty({
-    description:
-      'File size in bytes. NOTE: Not yet persisted in the Document schema — currently synthesized ' +
-      'by the stub service. Will be populated from the upload stream once real storage ships.',
+    description: 'File size in bytes (computed server-side from the upload stream).',
     example: 1024000,
   })
   fileSize!: number;
 
   @ApiProperty({
-    description:
-      'MIME type of the file. NOTE: Not yet persisted in the Document schema — currently synthesized ' +
-      'by the stub service. Will be detected and stored once real storage ships.',
+    description: 'MIME type of the file (detected from the upload request).',
     example: 'application/pdf',
   })
   mimeType!: string;
@@ -186,9 +187,43 @@ export class DocumentResponseDto {
   })
   uploadedAt!: string;
 
+  // FB-003 Run 4 Comment 20 — track who uploaded the document. Joined
+  // from the User table at fetch time; null for system uploads / older
+  // rows from before this column shipped.
+  @ApiPropertyOptional({
+    description: 'User who uploaded the document (joined from User table)',
+    example: {
+      id: '550e8400-e29b-41d4-a716-446655440090',
+      name: 'Tabrez Akhlaque',
+      avatarUrl: null,
+    },
+  })
+  uploadedBy?: { id: string; name: string; avatarUrl?: string | null } | null;
+
+  // FB-003 Run 4 Comment 21 — soft-delete via archive. Three fields ride
+  // together: timestamp + actor + optional reason. All null for active
+  // documents; all populated once archived.
+  @ApiPropertyOptional({
+    description: 'When the document was archived (null = active)',
+    example: null,
+  })
+  archivedAt?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'User who archived the document',
+    example: null,
+  })
+  archivedBy?: { id: string; name: string; avatarUrl?: string | null } | null;
+
+  @ApiPropertyOptional({
+    description: 'Optional reason for archive (free text, ≤500 chars)',
+    example: null,
+  })
+  archivedReason?: string | null;
+
   @ApiPropertyOptional({
     description: 'Additional metadata',
-    example: { uploadedBy: 'user@example.com' },
+    example: { source: 'Netflix Portal' },
   })
   metadata?: Record<string, unknown> | null;
 
@@ -216,4 +251,68 @@ export class DocumentListResponseDto {
     total: number;
     totalPages: number;
   };
+}
+
+// ============================================
+// Archive / Restore DTOs (FB-003 Run 4 Comment 21)
+// ============================================
+
+/**
+ * Body for `POST /documents/:id/archive`. Optional free-text reason
+ * surfaces on `DocumentResponseDto.archivedReason` and audit log.
+ */
+export class ArchiveDocumentDto {
+  @ApiPropertyOptional({
+    description: 'Optional reason for archiving (≤500 chars)',
+    example: 'Superseded by v2 of the contract',
+    maxLength: 500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+// ============================================
+// List Query DTO — extends pagination with optional filters
+// ============================================
+
+/**
+ * Query params for the document list endpoints. Extends
+ * `PaginationQueryDto` (the canonical pattern in this codebase — see
+ * `DealListQueryDto` / `RevenueBatchListQueryDto`). Adds:
+ *
+ *   - `docType` — filter by DocumentType enum
+ *   - `archived` — view mode: `false` (default = active only),
+ *                  `true` (archived only), `all` (both)
+ *   - `uploadedByUserId` — "documents I uploaded"
+ */
+export class DocumentListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    enum: DocumentTypeEnum,
+    description: 'Filter by document type',
+  })
+  @IsOptional()
+  @IsEnum(DocumentTypeEnum)
+  docType?: DocumentTypeEnum;
+
+  @ApiPropertyOptional({
+    description:
+      'Archived filter (FB-003 Run 4 Comment 21): `false` (default) = active only, ' +
+      '`true` = archived only, `all` = both. Anything else is rejected.',
+    enum: ['false', 'true', 'all'],
+    default: 'false',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['false', 'true', 'all'])
+  archived?: 'false' | 'true' | 'all';
+
+  @ApiPropertyOptional({
+    description: 'Filter to documents uploaded by this user',
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  uploadedByUserId?: string;
 }

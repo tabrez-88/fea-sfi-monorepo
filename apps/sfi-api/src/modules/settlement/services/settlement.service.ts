@@ -319,7 +319,7 @@ export class SettlementService {
       );
     }
 
-    const engineInput = this.buildEngineInput(run);
+    const engineInput = await this.buildEngineInput(run);
     const result = this.engine.calculate(engineInput);
 
     await this.prisma.settlementRun.update({
@@ -383,11 +383,21 @@ export class SettlementService {
       );
     }
 
-    const engineInput = this.buildEngineInput(run);
+    const engineInput = await this.buildEngineInput(run);
     const result = this.engine.calculate(engineInput);
     const now = new Date();
 
     await this.prisma.$transaction(async (tx) => {
+      // FB-003 Run 3 — persist per-investor cumulative balances when the
+      // engine emitted them (v2 paths). v1 results have no balances.
+      await this.persistParticipantBalances(
+        tx,
+        run.dealId,
+        run.ruleSnapshotId,
+        id,
+        result.participantBalances,
+      );
+
       for (const alloc of result.allocations) {
         await tx.settlementAllocation.create({
           data: {
@@ -599,7 +609,7 @@ export class SettlementService {
       throw new NotFoundException(`No proof record found for settlement run ${id}`);
     }
 
-    const engineInput = this.buildEngineInput(run);
+    const engineInput = await this.buildEngineInput(run);
     const result = this.engine.calculate(engineInput, storedProof.timestamp.toISOString());
 
     const verified = storedProof.proofHash === result.proof.proofHash;
@@ -625,8 +635,11 @@ export class SettlementService {
   // Private helpers
   // ============================================
 
-  private buildEngineInput(run: {
+  private async buildEngineInput(run: {
     id: string;
+    dealId: string;
+    ruleSnapshotId: string;
+    createdAt: Date;
     ruleSnapshot: {
       version: number;
       rules: unknown;
@@ -645,12 +658,29 @@ export class SettlementService {
       };
     }[];
     currency: string;
-  }): SettlementInput {
+  }): Promise<SettlementInput> {
     const rules = run.ruleSnapshot.rules as Record<string, unknown>;
     const settlementRules = this.extractSettlementRules(
       rules,
       run.ruleSnapshot.ruleSnapshotParticipants,
     );
+
+    // FB-003 Run 3 — branch on schemaVersion. For v2 snapshots, also
+    // pass the raw v2 rules to the engine so it can take the mode-aware
+    // orchestration path (waterfall tiers, pool resolver, etc.). v1
+    // snapshots leave `rulesV2` undefined so the engine runs the legacy
+    // 4-phase path bit-identically.
+    const schemaVersion = getRulesSchemaVersion(rules);
+    const rulesV2 =
+      schemaVersion === 2 ? (rules as unknown as RuleSnapshotRulesV2) : undefined;
+
+    // FB-003 Run 3 — load per-investor cumulative balances from a prior
+    // run on the same `(deal, participant, ruleSnapshot)` triple so the
+    // engine's hard-cap check can clip-not-skip on cap. Only meaningful
+    // for v2 waterfall mode; harmless for v1 (engine ignores).
+    const priorBalances = rulesV2
+      ? await this.loadPriorBalances(run.dealId, run.ruleSnapshotId)
+      : undefined;
 
     return {
       settlementRunId: run.id,
@@ -662,14 +692,91 @@ export class SettlementService {
         periodStart: link.revenueBatch.periodStart.toISOString(),
         periodEnd: link.revenueBatch.periodEnd.toISOString(),
       })),
-      participants: run.ruleSnapshot.ruleSnapshotParticipants.map((rsp) => ({
-        id: rsp.participant.id,
-        name: rsp.participant.name,
-        roleName: rsp.participant.roleName,
-        behaviorType: rsp.participant.behaviorType as EngineParticipantBehavior,
-      })),
+      participants: run.ruleSnapshot.ruleSnapshotParticipants.map((rsp) => {
+        const data = (rsp.participantData ?? null) as Record<string, unknown> | null;
+        // FB-003 Run 3 gate decision: pool membership / weighting comes from
+        // the frozen snapshot (RuleSnapshotParticipant.participantData), NOT
+        // the live Participant.metadata, so finalized runs stay deterministic.
+        return {
+          id: rsp.participant.id,
+          name: rsp.participant.name,
+          roleName: rsp.participant.roleName,
+          behaviorType: rsp.participant.behaviorType as EngineParticipantBehavior,
+          ...(data?.poolMember !== undefined && { poolMember: Boolean(data.poolMember) }),
+          ...(typeof data?.poolId === 'string' && { poolId: data.poolId }),
+          ...(typeof data?.units === 'number' && { units: data.units }),
+          ...(typeof data?.investmentAmount === 'number' && {
+            investmentAmount: data.investmentAmount,
+          }),
+          ...(typeof data?.pricePerUnit === 'number' && { pricePerUnit: data.pricePerUnit }),
+        };
+      }),
       rules: settlementRules,
+      // FB-003 Run 3 — preview determinism: runDate is the run's
+      // createdAt, NEVER `new Date()`. The engine consults this for
+      // tier-level deadline exit conditions.
+      runDate: run.createdAt.toISOString(),
+      ...(priorBalances !== undefined && { priorBalances }),
+      ...(rulesV2 !== undefined && { rulesV2 }),
     };
+  }
+
+  /**
+   * Load prior-run cumulative payouts for a `(deal, ruleSnapshot)` pair.
+   * Returns the rows shaped for `SettlementInput.priorBalances`.
+   */
+  private async loadPriorBalances(
+    dealId: string,
+    ruleSnapshotId: string,
+  ): Promise<SettlementInput['priorBalances']> {
+    const rows = await this.prisma.participantBalance.findMany({
+      where: { dealId, ruleSnapshotId },
+      select: { participantId: true, cumulativePayout: true },
+    });
+    return rows.map((r) => ({
+      participantId: r.participantId,
+      cumulativePayout: Number(r.cumulativePayout),
+    }));
+  }
+
+  /**
+   * Persist the engine's per-investor balance write-back into
+   * `participant_balances`. Upserts on the composite unique key so a
+   * second finalized run on the same snapshot keeps the running total
+   * accurate. Called only when the engine emits balances (v2 paths).
+   */
+  private async persistParticipantBalances(
+    tx: Prisma.TransactionClient,
+    dealId: string,
+    ruleSnapshotId: string,
+    runId: string,
+    balances: SettlementOutput['participantBalances'],
+  ): Promise<void> {
+    if (!balances || balances.length === 0) return;
+    for (const bal of balances) {
+      await tx.participantBalance.upsert({
+        where: {
+          dealId_participantId_ruleSnapshotId: {
+            dealId,
+            participantId: bal.participantId,
+            ruleSnapshotId,
+          },
+        },
+        update: {
+          cumulativePayout: new Prisma.Decimal(bal.cumulativePayout),
+          lastSettlementRunId: runId,
+          exitConditions: bal.exitConditions as unknown as Prisma.InputJsonValue,
+        },
+        create: {
+          dealId,
+          participantId: bal.participantId,
+          ruleSnapshotId,
+          cumulativePayout: new Prisma.Decimal(bal.cumulativePayout),
+          lastSettlementRunId: runId,
+          exitConditions: bal.exitConditions as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
   }
 
   /**

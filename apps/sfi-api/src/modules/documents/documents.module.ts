@@ -1,21 +1,24 @@
 import { Module } from '@nestjs/common';
 
+import { AuditLogModule } from '../audit-log/audit-log.module';
+
 import { DocumentsController } from './controllers/documents.controller';
 import { DocumentsService } from './services/documents.service';
 
 /**
- * Documents Module
+ * Documents Module (FB-003 Run 4)
  *
- * Handles document storage and evidence management.
+ * Real implementation: Prisma-backed persistence + storage-adapter
+ * file IO + uploadedBy capture + archive/restore + audit-log + raw
+ * streaming endpoint for the FE Preview drawer (Round 3 Comment 16 +
+ * Round 4 Comments 18–22).
  *
- * Features:
- * - Document upload with multipart/form-data
- * - SHA-256 checksum computation for integrity verification
- * - Document retrieval by ID or associations
- * - Document linking to deals, revenue batches, and settlement runs
- * - Secure object storage integration
+ * Storage backend is injected via `FILE_STORAGE` from the global
+ * `StorageModule` (defaults to `LocalFileStorage`). Swap to GCS/S3
+ * later via `STORAGE_BACKEND` env without touching this module.
  */
 @Module({
+  imports: [AuditLogModule],
   controllers: [DocumentsController],
   providers: [DocumentsService],
   exports: [DocumentsService],

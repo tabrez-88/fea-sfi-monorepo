@@ -41,10 +41,16 @@ enum RunType {
 }
 
 enum SettlementPhase {
+  // v1 phases — unchanged for proof-record back-compat (FB-001/FB-002)
   GROSS_RECEIPTS
   DISTRIBUTION_FEES
   RECOUPMENT
   NET_PROFITS
+
+  // FB-003 Run 3 — v2 phases for pool revenue source + waterfall tiers
+  POOL_REVENUE_SOURCE
+  WATERFALL_TIER_1
+  WATERFALL_TIER_2
 }
 
 enum DealStatus {
@@ -106,13 +112,14 @@ model Deal {
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  user            User            @relation(fields: [userId], references: [id])
-  participants    Participant[]
-  ruleSnapshots   RuleSnapshot[]
-  revenueBatches  RevenueBatch[]
-  settlementRuns  SettlementRun[]
-  ledgerJournals  LedgerJournal[]
-  documents       Document[]
+  user                User                 @relation(fields: [userId], references: [id])
+  participants        Participant[]
+  ruleSnapshots       RuleSnapshot[]
+  revenueBatches      RevenueBatch[]
+  settlementRuns      SettlementRun[]
+  ledgerJournals      LedgerJournal[]
+  documents           Document[]
+  participantBalances ParticipantBalance[] // FB-003 Run 3 — cross-phase cumulative tracking
 
   @@index([status])
   @@index([userId])
@@ -136,6 +143,7 @@ model Participant {
   ruleSnapshotParticipants RuleSnapshotParticipant[]
   settlementAllocations    SettlementAllocation[]
   ledgerPostings           LedgerPosting[]
+  participantBalances      ParticipantBalance[] // FB-003 Run 3
 
   @@index([dealId])
   @@map("participants")
@@ -159,6 +167,7 @@ model RuleSnapshot {
   deal                     Deal                      @relation(fields: [dealId], references: [id], onDelete: Cascade)
   ruleSnapshotParticipants RuleSnapshotParticipant[]
   settlementRuns           SettlementRun[]
+  participantBalances      ParticipantBalance[] // FB-003 Run 3
 
   @@index([dealId])
   @@map("rule_snapshots")
@@ -179,6 +188,35 @@ model RuleSnapshotParticipant {
   @@index([ruleSnapshotId])
   @@index([participantId])
   @@map("rule_snapshot_participants")
+}
+
+/// FB-003 Run 3 (BE-FB003-HARDCAP) — cross-snapshot cumulative payout tracking.
+/// One row per `(deal, participant, ruleSnapshot)` triple. The engine reads
+/// `cumulativePayout` to enforce per-investor hard caps across multiple
+/// settlement runs (clip-not-skip on cap), and writes it back when a run
+/// finalizes. `exitConditions` is a JSON array of chip metadata for the FE
+/// Detail page (Round 3 Comment 14 r8) — shape: `[{ type, value, firedAt? }]`.
+/// Keyed per snapshot so a new rule snapshot starts a fresh cap accounting
+/// without polluting prior versions' history.
+model ParticipantBalance {
+  id                  String    @id @default(uuid())
+  dealId              String    @map("deal_id")
+  participantId       String    @map("participant_id")
+  ruleSnapshotId      String    @map("rule_snapshot_id")
+  cumulativePayout    Decimal   @default(0) @map("cumulative_payout") @db.Decimal(18, 2)
+  lastSettlementRunId String?   @map("last_settlement_run_id")
+  exitConditions      Json?     @map("exit_conditions")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  deal         Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  participant  Participant  @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  ruleSnapshot RuleSnapshot @relation(fields: [ruleSnapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, participantId, ruleSnapshotId])
+  @@index([dealId])
+  @@index([participantId])
+  @@map("participant_balances")
 }
 
 // ===========================================
@@ -384,6 +422,17 @@ model Document {
   checksum        String       @db.VarChar(128) // SHA-256 hash of file
   uploadedAt      DateTime     @map("uploaded_at")
   metadata        Json?
+
+  // FB-003 Run 4 (BE-FB003-DOCUMENTS-V1) — was synthesized by the stubbed
+  // service; now real columns. All nullable so the migration is safe
+  // against existing rows.
+  fileSize         Int?      @map("file_size")
+  mimeType         String?   @map("mime_type")        @db.VarChar(100)
+  uploadedByUserId String?   @map("uploaded_by_user_id")
+  archivedAt       DateTime? @map("archived_at")
+  archivedByUserId String?   @map("archived_by_user_id")
+  archivedReason   String?   @map("archived_reason")  @db.VarChar(500)
+
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
 
@@ -391,11 +440,15 @@ model Document {
   deal          Deal?          @relation(fields: [dealId], references: [id], onDelete: SetNull)
   revenueBatch  RevenueBatch?  @relation(fields: [revenueBatchId], references: [id], onDelete: SetNull)
   settlementRun SettlementRun? @relation(fields: [settlementRunId], references: [id], onDelete: SetNull)
+  uploadedBy    User?          @relation("DocumentUploadedBy", fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  archivedBy    User?          @relation("DocumentArchivedBy", fields: [archivedByUserId], references: [id], onDelete: SetNull)
 
   @@index([dealId])
   @@index([revenueBatchId])
   @@index([settlementRunId])
   @@index([docType])
+  @@index([uploadedByUserId]) // FB-003 Run 4 — "documents I uploaded" queries
+  @@index([archivedAt])       // FB-003 Run 4 — default `archivedAt IS NULL` list filter
   @@map("documents")
 }
 
@@ -423,6 +476,8 @@ model User {
   deals               Deal[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  uploadedDocuments   Document[] @relation("DocumentUploadedBy") // FB-003 Run 4
+  archivedDocuments   Document[] @relation("DocumentArchivedBy") // FB-003 Run 4
 
   @@index([email])
   @@map("users")

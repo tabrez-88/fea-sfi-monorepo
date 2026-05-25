@@ -12,6 +12,7 @@ import { ParticipantsModule } from './modules/participants/participants.module';
 import { RevenueModule } from './modules/revenue/revenue.module';
 import { RulesModule } from './modules/rules/rules.module';
 import { SettlementModule } from './modules/settlement/settlement.module';
+import { StorageModule } from './modules/storage/storage.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
@@ -35,6 +36,7 @@ import { PrismaModule } from './prisma/prisma.module';
     RevenueModule,
     SettlementModule,
     LedgerModule,
+    StorageModule, // FB-003 Run 4 — file-storage abstraction (consumed by DocumentsModule)
     DocumentsModule,
     AuditLogModule,
     DashboardModule,
