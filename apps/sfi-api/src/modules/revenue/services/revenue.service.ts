@@ -8,11 +8,11 @@ import { RevenueBatchStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
-import { PaginationQueryDto } from '../../deals/dto';
 import {
   CreateRevenueBatchDto,
   RevenueBatchResponseDto,
   RevenueBatchListResponseDto,
+  RevenueBatchListQueryDto,
   ValidateRevenueBatchDto,
   RejectRevenueBatchDto,
 } from '../dto';
@@ -75,9 +75,15 @@ export class RevenueService {
         totalAmount: new Prisma.Decimal(createDto.totalAmount),
         currency: createDto.currency,
         source: createDto.source,
-        metadata: createDto.metadata
-          ? (createDto.metadata as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
+        // Run 5 / Round 4 Comment 24: top-level `territory` / `revenueType` /
+        // `reportingEntity` fields are merged INTO `metadata` JSON via the
+        // mapper helper. No Prisma migration — the categorization fields
+        // ride along inside the existing `metadata` column.
+        metadata: RevenueBatchMapper.buildMetadata(createDto.metadata, {
+          territory: createDto.territory,
+          revenueType: createDto.revenueType,
+          reportingEntity: createDto.reportingEntity,
+        }),
       },
       include: {
         _count: { select: { settlementRevenueLinks: true } },
@@ -97,6 +103,13 @@ export class RevenueService {
         totalAmount: createDto.totalAmount,
         currency: createDto.currency,
         status: batch.status,
+        // Surface categorization (when supplied) for ops queries — same
+        // pattern as Run 2's `schemaVersion` on rule-snapshot create.
+        ...(createDto.territory !== undefined && { territory: createDto.territory }),
+        ...(createDto.revenueType !== undefined && { revenueType: createDto.revenueType }),
+        ...(createDto.reportingEntity !== undefined && {
+          reportingEntity: createDto.reportingEntity,
+        }),
       },
     });
 
@@ -106,7 +119,7 @@ export class RevenueService {
   async listBatches(
     userId: string,
     dealId: string,
-    query: PaginationQueryDto,
+    query: RevenueBatchListQueryDto,
   ): Promise<RevenueBatchListResponseDto> {
     this.logger.log(`Listing revenue batches for deal: ${dealId}`);
 
@@ -115,9 +128,17 @@ export class RevenueService {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
+    // Categorization filters (Run 5 / Round 4 Comment 24) — the values live
+    // inside `RevenueBatch.metadata` JSON, so we use Prisma's `path`
+    // equality. AND-combined with `dealId`. Empty filter = no narrowing.
+    const where: Prisma.RevenueBatchWhereInput = {
+      dealId,
+      ...buildMetadataPathFilters(query),
+    };
+
     const [batches, total] = await Promise.all([
       this.prisma.revenueBatch.findMany({
-        where: { dealId },
+        where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
@@ -125,7 +146,7 @@ export class RevenueService {
           _count: { select: { settlementRevenueLinks: true } },
         },
       }),
-      this.prisma.revenueBatch.count({ where: { dealId } }),
+      this.prisma.revenueBatch.count({ where }),
     ]);
 
     return {
@@ -270,4 +291,37 @@ export class RevenueService {
 
     return batches.map(RevenueBatchMapper.toResponse);
   }
+}
+
+/**
+ * Build the `metadata` clause of a Prisma `RevenueBatchWhereInput` from a
+ * categorization filter. Each provided field becomes a `metadata path
+ * equals` clause; multiple fields AND-combine.
+ *
+ * Returns an empty object when no filter fields are set, so the caller can
+ * spread the result unconditionally without changing the existing query.
+ *
+ * Note: Prisma's `metadata` JSON filter uses an `AND` array when multiple
+ * `path` clauses appear in the same `where` (the last one wins if merged
+ * naively). We build the AND array explicitly so all three filters
+ * compose correctly.
+ */
+function buildMetadataPathFilters(
+  filter: Pick<RevenueBatchListQueryDto, 'territory' | 'revenueType' | 'reportingEntity'>,
+): Pick<Prisma.RevenueBatchWhereInput, 'AND'> | Record<string, never> {
+  const clauses: Prisma.RevenueBatchWhereInput[] = [];
+
+  if (filter.territory !== undefined) {
+    clauses.push({ metadata: { path: ['territory'], equals: filter.territory } });
+  }
+  if (filter.revenueType !== undefined) {
+    clauses.push({ metadata: { path: ['revenueType'], equals: filter.revenueType } });
+  }
+  if (filter.reportingEntity !== undefined) {
+    clauses.push({
+      metadata: { path: ['reportingEntity'], equals: filter.reportingEntity },
+    });
+  }
+
+  return clauses.length > 0 ? { AND: clauses } : {};
 }

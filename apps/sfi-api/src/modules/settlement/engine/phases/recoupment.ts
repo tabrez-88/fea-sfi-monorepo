@@ -20,7 +20,7 @@ import {
   RecoupmentBalance,
   ParticipantInput,
 } from '../types';
-import { minAmount, subtract, sum, clampPositive } from '../utils/decimal';
+import { minAmount, mulPercent, subtract, sum, clampPositive } from '../utils/decimal';
 
 export interface RecoupmentResult extends PhaseResult {
   balances: RecoupmentBalance[];
@@ -45,8 +45,17 @@ export function processRecoupment(
     const participant = participantMap.get(rule.participantId);
     const previouslyRecouped = rule.previouslyRecouped ?? 0;
 
-    // How much is left to recoup (considering cap and prior recoupments)
-    const effectiveCap = minAmount(rule.recoupAmount, rule.recoupCap);
+    // FB-003 RECOUPMULT (Run 2): when `recoupMultiplier` is set, the
+    // effective cap scales to `recoupAmount × multiplier` (e.g. 1.2 = 120%
+    // recoup). The absolute `recoupCap` field still acts as the hard
+    // ceiling. When the multiplier is undefined, behavior is identical to
+    // v1 — `min(recoupAmount, recoupCap)` — preserving the proof-hash
+    // regression bar.
+    const multiplierTarget =
+      rule.recoupMultiplier !== undefined
+        ? mulPercent(rule.recoupAmount, rule.recoupMultiplier * 100)
+        : rule.recoupAmount;
+    const effectiveCap = minAmount(multiplierTarget, rule.recoupCap);
     const leftToRecoup = clampPositive(subtract(effectiveCap, previouslyRecouped));
 
     // Recoup the minimum of: what's left to recoup, or what's available
@@ -61,6 +70,12 @@ export function processRecoupment(
         metadata: {
           recoupAmount: rule.recoupAmount,
           recoupCap: rule.recoupCap,
+          // Only surface multiplier metadata when explicitly set, so v1
+          // snapshots produce byte-identical allocation metadata to before.
+          ...(rule.recoupMultiplier !== undefined && {
+            recoupMultiplier: rule.recoupMultiplier,
+            multiplierTarget,
+          }),
           previouslyRecouped,
           recoupedThisRun,
           remainingToRecoup: subtract(leftToRecoup, recoupedThisRun),

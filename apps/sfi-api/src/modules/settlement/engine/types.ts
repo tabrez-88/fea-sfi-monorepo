@@ -42,15 +42,31 @@ export interface RevenueBatchInput {
 /**
  * Distribution fee configuration.
  * Applied to gross receipts before recoupment.
+ *
+ * Exactly one of `feePercentage` or `feeAmount` is consumed per rule:
+ *   - `feePercentage` (legacy default): `mulPercent(gross, feePercentage)`
+ *   - `feeAmount` (FB-003 FLATFEE, Run 2): flat dollar amount, capped at
+ *     the remaining gross so the phase can never overspend
+ *
+ * If both are present, `feeAmount` wins. If neither is set, the participant
+ * collects $0 in this phase. Back-compat: v1 snapshots never set `feeAmount`,
+ * so existing behavior is preserved exactly.
  */
 export interface DistributionFeeRule {
   participantId: string;
   feePercentage: number; // e.g. 15 for 15%
+  feeAmount?: number; // FB-003 FLATFEE — flat dollar fee (capped at remaining gross)
 }
 
 /**
  * Recoupment configuration for a single participant.
  * Investor recoups their investment before net profit split.
+ *
+ * `recoupMultiplier` (FB-003 RECOUPMULT, Run 2) scales the effective cap to
+ * `recoupAmount × recoupMultiplier`. e.g. multiplier=1.2 means the investor
+ * recoups up to 120% of their original investment. Bounded above by
+ * `recoupCap` (which still acts as a hard ceiling). When `recoupMultiplier`
+ * is `undefined`, behavior is unchanged from v1.
  */
 export interface RecoupmentRule {
   participantId: string;
@@ -58,6 +74,7 @@ export interface RecoupmentRule {
   recoupCap: number; // maximum they can recoup (often same as recoupAmount)
   priority: number; // lower number = higher priority (recouped first)
   previouslyRecouped?: number; // amount already recouped in prior settlement runs (carry-forward)
+  recoupMultiplier?: number; // FB-003 RECOUPMULT — e.g. 1.2 for 120% recoup
 }
 
 /**
@@ -181,4 +198,143 @@ export interface SettlementOutput {
   recoupmentBalances: RecoupmentBalance[];
   /** Proof record for determinism verification */
   proof: ProofRecord;
+}
+
+// ============================================
+// Rule Snapshot v2 types (FB-003 Rev 3)
+// ============================================
+//
+// New schema for stored RuleSnapshot.rules JSON. Discriminated from v1 by
+// `schemaVersion: 2`. v1 snapshots (`schemaVersion: undefined | 1`) remain
+// fully supported via the legacy path in `settlement.service.ts`.
+//
+// References:
+//   - BACKEND_GAP_ANALYSIS_FB003.md §3 (TARGETS / per-target allocation)
+//   - Round 3 Comment 11 (3-mode discriminator)
+//   - Round 4 Comment 17 (per-target editable allocation)
+//
+// Run 2 lays the substrate (types + validator + read path). The
+// orchestration that actually drives the new phases (Tier 2, pool resolver,
+// hard cap tracking) lands in Run 3.
+
+/**
+ * Distribution mode for a v2 rule snapshot. Mode-driven branching is the
+ * top-level switch the engine and validator consult:
+ *   - `revenue_share`: no recoupment, no tiers — straight % split of gross/net
+ *   - `recoup`: single recoupment phase + optional exit conditions, no tiers
+ *   - `waterfall`: full Tier 1 + Tier 2 + exit conditions
+ */
+export type SettlementMode = 'revenue_share' | 'recoup' | 'waterfall';
+
+/**
+ * Allocation target — the recipient of a split percentage. Either a single
+ * participant or a pool of participants (whose share resolves via the pool
+ * resolver in Run 3). Pool targets support an optional `displayName` so the
+ * UI can label them e.g. "Investor Pool" instead of the underlying UUID.
+ */
+export type AllocationTarget =
+  | {
+      type: 'individual';
+      participantId: string;
+    }
+  | {
+      type: 'pool';
+      poolId: string;
+      displayName?: string;
+    };
+
+/**
+ * One row inside a `WaterfallTierRule.splits`. The percentage is the share
+ * of THIS tier's bucket (not gross/net). All `percentage` values for a
+ * given tier must sum to 100.
+ */
+export interface AllocationSplit {
+  target: AllocationTarget;
+  percentage: number; // 0–100; splits within a tier sum to 100
+}
+
+/**
+ * Pool-revenue-source rule — defines how much of the upstream amount
+ * funds a pool's bucket and what base the percentage applies to.
+ */
+export interface PoolRevenueSourceRule {
+  poolId: string;
+  percentage: number; // 0–100
+  basis: 'GROSS' | 'NET'; // percentage of gross receipts or net (after deductions)
+}
+
+/**
+ * A single waterfall tier. `recoupMultiplier`/`hardCapMultiplier`/`deadline`
+ * are tier-scoped exit conditions consulted when the engine decides whether
+ * to keep paying into this tier (Run 3 wires the evaluator).
+ *
+ * `tier` is 1 or 2 in v1 — Tier 3 is explicitly deferred per Liang.
+ */
+export interface WaterfallTierRule {
+  tier: 1 | 2;
+  splits: AllocationSplit[];
+  recoupMultiplier?: number; // exit when cumulative payout ≥ recoupAmount × multiplier
+  hardCapMultiplier?: number; // hard ceiling — never pays past this multiple
+  deadline?: string; // ISO date — exit when runDate > deadline
+}
+
+/**
+ * Optional deduction layer that runs before tiers/recoupment in v2.
+ * Distinct from `DistributionFeeRule` (v1) because v2 supports both a
+ * flat-fee branch and a percentage branch via the FLATFEE extension on
+ * the v1 type — we reuse the v1 shape here so a single processor handles
+ * both schemas.
+ */
+export type DeductionRule = DistributionFeeRule;
+
+/**
+ * Complete v2 rule snapshot. The top-level `mode` discriminator drives
+ * which sub-fields are required. The validator enforces:
+ *
+ *   - `revenue_share` mode: `tiers` must be empty; either `splits` (direct
+ *     gross/net split) or `poolRevenueSources[]` populated.
+ *   - `recoup` mode: exactly 1 tier in `tiers`.
+ *   - `waterfall` mode: exactly 2 tiers in `tiers`, in tier-number order.
+ *
+ * `deductions[]` is optional and orthogonal to mode (any mode may have
+ * pre-distribution deductions).
+ *
+ * Stored verbatim in `RuleSnapshot.rules: Json` — no Prisma migration.
+ */
+export interface RuleSnapshotRulesV2 {
+  schemaVersion: 2;
+  mode: SettlementMode;
+  /** Optional pre-distribution deductions (distributor fees, marketing recoupment, etc.) */
+  deductions?: DeductionRule[];
+  /** Pool funding rules — at most one pool target per snapshot in v1 */
+  poolRevenueSources?: PoolRevenueSourceRule[];
+  /** Waterfall tiers — 0/1/2 entries depending on mode */
+  tiers?: WaterfallTierRule[];
+  /** Direct revenue_share splits (used only when mode === 'revenue_share' and no pool) */
+  splits?: AllocationSplit[];
+}
+
+/**
+ * Discriminated union of v1 and v2 rule shapes for the read path in
+ * `extractSettlementRules()`. `RuleSnapshot.rules` is `Json` in Prisma so
+ * the actual stored value is `unknown` — narrowing happens via
+ * `getRulesSchemaVersion()`.
+ */
+export type StoredRuleSnapshot =
+  | { schemaVersion?: 1; [key: string]: unknown }
+  | RuleSnapshotRulesV2;
+
+/**
+ * Inspect a stored rules JSON blob and return its schema version.
+ * `undefined` or `1` → v1; `2` → v2; anything else throws.
+ *
+ * The result is used by `extractSettlementRules()` to pick the right
+ * read-path; v1 snapshots produce byte-identical output to before Run 2.
+ */
+export function getRulesSchemaVersion(rules: unknown): 1 | 2 {
+  if (rules === null || typeof rules !== 'object') return 1;
+  const sv = (rules as { schemaVersion?: unknown }).schemaVersion;
+  if (sv === undefined || sv === 1) return 1;
+  if (sv === 2) return 2;
+  throw new Error(`Unsupported RuleSnapshot.schemaVersion: ${String(sv)}`);
 }

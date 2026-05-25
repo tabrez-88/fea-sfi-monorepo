@@ -10,6 +10,8 @@ import {
   Min,
 } from 'class-validator';
 
+import { PaginationQueryDto } from '../../deals/dto';
+
 // ============================================
 // Enums
 // ============================================
@@ -80,10 +82,48 @@ export class CreateRevenueBatchDto {
 
   @ApiPropertyOptional({
     description:
+      'Geographic / market territory the revenue was generated in. Free-form combobox in the UI ' +
+      '(common presets: Global, US, EU, APAC, Indonesia). Persisted in `metadata.territory` and ' +
+      'surfaced as a top-level response field.',
+    example: 'US',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  territory?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Type of revenue stream. Free-form combobox in the UI (common presets: Streaming, Box Office, ' +
+      'Licensing, Live, Merch). Persisted in `metadata.revenueType` and surfaced as a top-level response field.',
+    example: 'Streaming',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  revenueType?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Name of the upstream reporting entity / payor (e.g. the operator that issued the statement). ' +
+      'Persisted in `metadata.reportingEntity` and surfaced as a top-level response field.',
+    example: 'Spotify',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  reportingEntity?: string;
+
+  @ApiPropertyOptional({
+    description:
       'Free-form JSON metadata. Shape is not enforced — callers typically attach line items, ' +
-      'territory/platform breakdowns, or source-system references.',
+      'platform breakdowns, or source-system references. The dedicated `territory`, `revenueType`, ' +
+      'and `reportingEntity` fields above are persisted INTO this same JSON blob, so do not ' +
+      'duplicate them here — the server will overwrite any duplicate keys.',
     example: {
-      territory: 'US',
       channel: 'hotel-operations',
       lineItems: [
         { label: 'Room Revenue', amount: 100000 },
@@ -158,7 +198,27 @@ export class RevenueBatchResponseDto {
   source?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Additional metadata',
+    description: 'Geographic / market territory (read from metadata.territory).',
+    example: 'US',
+  })
+  territory?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Type of revenue stream (read from metadata.revenueType).',
+    example: 'Streaming',
+  })
+  revenueType?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Upstream reporting entity / payor (read from metadata.reportingEntity).',
+    example: 'Spotify',
+  })
+  reportingEntity?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Additional metadata. The `territory`, `revenueType`, and `reportingEntity` keys are ' +
+      'stripped from this object since they are surfaced as top-level response fields above.',
   })
   metadata?: Record<string, unknown> | null;
 
@@ -194,6 +254,50 @@ export class RevenueBatchListResponseDto {
     total: number;
     totalPages: number;
   };
+}
+
+// ============================================
+// List Query — extends pagination with optional categorization filters
+// ============================================
+
+/**
+ * Query params for the list-batches endpoint. Extends `PaginationQueryDto`
+ * so the controller can take a single `@Query()` (the codebase convention —
+ * see `DealListQueryDto`). Categorization filters (`territory`,
+ * `revenueType`, `reportingEntity`) match the stored values inside
+ * `RevenueBatch.metadata` JSON via Prisma's `path` query. Free-form — no
+ * closed enum, since the underlying fields are user-defined comboboxes.
+ */
+export class RevenueBatchListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    description: 'Filter to batches whose `territory` exactly matches this value.',
+    example: 'US',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  territory?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter to batches whose `revenueType` exactly matches this value.',
+    example: 'Streaming',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  revenueType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter to batches whose `reportingEntity` exactly matches this value.',
+    example: 'Spotify',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  reportingEntity?: string;
 }
 
 // ============================================

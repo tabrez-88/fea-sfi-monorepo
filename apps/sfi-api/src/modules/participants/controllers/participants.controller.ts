@@ -45,11 +45,16 @@ export class ParticipantsController {
   constructor(private readonly participantsService: ParticipantsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Add a participant to a deal' })
+  @ApiOperation({
+    summary: 'Add or update a participant on a deal (upsert)',
+    description:
+      'Upserts on `(dealId, email)` first, then `(dealId, externalId)`. ' +
+      'Submitting the same email twice updates the existing row in place instead of creating a duplicate.',
+  })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiResponse({
     status: 201,
-    description: 'Participant created successfully',
+    description: 'Participant created or updated successfully',
     type: ParticipantResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid input' })
@@ -85,8 +90,10 @@ export class ParticipantsController {
   @ApiOperation({
     summary: 'Bulk import participants from a CSV file',
     description:
-      'Expected CSV columns (header required): name,roleName,behaviorType,email,externalId. ' +
-      'behaviorType must be one of: FEE_DEDUCTION, RECOUPMENT, NET_PROFIT_SHARE, FLAT_FEE, PASS_THROUGH.',
+      'Accepts either the legacy 5-column header `name,roleName,behaviorType,email,externalId` ' +
+      'or the current 9-column header that appends `investmentAmount,units,pricePerUnit,poolMember`. ' +
+      'behaviorType must be one of: FEE_DEDUCTION, RECOUPMENT, NET_PROFIT_SHARE, FLAT_FEE, PASS_THROUGH. ' +
+      'Rows are upserted on `(dealId, email)` (or `(dealId, externalId)` when email is blank), so re-importing the same CSV is idempotent — each row reports an `outcome` of `created`, `updated`, or `skipped`.',
   })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiConsumes('multipart/form-data')
@@ -119,7 +126,9 @@ export class ParticipantsController {
   @Get('export')
   @ApiOperation({
     summary: 'Export all participants for a deal as CSV',
-    description: 'Returns a downloadable CSV file with columns: name,roleName,behaviorType,email,externalId.',
+    description:
+      'Returns a downloadable CSV with the 9-column header: ' +
+      'name,roleName,behaviorType,email,externalId,investmentAmount,units,pricePerUnit,poolMember.',
   })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiProduces('text/csv')

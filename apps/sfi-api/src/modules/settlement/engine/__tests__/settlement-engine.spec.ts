@@ -856,4 +856,191 @@ describe('SettlementEngine', () => {
       );
     });
   });
+
+  // ============================================
+  // FB-003 Run 2 — FLATFEE (DistributionFeeRule.feeAmount)
+  // ============================================
+  describe('FLATFEE — flat-dollar distribution fee', () => {
+    it('uses feeAmount when provided, ignoring feePercentage', () => {
+      const input = buildBlockbusterFilmInput();
+      // Replace the 15% fee with a flat $20M fee.
+      input.rules.distributionFees = [
+        { participantId: 'distributor-001', feePercentage: 15, feeAmount: 20_000_000 },
+      ];
+
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+      const feePhase = result.phaseResults[1];
+
+      expect(feePhase.totalAllocated).toBe(20_000_000);
+      expect(feePhase.remainingAmount).toBe(130_000_000); // $150M − $20M
+      expect(feePhase.allocations[0].metadata).toMatchObject({
+        feeType: 'flat',
+        feeAmount: 20_000_000,
+      });
+    });
+
+    it('clips feeAmount when it exceeds the remaining gross', () => {
+      // Single small revenue batch + a flat fee bigger than gross.
+      const input = buildBlockbusterFilmInput({
+        revenueBatches: [
+          { id: 'small-batch', amount: 5_000_000, periodStart: '2024-01-01', periodEnd: '2024-01-31' },
+        ],
+      });
+      input.rules.distributionFees = [
+        { participantId: 'distributor-001', feePercentage: 15, feeAmount: 10_000_000 },
+      ];
+      // Strip recoup / profit rules so we can isolate the fee phase.
+      input.rules.recoupment = [];
+      input.rules.netProfitSplit = [
+        { participantId: 'studio-001', percentage: 100 },
+      ];
+
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+      const feePhase = result.phaseResults[1];
+
+      expect(feePhase.totalAllocated).toBe(5_000_000); // clipped from 10M to 5M
+      expect(feePhase.allocations[0].metadata).toMatchObject({
+        feeType: 'flat',
+        feeAmount: 10_000_000, // original requested amount preserved in metadata
+      });
+      // Calculation string should reflect the clip
+      expect(feePhase.allocations[0].metadata.calculation).toMatch(/clipped/i);
+    });
+
+    it('mixes flat and percentage fees on the same deal', () => {
+      const input = buildBlockbusterFilmInput();
+      // Add a second fee-paying distributor; one flat, one percentage.
+      input.participants.push({
+        id: 'marketing-001',
+        name: 'Marketing Co',
+        roleName: 'Marketing',
+        behaviorType: ParticipantBehavior.FEE_DEDUCTION,
+      });
+      input.rules.distributionFees = [
+        { participantId: 'distributor-001', feePercentage: 10 }, // 10% of $150M = $15M
+        { participantId: 'marketing-001', feePercentage: 0, feeAmount: 5_000_000 }, // flat $5M
+      ];
+      // Drop the recoupment so we have a clean expectation on remainder
+      input.rules.recoupment = [];
+      input.rules.netProfitSplit = [
+        { participantId: 'studio-001', percentage: 100 },
+      ];
+
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+      const feePhase = result.phaseResults[1];
+
+      expect(feePhase.totalAllocated).toBe(20_000_000); // $15M + $5M
+      expect(feePhase.remainingAmount).toBe(130_000_000); // $150M − $20M
+      expect(feePhase.allocations).toHaveLength(2);
+      expect(feePhase.allocations[0].metadata.feeType).toBe('percentage');
+      expect(feePhase.allocations[1].metadata.feeType).toBe('flat');
+    });
+  });
+
+  // ============================================
+  // FB-003 Run 2 — RECOUPMULT (RecoupmentRule.recoupMultiplier)
+  // ============================================
+  describe('RECOUPMULT — recoup with multiplier', () => {
+    it('with multiplier=1.2, recoup extends to 120% of recoupAmount', () => {
+      const input = buildBlockbusterFilmInput();
+      // Investor A's recoupAmount stays $30M but multiplier 1.2 raises target
+      // to $36M. recoupCap also widened so multiplier (not cap) binds.
+      input.rules.recoupment = [
+        {
+          participantId: 'investor-a',
+          recoupAmount: 30_000_000,
+          recoupCap: 50_000_000,
+          priority: 1,
+          recoupMultiplier: 1.2,
+        },
+        {
+          participantId: 'investor-b',
+          recoupAmount: 20_000_000,
+          recoupCap: 20_000_000,
+          priority: 2,
+        },
+      ];
+
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+
+      const recoupA = result.allocations.find(
+        (a) => a.participantId === 'investor-a' && a.phase === Phase.RECOUPMENT,
+      );
+      expect(recoupA?.amount).toBe(36_000_000); // 30M × 1.2
+      expect(recoupA?.metadata).toMatchObject({
+        recoupMultiplier: 1.2,
+        multiplierTarget: 36_000_000,
+      });
+
+      const balanceA = result.recoupmentBalances.find((b) => b.participantId === 'investor-a');
+      expect(balanceA?.fullyRecouped).toBe(true);
+      expect(balanceA?.totalToRecoup).toBe(36_000_000);
+    });
+
+    it('recoupCap still binds when multiplierTarget exceeds the cap', () => {
+      const input = buildBlockbusterFilmInput();
+      // multiplier 2.0 would push to $60M, but cap is set to $35M
+      input.rules.recoupment = [
+        {
+          participantId: 'investor-a',
+          recoupAmount: 30_000_000,
+          recoupCap: 35_000_000,
+          priority: 1,
+          recoupMultiplier: 2.0,
+        },
+      ];
+      input.rules.netProfitSplit = [
+        { participantId: 'studio-001', percentage: 100 },
+      ];
+
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+
+      const recoupA = result.allocations.find(
+        (a) => a.participantId === 'investor-a' && a.phase === Phase.RECOUPMENT,
+      );
+      // After 15% fee on $150M = $127.5M remaining → cap of $35M binds
+      expect(recoupA?.amount).toBe(35_000_000);
+    });
+
+    it('legacy v1 rules without recoupMultiplier are unchanged (regression)', () => {
+      const input = buildBlockbusterFilmInput();
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+
+      const recoupA = result.allocations.find(
+        (a) => a.participantId === 'investor-a' && a.phase === Phase.RECOUPMENT,
+      );
+      // No multiplier → same $30M as before Run 2
+      expect(recoupA?.amount).toBe(30_000_000);
+      // Metadata should NOT include multiplier keys when undefined
+      expect(recoupA?.metadata).not.toHaveProperty('recoupMultiplier');
+      expect(recoupA?.metadata).not.toHaveProperty('multiplierTarget');
+    });
+  });
+
+  // ============================================
+  // FB-003 Run 2 — v1 Proof-Hash Regression
+  // ============================================
+  // This is the critical Run 2 acceptance bar: existing v1 rule snapshots
+  // must produce byte-identical engine output (and therefore the same
+  // SHA-256 proof hash) after Run 2's type/phase extensions. If this test
+  // ever fails, something in the v1 read or write path drifted.
+  describe('v1 Proof-Hash Regression (Run 2 bar)', () => {
+    // Captured from the engine on 2026-05-20 with the FB-001/002 baseline
+    // engine code. If you change v1 fee/recoup/profit logic, allocation
+    // field order, or the canonicalizer, this hash WILL flip — that is
+    // the regression signal Run 2 promised to hold.
+    const V1_BLOCKBUSTER_HASH =
+      'sha256:d75e8666fdee55db9ded5ee7e111befae89ad67aaccc6c656b83f5c3536ddf06';
+
+    it('Blockbuster $150M scenario produces a stable hash with fixed timestamp', () => {
+      const input = buildBlockbusterFilmInput();
+      const result = engine.calculate(input, FIXED_TIMESTAMP);
+
+      // The hash is computed from canonical (sorted-keys) JSON of the
+      // settlement input + allocations. Any change to v1 fee/recoup/profit
+      // logic, allocation field order, or the canonicalizer will flip
+      // this hash and trip the regression test.
+      expect(result.proof.proofHash).toBe(V1_BLOCKBUSTER_HASH);
+    });
+  });
 });

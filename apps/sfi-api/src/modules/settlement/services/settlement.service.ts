@@ -28,11 +28,14 @@ import {
   SettlementPhaseEnum,
   CurrencyEnum,
 } from '../dto';
+import { extractV2SettlementRules } from '../engine/extractors/v2';
 import { SettlementEngine } from '../engine/settlement-engine';
 import {
   SettlementInput,
   SettlementOutput,
   ParticipantBehavior as EngineParticipantBehavior,
+  RuleSnapshotRulesV2,
+  getRulesSchemaVersion,
 } from '../engine/types';
 
 @Injectable()
@@ -669,6 +672,20 @@ export class SettlementService {
     };
   }
 
+  /**
+   * Extract engine-ready `SettlementRules` from the stored rule snapshot.
+   *
+   * Branches on `schemaVersion`:
+   *   - `undefined | 1` → existing flat-shape path (untouched — v1 snapshots
+   *     produce byte-identical engine output to before Run 2)
+   *   - `2` → new Rev 3 path: maps the v2 rules JSON to the engine's
+   *     `SettlementRules` shape so the existing 4-phase engine can still
+   *     run while Run 3 lands the orchestration for pool resolver + Tier 2
+   *     + cross-phase hard cap.
+   *
+   * Run 2 substrate-only: v2 returns the same flat 4-phase shape — the new
+   * phases (`POOL_REVENUE_SOURCE`, `WATERFALL_TIER_*`) are wired in Run 3.
+   */
   private extractSettlementRules(
     rules: Record<string, unknown>,
     participants: {
@@ -677,6 +694,14 @@ export class SettlementService {
       participant: { roleName: string; behaviorType: string };
     }[],
   ): SettlementInput['rules'] {
+    const version = getRulesSchemaVersion(rules);
+    if (version === 2) {
+      return extractV2SettlementRules(
+        rules as unknown as RuleSnapshotRulesV2,
+        participants,
+      );
+    }
+
     if (rules.distributionFees && rules.recoupment && rules.netProfitSplit) {
       return rules as unknown as SettlementInput['rules'];
     }
