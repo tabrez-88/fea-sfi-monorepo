@@ -1,0 +1,165 @@
+name: Deploy to Contabo (staging)
+
+# ============================================================================
+# Builds the two app images, pushes them to GitHub Container Registry (GHCR),
+# then SSHes into the Contabo VPS and pulls + restarts the running stack.
+#
+# Required repo secrets (Settings → Secrets → Actions):
+#   GHCR_USERNAME            — GitHub username with write:packages scope
+#                              (a fine-grained PAT works fine; just package
+#                              write + read scopes on this repo)
+#   GHCR_TOKEN               — the PAT itself
+#   CONTABO_HOST             — VPS IP or hostname (e.g. 1.2.3.4 or vps.example.com)
+#   CONTABO_USER             — SSH user (typically `deploy` — not root)
+#   CONTABO_SSH_PRIVATE_KEY  — PEM-encoded private key for the deploy user
+#                              (paste the entire OpenSSH file content)
+#   CONTABO_DEPLOY_PATH      — absolute path where the repo lives on the VPS
+#                              (e.g. /opt/sfi-fea)
+#
+# Companion docs: docs/deployment/CONTABO_MIGRATION_GUIDE.md § "GitHub
+# Actions deploy".
+# ============================================================================
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch: # manual re-deploys from the Actions tab
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }} # e.g. ghcr.io/<user>/<image>
+  API_IMAGE_NAME: sfi-api
+  ADMIN_IMAGE_NAME: sfi-admin
+
+concurrency:
+  # Cancel in-flight deploys when a new commit lands on `staging` so we
+  # don't race two SSH sessions on the same VPS.
+  group: deploy-contabo-staging
+  cancel-in-progress: false
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Build + push both images to GHCR. Each image is tagged with the commit
+  # SHA (immutable) AND `staging-latest` (mutable, used by docker-compose
+  # pull on the VPS).
+  # --------------------------------------------------------------------------
+  build-and-push:
+    name: Build + push images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to GHCR
+    outputs:
+      api_image: ${{ steps.tags.outputs.api_image_latest }}
+      admin_image: ${{ steps.tags.outputs.admin_image_latest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: tags
+        run: |
+          API_TAG_SHA="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.API_IMAGE_NAME }}:${{ github.sha }}"
+          API_TAG_LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.API_IMAGE_NAME }}:staging-latest"
+          ADMIN_TAG_SHA="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.ADMIN_IMAGE_NAME }}:${{ github.sha }}"
+          ADMIN_TAG_LATEST="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.ADMIN_IMAGE_NAME }}:staging-latest"
+          {
+            echo "api_image_sha=$API_TAG_SHA"
+            echo "api_image_latest=$API_TAG_LATEST"
+            echo "admin_image_sha=$ADMIN_TAG_SHA"
+            echo "admin_image_latest=$ADMIN_TAG_LATEST"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build + push sfi-api
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/sfi-api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.api_image_sha }}
+            ${{ steps.tags.outputs.api_image_latest }}
+          cache-from: type=gha,scope=sfi-api
+          cache-to: type=gha,scope=sfi-api,mode=max
+
+      - name: Build + push sfi-admin
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/sfi-admin/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.tags.outputs.admin_image_sha }}
+            ${{ steps.tags.outputs.admin_image_latest }}
+          # Next.js bakes NEXT_PUBLIC_* into the client bundle at build
+          # time, so the API URL must be passed as a build-arg. Override
+          # by setting the `NEXT_PUBLIC_API_URL` repository variable
+          # (Settings → Secrets and variables → Actions → Variables).
+          # Default targets the IP-only staging VPS.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'http://94.72.127.139:8080/api/v1' }}
+            NEXT_PUBLIC_APP_ENV=staging
+          cache-from: type=gha,scope=sfi-admin
+          cache-to: type=gha,scope=sfi-admin,mode=max
+
+  # --------------------------------------------------------------------------
+  # SSH into the Contabo VPS and roll the running compose stack. We pin
+  # to the SHA tag in the compose env so a re-pull always grabs the
+  # exact image we built. Health-checks are gated by docker-compose's
+  # `service_healthy` predicate so sfi-admin only starts after sfi-api
+  # is up.
+  # --------------------------------------------------------------------------
+  deploy:
+    name: Deploy via SSH
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH + pull + restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CONTABO_HOST }}
+          username: ${{ secrets.CONTABO_USER }}
+          key: ${{ secrets.CONTABO_SSH_PRIVATE_KEY }}
+          script_stop: true
+          envs: API_IMAGE,ADMIN_IMAGE,DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.CONTABO_DEPLOY_PATH }}"
+
+            # Refresh the compose file from the deployed branch so any
+            # changes to docker-compose.contabo.yml land too.
+            git fetch origin staging
+            git reset --hard origin/staging
+
+            # Log in to GHCR so the upcoming pull can fetch private images.
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io \
+              --username "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+            # Point compose at the freshly-pushed SHA-tagged images so
+            # this deploy is idempotent (no chance of an old `staging-latest`
+            # being cached locally).
+            export SFI_API_IMAGE="${{ needs.build-and-push.outputs.api_image }}"
+            export SFI_ADMIN_IMAGE="${{ needs.build-and-push.outputs.admin_image }}"
+
+            docker compose -f docker-compose.contabo.yml pull
+            docker compose -f docker-compose.contabo.yml up -d --remove-orphans
+
+            # Prune dangling images so the VPS disk doesn't fill up over
+            # a few months of deploys.
+            docker image prune -f
+
+            # Smoke-check: tail the last 20 log lines from each service
+            # so we see a startup error in the Actions log if one occurs.
+            sleep 5
+            docker compose -f docker-compose.contabo.yml logs --tail=20 sfi-api
+            docker compose -f docker-compose.contabo.yml logs --tail=20 sfi-admin

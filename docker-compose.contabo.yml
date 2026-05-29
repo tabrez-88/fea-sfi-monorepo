@@ -1,0 +1,81 @@
+# ===========================================
+# SFI-FEA Docker Compose — Contabo / self-hosted deployment
+# ===========================================
+# Designed for a single Contabo VPS (or any plain Linux VM). Reads
+# secrets from `.env` (loaded by compose); does NOT touch GCP Secret
+# Manager. The `sfi-api` container expects `SECRETS_PROVIDER=env` in
+# the env file.
+#
+# Storage: documents are written to a host-mounted volume so files
+# survive container restarts and image rebuilds.
+#
+# Usage:
+#   1. Copy .env.contabo.example → .env on the VM
+#   2. Fill in DATABASE_URL, JWT_*, etc.
+#   3. docker compose -f docker-compose.contabo.yml up -d
+#
+# Full setup: docs/deployment/CONTABO_MIGRATION_GUIDE.md
+
+services:
+  sfi-api:
+    image: ${SFI_API_IMAGE:-ghcr.io/your-org/sfi-api:staging-latest}
+    container_name: sfi-api
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3001:3001' # bind to loopback only — nginx proxies from :443
+    env_file:
+      - .env
+    environment:
+      # Force the Contabo path even if .env doesn't set it explicitly
+      - SECRETS_PROVIDER=env
+      - NODE_ENV=${NODE_ENV:-production}
+      - STORAGE_BACKEND=local
+      - STORAGE_LOCAL_PATH=/var/lib/sfi-fea/storage/documents
+    volumes:
+      # Persisted document uploads — bind-mounted from the host so files
+      # are easy to back up (`tar` the host dir directly) and inspect.
+      # Same path inside the container as STORAGE_LOCAL_PATH above.
+      - /var/lib/sfi-fea/storage/documents:/var/lib/sfi-fea/storage/documents
+    networks:
+      - sfi-network
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3001/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  sfi-admin:
+    image: ${SFI_ADMIN_IMAGE:-ghcr.io/your-org/sfi-admin:staging-latest}
+    container_name: sfi-admin
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:3002:3002'
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      # NEXT_PUBLIC_API_URL is baked at BUILD time (Dockerfile ARG +
+      # deploy workflow build-args). Setting it here only affects
+      # server components; the client bundle ignores it. The build-time
+      # value MUST match what the browser ultimately uses.
+      - NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:-http://94.72.127.139:8080/api/v1}
+    depends_on:
+      sfi-api:
+        condition: service_healthy
+    networks:
+      - sfi-network
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+networks:
+  sfi-network:
+    driver: bridge

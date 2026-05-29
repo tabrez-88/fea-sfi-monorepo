@@ -14,13 +14,13 @@
  */
 
 // ============================================
-// V1 — legacy flat shape (still supported)
+// V1: legacy flat shape (still supported)
 // ============================================
 
 export interface DistributionFeeRule {
   participantId: string;
   feePercentage: number;
-  /** FB-003 FLATFEE — flat dollar fee (capped at remaining gross). */
+  /** FB-003 FLATFEE: flat dollar fee (capped at remaining gross). */
   feeAmount?: number;
 }
 
@@ -30,7 +30,7 @@ export interface RecoupmentRule {
   recoupCap: number;
   priority: number;
   previouslyRecouped?: number;
-  /** FB-003 RECOUPMULT — recoup target = recoupAmount × multiplier. */
+  /** FB-003 RECOUPMULT: recoup target = recoupAmount × multiplier. */
   recoupMultiplier?: number;
 }
 
@@ -46,7 +46,7 @@ export interface SettlementRulesV1 {
 }
 
 // ============================================
-// V2 — FB-003 Rev 3 single-pipeline schema
+// V2: FB-003 Rev 3 single-pipeline schema
 // ============================================
 
 export type SettlementMode = 'revenue_share' | 'recoup' | 'waterfall';
@@ -97,7 +97,7 @@ export type StoredRuleSnapshot =
   | RuleSnapshotRulesV2;
 
 /**
- * Mirrors `getRulesSchemaVersion()` in the BE engine — returns `1` for
+ * Mirrors `getRulesSchemaVersion()` in the BE engine. Returns `1` for
  * legacy flat shapes (no `schemaVersion` or `schemaVersion === 1`) and
  * `2` for the new shape. Throws when a stored snapshot carries a version
  * this build doesn't understand.
@@ -108,4 +108,42 @@ export function getRulesSchemaVersion(rules: unknown): 1 | 2 {
   if (sv === undefined || sv === 1) return 1;
   if (sv === 2) return 2;
   throw new Error(`Unsupported RuleSnapshot.schemaVersion: ${String(sv)}`);
+}
+
+// ============================================
+// API response shape (BE: RuleSnapshotResponseDto)
+// ============================================
+
+export interface RuleSnapshot {
+  id: string;
+  dealId: string;
+  version: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  rules: StoredRuleSnapshot;
+  notes?: string | null;
+  participantCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Derived display status for the list page. A snapshot is `ACTIVE` when its
+ * `effectiveTo` is null (still in effect) and `CLOSED` when it has been
+ * superseded by a newer snapshot.
+ */
+export const RuleSnapshotStatus = {
+  ACTIVE: 'ACTIVE',
+  CLOSED: 'CLOSED',
+} as const;
+
+export type RuleSnapshotStatus =
+  (typeof RuleSnapshotStatus)[keyof typeof RuleSnapshotStatus];
+
+export function deriveRuleSnapshotStatus(
+  snapshot: RuleSnapshot,
+): RuleSnapshotStatus {
+  return snapshot.effectiveTo === null
+    ? RuleSnapshotStatus.ACTIVE
+    : RuleSnapshotStatus.CLOSED;
 }

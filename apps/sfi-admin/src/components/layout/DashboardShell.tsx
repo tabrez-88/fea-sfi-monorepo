@@ -51,11 +51,11 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const inDealContext = dealId !== null;
 
   // Default: full labels in non-deal context, icon-rail in deal context
-  // (matches Figma — the DealSidebar takes over as the primary nav there).
+  // (matches Figma; the DealSidebar takes over as the primary nav there).
   const [desktopOpen, setDesktopOpen] = useState(() => !inDealContext);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Always toggleable — per Figma "Desktop Sidebar [Inactive]", the collapsed
+  // Always toggleable. Per Figma "Desktop Sidebar [Inactive]", the collapsed
   // state is an icon-rail (not hidden), so the toggle is meaningful in both
   // contexts.
   const toggleSidebar = useCallback(() => {
@@ -113,7 +113,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
     <div className="flex min-h-screen flex-col bg-white">
       <Navbar onToggleSidebar={toggleSidebar} />
 
-      <div className="flex flex-1 items-stretch">
+      <div className="flex flex-1 items-start pt-[96px]">
         <Sidebar
           desktopOpen={desktopOpen}
           mobileOpen={mobileOpen && !inDealContext}

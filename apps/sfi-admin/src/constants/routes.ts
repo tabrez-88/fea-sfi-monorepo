@@ -17,7 +17,11 @@ export const ROUTES = {
     EDIT: (id: string) => `/deals/${id}/edit`,
     // Deal-scoped context pages (Sprint 2+)
     PARTICIPANTS: (id: string) => `/deals/${id}/participants`,
+    PARTICIPANTS_NEW: (id: string) => `/deals/${id}/participants/new`,
+    PARTICIPANT_DETAIL: (id: string, participantId: string) =>
+      `/deals/${id}/participants/${participantId}`,
     RULES: (id: string) => `/deals/${id}/rules`,
+    RULES_NEW: (id: string) => `/deals/${id}/rules/new`,
     REVENUE: (id: string) => `/deals/${id}/revenue`,
     SETTLEMENT: (id: string) => `/deals/${id}/settlement`,
     DOCUMENTS: (id: string) => `/deals/${id}/documents`,

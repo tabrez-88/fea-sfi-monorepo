@@ -67,6 +67,27 @@ export class ParticipantsController {
     return this.participantsService.create(user.id, dealId, createParticipantDto);
   }
 
+  @Get('roles')
+  @ApiOperation({
+    summary: 'List distinct role names on a deal',
+    description:
+      'Returns up to 20 alphabetically-sorted, case-insensitive distinct ' +
+      '`roleName` values present on the deal. Used by the Add Participant ' +
+      "form to power Role Name autocomplete. Pass `q` to narrow by " +
+      'substring match (case-insensitive). Empty `q` returns the first 20.',
+  })
+  @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
+  @ApiQuery({ name: 'q', required: false, type: String, description: 'Case-insensitive substring filter on roleName' })
+  @ApiResponse({ status: 200, description: 'Array of distinct role names', schema: { type: 'array', items: { type: 'string' } } })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async findRoles(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('dealId', ParseUUIDPipe) dealId: string,
+    @Query('q') q?: string,
+  ): Promise<string[]> {
+    return this.participantsService.findDistinctRoles(user.id, dealId, q);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all participants for a deal' })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
@@ -90,10 +111,13 @@ export class ParticipantsController {
   @ApiOperation({
     summary: 'Bulk import participants from a CSV file',
     description:
-      'Accepts either the legacy 5-column header `name,roleName,behaviorType,email,externalId` ' +
-      'or the current 9-column header that appends `investmentAmount,units,pricePerUnit,poolMember`. ' +
+      'Accepts three header variants (case-insensitive on column names, fixed column order): ' +
+      '`name,roleName,behaviorType,email,externalId` (legacy 5-col), ' +
+      '`name,roleName,behaviorType,email,externalId,investmentAmount,units,pricePerUnit,poolMember` (v2 9-col), or ' +
+      '`name,roleName,behaviorType,email,investmentAmount,units,pricePerUnit,poolMember` (v2 8-col without externalId, shipped by the in-app Download CSV Template button). ' +
       'behaviorType must be one of: FEE_DEDUCTION, RECOUPMENT, NET_PROFIT_SHARE, FLAT_FEE, PASS_THROUGH. ' +
-      'Rows are upserted on `(dealId, email)` (or `(dealId, externalId)` when email is blank), so re-importing the same CSV is idempotent — each row reports an `outcome` of `created`, `updated`, or `skipped`.',
+      'Rows are upserted on `(dealId, email)` (or `(dealId, externalId)` when email is blank), so re-importing the same CSV is idempotent. Each row reports an `outcome` of `created`, `updated`, or `skipped`. ' +
+      'Pass `dryRun=true` to validate + preview the CSV without writing to the database; the response shape is identical, valid rows come back with `outcome=skipped` (nothing persisted), and hard-failed rows keep their parse error.',
   })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiConsumes('multipart/form-data')
@@ -108,6 +132,7 @@ export class ParticipantsController {
     },
   })
   @ApiQuery({ name: 'skipErrors', required: false, type: Boolean })
+  @ApiQuery({ name: 'dryRun', required: false, type: Boolean, description: 'Validate without writing (default: false). Powers the Preview Import modal.' })
   @ApiResponse({ status: 200, description: 'Import result', type: BulkImportResultDto })
   @ApiResponse({ status: 400, description: 'Invalid CSV or validation error' })
   @ApiResponse({ status: 404, description: 'Deal not found' })
@@ -116,11 +141,12 @@ export class ParticipantsController {
     @Param('dealId', ParseUUIDPipe) dealId: string,
     @UploadedFile() file: Express.Multer.File,
     @Query('skipErrors', new DefaultValuePipe(false), ParseBoolPipe) skipErrors: boolean,
+    @Query('dryRun', new DefaultValuePipe(false), ParseBoolPipe) dryRun: boolean,
   ): Promise<BulkImportResultDto> {
     if (!file) {
       throw new Error('No file uploaded');
     }
-    return this.participantsService.importFromCsv(user.id, dealId, file.buffer, skipErrors);
+    return this.participantsService.importFromCsv(user.id, dealId, file.buffer, skipErrors, dryRun);
   }
 
   @Get('export')

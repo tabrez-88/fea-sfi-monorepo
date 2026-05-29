@@ -23,7 +23,7 @@ function range(start: number, end: number): number[] {
 }
 
 /**
- * Build the compact page list — first/last always, and `siblingCount` pages
+ * Build the compact page list: first/last always, and `siblingCount` pages
  * around the current page, with DOTS used to collapse the remaining ranges.
  * Matches the Figma `< 1 2 3 ... 10 >` pattern.
  */
@@ -62,7 +62,7 @@ function buildPageList(
 /**
  * Numbered pagination matching the Figma Deal List footer:
  *   `‹  1  2  3  …  10  ›`
- * — current page pill-filled, chevrons disabled at bounds.
+ * with current page pill-filled and chevrons disabled at bounds.
  */
 export function Pagination({
   page,

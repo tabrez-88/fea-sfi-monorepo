@@ -8,7 +8,7 @@ type PageHeaderProps = Readonly<{
 }>;
 
 /**
- * Page header — small neutral eyebrow + 40px Light title. Matches the Figma
+ * Page header: small neutral eyebrow + 40px Light title. Matches the Figma
  * content-header (node 385:11470).
  */
 export function PageHeader({ eyebrow, title, actions }: PageHeaderProps) {

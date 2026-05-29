@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -69,6 +69,7 @@ describe('ParticipantsService', () => {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       count: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -216,6 +217,119 @@ describe('ParticipantsService', () => {
         where: { dealId: MOCK_DEAL_ID, externalId: 'EXT-1' },
       });
       expect(mockPrismaService.participant.create).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── findOne / update / remove ──────────────────────────────────────────────
+
+  describe('findOne', () => {
+    it('returns the participant when found and the caller owns the deal', async () => {
+      const row = buildParticipantRow({ id: 'p-1', name: 'Alice' });
+      mockPrismaService.participant.findUnique.mockResolvedValue(row);
+
+      const result = await service.findOne(MOCK_USER_ID, 'p-1');
+
+      expect(result.name).toBe('Alice');
+      expect(mockDealsService.assertDealOwner).toHaveBeenCalledWith(MOCK_DEAL_ID, MOCK_USER_ID);
+    });
+
+    it('throws NotFoundException when the participant does not exist', async () => {
+      mockPrismaService.participant.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOne(MOCK_USER_ID, 'missing')).rejects.toThrow(NotFoundException);
+      expect(mockDealsService.assertDealOwner).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    it('writes only the keys present in the DTO and merges investment fields into existing metadata', async () => {
+      mockPrismaService.participant.findUnique.mockResolvedValue(
+        buildParticipantRow({
+          id: 'p-1',
+          name: 'Old name',
+          metadata: { customNote: 'preserve me', investmentAmount: 1000 },
+        }),
+      );
+      mockPrismaService.participant.update.mockResolvedValue(
+        buildParticipantRow({
+          id: 'p-1',
+          name: 'New name',
+          metadata: { customNote: 'preserve me', investmentAmount: 5000, units: 50 },
+        }),
+      );
+
+      const result = await service.update(MOCK_USER_ID, 'p-1', {
+        name: 'New name',
+        investmentAmount: 5000,
+        units: 50,
+      });
+
+      const call = mockPrismaService.participant.update.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'p-1' });
+      expect(call.data.name).toBe('New name');
+      // Unspecified DTO fields (roleName / behaviorType / email / externalId) NOT
+      // forwarded to the update.
+      expect(call.data.roleName).toBeUndefined();
+      expect(call.data.behaviorType).toBeUndefined();
+      // Investment merge: customNote preserved, investmentAmount overwritten,
+      // units added.
+      expect(call.data.metadata).toEqual({
+        customNote: 'preserve me',
+        investmentAmount: 5000,
+        units: 50,
+      });
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'UPDATED', entityType: 'Participant', entityId: 'p-1' }),
+      );
+      expect(result.name).toBe('New name');
+    });
+
+    it('throws NotFoundException when the participant does not exist', async () => {
+      mockPrismaService.participant.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.update(MOCK_USER_ID, 'missing', { name: 'New name' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.participant.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('remove', () => {
+    it('hard-deletes the participant and writes a DELETED audit entry with identifying fields', async () => {
+      mockPrismaService.participant.findUnique.mockResolvedValue(
+        buildParticipantRow({
+          id: 'p-1',
+          name: 'Alice',
+          roleName: 'Investor',
+          email: 'alice@example.com',
+          behaviorType: 'RECOUPMENT',
+        }),
+      );
+      mockPrismaService.participant.delete.mockResolvedValue({ id: 'p-1' });
+
+      await service.remove(MOCK_USER_ID, 'p-1');
+
+      expect(mockPrismaService.participant.delete).toHaveBeenCalledWith({ where: { id: 'p-1' } });
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'DELETED',
+          entityType: 'Participant',
+          entityId: 'p-1',
+          metadata: expect.objectContaining({
+            name: 'Alice',
+            roleName: 'Investor',
+            email: 'alice@example.com',
+            behaviorType: 'RECOUPMENT',
+          }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException when the participant does not exist', async () => {
+      mockPrismaService.participant.findUnique.mockResolvedValue(null);
+
+      await expect(service.remove(MOCK_USER_ID, 'missing')).rejects.toThrow(NotFoundException);
+      expect(mockPrismaService.participant.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -513,6 +627,178 @@ describe('ParticipantsService', () => {
       await expect(
         service.importFromCsv(MOCK_USER_ID, MOCK_DEAL_ID, Buffer.from(csv)),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts the 8-column header without externalId and parses investment fields into metadata', async () => {
+      const tx = stageTransaction();
+
+      const csv = [
+        'name,roleName,behaviorType,email,investmentAmount,units,pricePerUnit,poolMember',
+        'Alice,Investor,RECOUPMENT,alice@example.com,50000,1000,50,true',
+      ].join('\r\n');
+
+      const result = await service.importFromCsv(MOCK_USER_ID, MOCK_DEAL_ID, Buffer.from(csv), true);
+
+      expect(result.rows[0].outcome).toBe(ImportRowOutcomeDto.CREATED);
+      const created = tx.participant.create.mock.calls[0][0].data;
+      expect(created.externalId).toBeUndefined();
+      expect(created.metadata).toEqual({
+        investmentAmount: 50000,
+        units: 1000,
+        pricePerUnit: 50,
+        poolMember: true,
+      });
+    });
+
+    it('rejects a header that is the right column count but a different shape (between variants)', async () => {
+      stageTransaction();
+
+      const csv = [
+        // 7 cols, doesn't match any of the 3 variants
+        'name,roleName,behaviorType,email,units,pricePerUnit,poolMember',
+        'Alice,Investor,RECOUPMENT,alice@example.com,1000,50,true',
+      ].join('\r\n');
+
+      await expect(
+        service.importFromCsv(MOCK_USER_ID, MOCK_DEAL_ID, Buffer.from(csv)),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('with dryRun=true, parses + validates without writing to the DB; valid rows come back as skipped with parsed participant data attached', async () => {
+      const tx = stageTransaction();
+
+      const csv = [
+        'name,roleName,behaviorType,email,investmentAmount,units,pricePerUnit,poolMember',
+        'Alice,Investor,RECOUPMENT,alice@example.com,5000,50,100,true',
+        'Bob,Investor,RECOUPMENT,bob@example.com,10000,100,100,true',
+      ].join('\r\n');
+
+      const result = await service.importFromCsv(
+        MOCK_USER_ID,
+        MOCK_DEAL_ID,
+        Buffer.from(csv),
+        true, // skipErrors
+        true, // dryRun
+      );
+
+      // No DB writes
+      expect(tx.participant.create).not.toHaveBeenCalled();
+      expect(tx.participant.update).not.toHaveBeenCalled();
+      // Imported count is 0 in dry-run mode
+      expect(result.imported).toBe(0);
+      // Valid rows surface as `skipped` (nothing persisted)
+      expect(result.rows).toHaveLength(2);
+      expect(result.rows[0].success).toBe(true);
+      expect(result.rows[0].outcome).toBe(ImportRowOutcomeDto.SKIPPED);
+      expect(result.rows[1].outcome).toBe(ImportRowOutcomeDto.SKIPPED);
+
+      // Synthetic participant payload is attached so the FE Preview table
+      // can render row content (name / behavior / email / investment).
+      expect(result.rows[0].participant).toEqual(
+        expect.objectContaining({
+          name: 'Alice',
+          roleName: 'Investor',
+          behaviorType: 'RECOUPMENT',
+          email: 'alice@example.com',
+          investmentAmount: 5000,
+          units: 50,
+          pricePerUnit: 100,
+          poolMember: true,
+        }),
+      );
+      expect(result.rows[1].participant).toEqual(
+        expect.objectContaining({
+          name: 'Bob',
+          email: 'bob@example.com',
+          investmentAmount: 10000,
+        }),
+      );
+    });
+
+    it('with dryRun=true, hard-failed rows keep their parse error and skipped outcome', async () => {
+      const tx = stageTransaction();
+
+      const csv = [
+        'name,roleName,behaviorType,email,externalId',
+        'Alice,Investor,RECOUPMENT,alice@example.com,',
+        'Bob,Investor,NOT_A_BEHAVIOR,bob@example.com,', // bad behaviorType
+      ].join('\r\n');
+
+      const result = await service.importFromCsv(
+        MOCK_USER_ID,
+        MOCK_DEAL_ID,
+        Buffer.from(csv),
+        true, // skipErrors so the bad row doesn't abort
+        true, // dryRun
+      );
+
+      expect(tx.participant.create).not.toHaveBeenCalled();
+      expect(result.imported).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.rows[0]).toMatchObject({ success: true, outcome: ImportRowOutcomeDto.SKIPPED });
+      expect(result.rows[1]).toMatchObject({
+        success: false,
+        outcome: ImportRowOutcomeDto.SKIPPED,
+        error: expect.stringContaining('behaviorType must be one of'),
+      });
+    });
+
+    it('hard-failed rows still surface whatever raw column data was extractable (so the FE preview can render partial rows)', async () => {
+      stageTransaction();
+
+      const csv = [
+        'name,roleName,behaviorType,email,investmentAmount,units,pricePerUnit,poolMember',
+        ',Investor,RECOUPMENT,sam@example.com,,,,', // missing name, fails
+        'Alice,Investor,RECOUPMENT,alice@example.com,5000,50,100,true', // valid (anchor row)
+        'Bob,Investor,NOT_A_BEHAVIOR,bob@example.com,5000,50,100,true', // bad behavior, fails but other data present
+      ].join('\r\n');
+
+      const result = await service.importFromCsv(
+        MOCK_USER_ID,
+        MOCK_DEAL_ID,
+        Buffer.from(csv),
+        true, // skipErrors so all rows surface in the response
+        true, // dryRun
+      );
+
+      // Row 1: missing name. Email + role still extractable.
+      expect(result.rows[0]).toMatchObject({
+        success: false,
+        outcome: ImportRowOutcomeDto.SKIPPED,
+        error: 'name is required',
+        participant: expect.objectContaining({
+          name: '',
+          roleName: 'Investor',
+          behaviorType: 'RECOUPMENT', // valid enum, so preserved
+          email: 'sam@example.com',
+        }),
+      });
+
+      // Row 2 is the valid anchor.
+      expect(result.rows[1]).toMatchObject({
+        success: true,
+        outcome: ImportRowOutcomeDto.SKIPPED,
+        participant: expect.objectContaining({ name: 'Alice' }),
+      });
+
+      // Row 3: bad behaviorType. Name + investment fields still extractable.
+      // Invalid behavior comes back as null so the FE renders "N/A" instead
+      // of crashing the badge lookup.
+      expect(result.rows[2]).toMatchObject({
+        success: false,
+        outcome: ImportRowOutcomeDto.SKIPPED,
+        error: expect.stringContaining('behaviorType must be one of'),
+        participant: expect.objectContaining({
+          name: 'Bob',
+          roleName: 'Investor',
+          behaviorType: null,
+          email: 'bob@example.com',
+          investmentAmount: 5000,
+          units: 50,
+          pricePerUnit: 100,
+          poolMember: true,
+        }),
+      });
     });
   });
 

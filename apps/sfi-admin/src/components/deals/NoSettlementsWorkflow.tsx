@@ -23,7 +23,7 @@ type NoSettlementsWorkflowProps = Readonly<{
 
 /**
  * Empty-state for "Latest Settlement" when the deal has no runs yet. Matches
- * Figma "Deal Detail [Empty]" — dashed-border container with a headline
+ * Figma "Deal Detail [Empty]": dashed-border container with a headline
  * message and a 4-step numbered workflow that doubles as the guided setup
  * path: Add Participants → Create Rules → Submit Revenue → Run Settlement.
  *

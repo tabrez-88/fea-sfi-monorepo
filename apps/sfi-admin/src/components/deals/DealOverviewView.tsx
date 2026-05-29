@@ -24,15 +24,15 @@ type DealOverviewViewProps = Readonly<{
 }>;
 
 /**
- * FEA-7 — Deal Overview. Owns the page-level structure:
+ * FEA-7: Deal Overview. Owns the page-level structure:
  *   [← Deals List]
  *   [Deal Overview title]              [Edit Deal]
  *   ┌─ big outer card ─────────────────────────────────────┐
  *   │  Deal name · subtitle           [status pill]        │
- *   │  [Suspended banner — conditional]                    │
+ *   │  [Suspended banner, conditional]                     │
  *   │  [4 stat cards]                                      │
  *   └──────────────────────────────────────────────────────┘
- *   [Latest Settlement card — real or empty-workflow]
+ *   [Latest Settlement card: real or empty-workflow]
  *   [Quick Actions card]
  *   [Recent Activity card]
  *
@@ -85,7 +85,7 @@ export function DealOverviewView({ dealId }: DealOverviewViewProps) {
         </Button>
       </div>
 
-      {/* Big outer card — deal name + suspended banner + stat cards */}
+      {/* Big outer card: deal name + suspended banner + stat cards */}
       <section className="flex flex-col gap-5 rounded-[8px] border border-border bg-white p-4 sm:p-6">
         <DealHeader deal={deal} />
 
@@ -108,7 +108,7 @@ export function DealOverviewView({ dealId }: DealOverviewViewProps) {
         <DealStatCards deal={deal} />
       </section>
 
-      {/* Latest Settlement — real panel or dashed empty-state workflow */}
+      {/* Latest Settlement: real panel or dashed empty-state workflow */}
       {latestSettlement ? (
         <LatestSettlementCard dealId={dealId} settlement={latestSettlement} />
       ) : (

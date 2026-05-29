@@ -9,7 +9,7 @@ import { useCreateDeal } from '@/hooks/deals/useCreateDeal';
 import { getApiErrorMessage } from '@/lib/axios';
 import type { CreateDealInput, UpdateDealInput } from '@/types/deal.types';
 
-/** FEA-6 — client container wiring the Create Deal form to the mutation. */
+/** FEA-6: client container wiring the Create Deal form to the mutation. */
 export function CreateDealContainer() {
   const router = useRouter();
   const { mutateAsync, isPending } = useCreateDeal();

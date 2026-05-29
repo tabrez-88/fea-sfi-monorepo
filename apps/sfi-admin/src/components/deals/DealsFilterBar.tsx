@@ -28,7 +28,7 @@ type DealsFilterBarProps = Readonly<{
 }>;
 
 /**
- * Header action row for the Deals List — search + Status select + icon-only
+ * Header action row for the Deals List: search + Status select + icon-only
  * date filter + primary [Create New Deal] CTA. The parent page lays this out
  * on the same row as the page title at ≥lg; on mobile the parent stacks it
  * below the title and this component wraps its own controls.

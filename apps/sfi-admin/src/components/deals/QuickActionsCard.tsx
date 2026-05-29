@@ -8,7 +8,7 @@ type QuickActionsCardProps = Readonly<{
 }>;
 
 /**
- * Quick Actions panel — 4 solid-black primary buttons in a 2×2 grid on
+ * Quick Actions panel: 4 solid-black primary buttons in a 2×2 grid on
  * desktop, stacked 1-per-row on mobile (matches Figma `385:10602` and
  * `385:10754`). Each button routes directly to the matching deal-scoped
  * creation flow (populated progressively as Sprint 2 delivers those pages).

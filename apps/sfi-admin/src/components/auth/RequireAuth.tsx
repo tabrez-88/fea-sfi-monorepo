@@ -12,7 +12,7 @@ import type { UserRole } from '@/types/auth.types';
 type RequireAuthProps = Readonly<{
   children: ReactNode;
   /**
-   * Optional role gate — if provided, the current user's role must be one of
+   * Optional role gate. If provided, the current user's role must be one of
    * these values. Anyone else is bounced back to the dashboard with a toast.
    * Leave undefined for routes that only require "signed in".
    */
@@ -32,7 +32,7 @@ type RequireAuthProps = Readonly<{
  *     fall back to showing a skeleton.
  *  3. If `roles` prop is set and the user's role isn't in it, redirect home.
  *
- * This is a deliberately simple guard — no SSR cookie check, no per-action
+ * This is a deliberately simple guard with no SSR cookie check, no per-action
  * permissions. Upgrade path: when the refresh token moves to an httpOnly
  * cookie, add a Next.js middleware that rejects requests without it at the
  * edge, and keep this component for the role check only.
@@ -49,7 +49,7 @@ export function RequireAuth({ children, roles }: RequireAuthProps) {
 
   const { data: user, isLoading, isError } = useCurrentUser();
 
-  // No token — kick to login with return path.
+  // No token: kick to login with return path.
   useEffect(() => {
     if (hasToken === false) {
       const next = encodeURIComponent(pathname || ROUTES.DASHBOARD);
@@ -57,7 +57,7 @@ export function RequireAuth({ children, roles }: RequireAuthProps) {
     }
   }, [hasToken, pathname, router]);
 
-  // Role check — once user is loaded, enforce the role gate.
+  // Role check: once user is loaded, enforce the role gate.
   useEffect(() => {
     if (!user || !roles || roles.length === 0) return;
     if (!roles.includes(user.role)) {
@@ -65,7 +65,7 @@ export function RequireAuth({ children, roles }: RequireAuthProps) {
     }
   }, [user, roles, router]);
 
-  // Gate states — show a matching skeleton while redirects settle.
+  // Gate states: show a matching skeleton while redirects settle.
   if (hasToken === null || (hasToken && (isLoading || !user))) {
     return <AuthGateSkeleton />;
   }

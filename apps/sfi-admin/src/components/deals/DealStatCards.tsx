@@ -17,15 +17,17 @@ type StatCardSpec = Readonly<{
   value: string;
   href: string;
   icon: LucideIcon;
-  /** `true` promotes the card to the solid-black "featured" treatment per Figma. */
-  featured?: boolean;
 }>;
 
 /**
  * 4-card stat row shown below the deal header. Matches Figma `385:10602`:
- *   Participants (featured — black fill, white text) · Rule Snapshots · Total
- *   Revenue · Settlement Runs. Each card links to the relevant deal-scoped
- *   page and carries an up-right arrow top-right.
+ *   Participants · Rule Snapshots · Total Revenue · Settlement Runs. Each
+ *   card links to the relevant deal-scoped page and carries an up-right
+ *   arrow top-right.
+ *
+ * All cards default to the white "outlined" treatment and invert to the
+ * solid-black fill only on hover/focus (per client request, black is the
+ * hover affordance, not a featured-card marker).
  *
  * Reflow: 2×2 grid on mobile, 4 columns from ≥lg.
  */
@@ -43,7 +45,6 @@ export function DealStatCards({ deal }: DealStatCardsProps) {
       value: formatNumber(participants),
       href: ROUTES.DEALS.PARTICIPANTS(deal.id),
       icon: ArrowUpRight,
-      featured: true,
     },
     {
       label: 'Rule Snapshots',
@@ -77,35 +78,21 @@ export function DealStatCards({ deal }: DealStatCardsProps) {
             key={card.label}
             href={card.href}
             className={cn(
-              'group flex min-h-[128px] flex-col justify-between gap-3 rounded-[8px] border p-5 transition-colors sm:min-h-[140px] sm:p-6',
-              card.featured
-                ? 'border-foreground bg-foreground text-background hover:bg-foreground/90'
-                : 'border-border bg-white text-foreground hover:border-foreground/40',
+              'group flex min-h-[128px] flex-col justify-between gap-3 rounded-[8px] border border-border bg-white p-5 text-foreground transition-colors sm:min-h-[140px] sm:p-6',
+              'hover:border-foreground hover:bg-foreground hover:text-background focus-visible:border-foreground focus-visible:bg-foreground focus-visible:text-background focus-visible:outline-none',
             )}
           >
             <div className="flex items-start justify-between gap-2">
-              <span
-                className={cn(
-                  'text-[14px] font-medium',
-                  card.featured ? 'text-background/80' : 'text-neutral',
-                )}
-              >
+              <span className="text-[14px] font-medium text-neutral transition-colors group-hover:text-background/80 group-focus-visible:text-background/80">
                 {card.label}
               </span>
               <Icon
                 aria-hidden
-                className={cn(
-                  'size-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5',
-                  card.featured ? 'text-background' : 'text-neutral',
-                )}
+                className="size-4 shrink-0 text-neutral transition-[color,transform] group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-background group-focus-visible:-translate-y-0.5 group-focus-visible:translate-x-0.5 group-focus-visible:text-background"
                 strokeWidth={2}
               />
             </div>
-            <span
-              className={cn(
-                'text-[32px] font-semibold leading-[36px] tracking-[-0.64px] sm:text-[40px] sm:leading-[44px] sm:tracking-[-0.8px]',
-              )}
-            >
+            <span className="text-[32px] font-semibold leading-[36px] tracking-[-0.64px] sm:text-[40px] sm:leading-[44px] sm:tracking-[-0.8px]">
               {card.value}
             </span>
           </Link>

@@ -3,7 +3,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 /**
- * Textarea primitive — shadcn-structured, Figma-styled. Mirrors the existing
+ * Textarea primitive: shadcn-structured, Figma-styled. Mirrors the existing
  * `Input` component: border-border, 8px radius, 16px/20px text, transitions
  * via `focus-visible:border-foreground`. Forwards ref so react-hook-form and
  * focus management work out of the box.

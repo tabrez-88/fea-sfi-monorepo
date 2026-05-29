@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     default: 'FEA-SFI Admin',
     template: '%s · FEA-SFI Admin',
   },
-  description: 'FEA SFI Admin Portal — internal operator UI for deals, settlements, and revenue.',
+  description: 'FEA SFI Admin Portal: internal operator UI for deals, settlements, and revenue.',
   icons: {
     icon: '/favicon.ico',
   },
@@ -25,6 +25,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#1A1A1A',
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

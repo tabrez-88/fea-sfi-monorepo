@@ -12,13 +12,19 @@ async function bootstrap() {
 
   logger.log(`Starting SFI-FEA API in ${nodeEnv} mode...`);
 
-  // Load secrets from GCP Secret Manager BEFORE creating the app
-  // This ensures DATABASE_URL is available when Prisma initializes
-  if (nodeEnv === 'staging' || nodeEnv === 'production') {
-    logger.log('Loading secrets from GCP Secret Manager...');
-    await loadGcpSecrets();
-    logger.log('Secrets loaded successfully');
-  }
+  // Load runtime config secrets BEFORE creating the app — this ensures
+  // DATABASE_URL is available when Prisma initializes.
+  //
+  // Provider selection (see SECRETS_PROVIDER in .env.example):
+  //   - SECRETS_PROVIDER=gcp  → fetch from GCP Secret Manager
+  //   - SECRETS_PROVIDER=env  → no fetch; use process.env as-is (Contabo path)
+  //   - unset                 → back-compat auto-detect (GCP if NODE_ENV is
+  //                             staging/production AND GCP_PROJECT_ID is set;
+  //                             otherwise env)
+  //
+  // loadGcpSecrets() short-circuits to a no-op when not opted into GCP, so
+  // calling it unconditionally is safe.
+  await loadGcpSecrets();
 
   const app = await NestFactory.create(AppModule, {
     logger:
@@ -41,7 +47,8 @@ async function bootstrap() {
   );
   const corsOrigins = corsOrigin.split(',').map((origin) => origin.trim());
 
-  // Allow an additional admin origin (set via Cloud Run env vars)
+  // Allow an additional admin origin via the ADMIN_CORS_ORIGIN env var
+  // (typically the deployed sfi-admin URL — set by the deploy pipeline)
   const adminOrigin = configService.get<string>('ADMIN_CORS_ORIGIN', '');
   if (adminOrigin) {
     corsOrigins.push(

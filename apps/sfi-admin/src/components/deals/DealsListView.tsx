@@ -1,8 +1,8 @@
 'use client';
 
-import { ArrowUpDown, FileText, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUpDown, FileText, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
@@ -14,14 +14,6 @@ import { DealsListStatCards } from '@/components/deals/DealsListStatCards';
 import { DealStatusBadge } from '@/components/deals/DealStatusBadge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { ROUTES } from '@/constants/routes';
 import { DEFAULT_PAGE_SIZE } from '@/constants/ui';
 import { useDeals } from '@/hooks/deals/useDeals';
@@ -37,11 +29,24 @@ type SortOrder = 'asc' | 'desc';
 const SKELETON_ROWS = ['s1', 's2', 's3', 's4', 's5'] as const;
 
 /**
+ * Grid template: Deal Name takes the widest share; remaining 5 columns
+ * are evenly distributed. Mobile drops to a horizontally-scrolling viewport
+ * via the parent overflow-x-auto.
+ */
+const GRID_COLS =
+  'grid grid-cols-[minmax(180px,2fr)_repeat(5,minmax(100px,1fr))]';
+
+/**
  * Full Deals List screen (FEA-5). Owns all list-level state (search, status,
  * effectiveFrom, page, sort) so the title + filter bar + stat cards + table +
  * pagination can share a single source of truth. Matches the Figma "Deal
- * List" frame: title + filter bar on one row at ≥lg, stat cards row, then
- * the 6-column table with numbered pagination centred below.
+ * List" frame (`385:10893`): title + filter bar on one row at ≥lg, then a
+ * single bordered card containing 4 stat-filter cards + 6-column table, then
+ * numbered pagination centred below.
+ *
+ * Table styling mirrors the dashboard's RecentDealsTable: grid layout (not
+ * shadcn Table), grey-50 header row, 18px bold headers with sort arrows,
+ * underlined link cell for the deal name.
  */
 export function DealsListView() {
   const [statusFilter, setStatusFilter] = useState<DealsStatusFilter>('ALL');
@@ -64,7 +69,7 @@ export function DealsListView() {
     [page, sortBy, sortOrder, search, statusFilter, effectiveFrom],
   );
 
-  const { data, isLoading, isError, refetch, isFetching } = useDeals(params);
+  const { data, isLoading, isError, refetch } = useDeals(params);
   const { data: counts, isLoading: countsLoading } = useDealsCounts();
 
   function handleRetry() {
@@ -101,7 +106,7 @@ export function DealsListView() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Header row: title on the left, filter bar on the right — stacks on mobile */}
+      {/* Header row: title on the left, filter bar on the right. Stacks on mobile */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
         <div className="flex flex-col">
           <p className="px-1 text-[14px] font-medium leading-[20px] text-neutral">
@@ -123,58 +128,97 @@ export function DealsListView() {
         </div>
       </div>
 
-      <DealsListStatCards
-        counts={counts}
-        isLoading={countsLoading}
-        activeFilter={statusFilter}
-        onFilterChange={handleStatusFilterChange}
-      />
+      <section className="flex flex-col gap-6 overflow-hidden rounded-[8px] border border-border bg-white p-4 sm:p-6">
+        <DealsListStatCards
+          counts={counts}
+          isLoading={countsLoading}
+          activeFilter={statusFilter}
+          onFilterChange={handleStatusFilterChange}
+        />
 
-      <div className="overflow-hidden rounded-[8px] border border-border bg-white">
         <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  <SortButton field="name" currentField={sortBy} order={sortOrder} onSort={handleSort} label="Deal Name" />
-                </TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden sm:table-cell">Currency</TableHead>
-                <TableHead className="hidden md:table-cell">Participants</TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <SortButton field="createdAt" currentField={sortBy} order={sortOrder} onSort={handleSort} label="Created At" />
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  <SortButton field="updatedAt" currentField={sortBy} order={sortOrder} onSort={handleSort} label="Updated At" />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <DealsTableBody
-                isLoading={isLoading}
-                isError={isError}
-                deals={deals}
-                onRetry={handleRetry}
-              />
-            </TableBody>
-          </Table>
+          <div className="min-w-[760px]">
+            {/* Header row */}
+            <div className={cn(GRID_COLS, 'border-b border-grey-200 bg-grey-50')}>
+              <HeaderCell>
+                <SortButton
+                  field="name"
+                  currentField={sortBy}
+                  order={sortOrder}
+                  onSort={handleSort}
+                  label="Deal Name"
+                />
+              </HeaderCell>
+              <HeaderCell>Status</HeaderCell>
+              <HeaderCell>Currency</HeaderCell>
+              <HeaderCell>Participants</HeaderCell>
+              <HeaderCell>
+                <SortButton
+                  field="createdAt"
+                  currentField={sortBy}
+                  order={sortOrder}
+                  onSort={handleSort}
+                  label="Created At"
+                />
+              </HeaderCell>
+              <HeaderCell>
+                <SortButton
+                  field="updatedAt"
+                  currentField={sortBy}
+                  order={sortOrder}
+                  onSort={handleSort}
+                  label="Updated At"
+                />
+              </HeaderCell>
+            </div>
+
+            {/* Body rows */}
+            <DealRows
+              isLoading={isLoading}
+              isError={isError}
+              deals={deals}
+              onRetry={handleRetry}
+            />
+          </div>
         </div>
-      </div>
+      </section>
 
       {meta && meta.total > 0 && (
-        <div className="flex flex-col items-center gap-2">
-          <Pagination
-            page={meta.page}
-            totalPages={totalPages}
-            onPageChange={setPage}
-          />
-          <p className="text-[13px] text-neutral" aria-live="polite">
-            {isFetching
-              ? 'Updating…'
-              : `Showing ${(meta.page - 1) * meta.limit + 1}-${Math.min(meta.page * meta.limit, meta.total)} of ${meta.total}`}
-          </p>
-        </div>
+        <Pagination
+          page={meta.page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          className="justify-center"
+        />
       )}
+    </div>
+  );
+}
+
+/* ─── Sub-components ────────────────────────────────────────────────────── */
+
+function HeaderCell({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <div className="flex items-center px-[10px] py-[14px]">
+      <span className="text-[18px] font-bold leading-[24px] tracking-[0.036px] text-foreground">
+        {children}
+      </span>
+    </div>
+  );
+}
+
+function BodyCell({
+  children,
+  className,
+}: Readonly<{ children: ReactNode; className?: string }>) {
+  return (
+    <div
+      className={cn(
+        'flex h-[48px] items-center px-[10px] py-[14px]',
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }
@@ -187,45 +231,55 @@ type SortButtonProps = Readonly<{
   label: string;
 }>;
 
-function SortButton({ field, currentField, order, onSort, label }: SortButtonProps) {
+function SortButton({
+  field,
+  currentField,
+  order,
+  onSort,
+  label,
+}: SortButtonProps) {
   const active = field === currentField;
   let indicator: string;
   if (active) indicator = order === 'asc' ? 'sorted ascending' : 'sorted descending';
   else indicator = 'sortable';
 
+  // Active column shows a single-direction arrow indicating current sort;
+  // inactive sortable columns show the neutral up-down icon.
+  const Icon = active ? ArrowDown : ArrowUpDown;
+
   return (
     <button
       type="button"
       onClick={() => onSort(field)}
-      className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-foreground hover:text-foreground/80"
-      aria-label={`${label} — ${indicator}`}
+      className="inline-flex items-center gap-1.5 text-[18px] font-bold leading-[24px] tracking-[0.036px] text-foreground hover:text-foreground/80"
+      aria-label={`${label}, ${indicator}`}
     >
       {label}
-      <ArrowUpDown className={cn('size-3.5', active ? 'text-foreground' : 'text-neutral')} />
+      <Icon
+        className={cn(
+          'size-4 shrink-0 transition-transform',
+          active && order === 'asc' && 'rotate-180',
+          active ? 'text-foreground' : 'text-neutral',
+        )}
+        aria-hidden
+      />
     </button>
   );
 }
 
-type DealsTableBodyProps = Readonly<{
+type DealRowsProps = Readonly<{
   isLoading: boolean;
   isError: boolean;
   deals: ReadonlyArray<Deal>;
   onRetry: () => void;
 }>;
 
-function DealsTableBody({ isLoading, isError, deals, onRetry }: DealsTableBodyProps) {
+function DealRows({ isLoading, isError, deals, onRetry }: DealRowsProps) {
   if (isLoading) {
     return (
       <>
         {SKELETON_ROWS.map((key) => (
-          <TableRow key={key}>
-            <TableCell><Skeleton className="h-5 w-48" /></TableCell>
-            <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-            <TableCell className="hidden sm:table-cell"><Skeleton className="h-5 w-12" /></TableCell>
-            <TableCell className="hidden md:table-cell"><Skeleton className="h-5 w-8" /></TableCell>
-            <TableCell className="hidden lg:table-cell"><Skeleton className="h-5 w-24" /></TableCell>
-            <TableCell className="hidden lg:table-cell"><Skeleton className="h-5 w-24" /></TableCell>
-          </TableRow>
+          <RowSkeleton key={key} />
         ))}
       </>
     );
@@ -233,74 +287,116 @@ function DealsTableBody({ isLoading, isError, deals, onRetry }: DealsTableBodyPr
 
   if (isError) {
     return (
-      <TableRow>
-        <TableCell colSpan={6} className="py-8 text-center">
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-[14px] text-danger">Failed to load deals.</p>
-            <Button type="button" variant="outline" onClick={() => onRetry()}>
-              Try again
-            </Button>
-          </div>
-        </TableCell>
-      </TableRow>
+      <div className="flex flex-col items-center gap-3 py-10 text-center">
+        <p className="text-[14px] text-danger">Failed to load deals.</p>
+        <Button type="button" variant="outline" onClick={onRetry}>
+          Try again
+        </Button>
+      </div>
     );
   }
 
   if (deals.length === 0) {
     return (
-      <TableRow>
-        <TableCell colSpan={6} className="p-0">
-          <EmptyState
-            icon={FileText}
-            title="No deals yet"
-            description="Create your first deal to start managing participants, rules, and settlements."
-            action={{
-              label: (
-                <span className="inline-flex items-center gap-1.5">
-                  <Plus className="size-4" /> Create Deal
-                </span>
-              ),
-              href: ROUTES.DEALS.CREATE,
-            }}
-            className="border-0"
-          />
-        </TableCell>
-      </TableRow>
+      <EmptyState
+        icon={FileText}
+        title="No deals yet"
+        description="Create your first deal to start managing participants, rules, and settlements."
+        action={{
+          label: (
+            <span className="inline-flex items-center gap-1.5">
+              <Plus className="size-4" /> Create Deal
+            </span>
+          ),
+          href: ROUTES.DEALS.CREATE,
+        }}
+        className="border-0"
+      />
     );
   }
 
   return (
     <>
-      {deals.map((deal) => {
-        const participants = deal._count?.participants ?? deal.participantsCount ?? 0;
-        return (
-          <TableRow key={deal.id}>
-            <TableCell>
-              <Link
-                href={ROUTES.DEALS.DETAIL(deal.id)}
-                className="text-[14px] font-semibold text-foreground underline-offset-4 hover:underline"
-              >
-                {deal.name}
-              </Link>
-            </TableCell>
-            <TableCell>
-              <DealStatusBadge status={deal.status} />
-            </TableCell>
-            <TableCell className="hidden text-[14px] text-foreground sm:table-cell">
-              {deal.currency}
-            </TableCell>
-            <TableCell className="hidden text-[14px] text-foreground md:table-cell">
-              {formatNumber(participants)}
-            </TableCell>
-            <TableCell className="hidden text-[14px] text-neutral lg:table-cell">
-              {formatDate(deal.createdAt)}
-            </TableCell>
-            <TableCell className="hidden text-[14px] text-neutral lg:table-cell">
-              {formatDate(deal.updatedAt)}
-            </TableCell>
-          </TableRow>
-        );
-      })}
+      {deals.map((deal, idx) => (
+        <DealRow
+          key={deal.id}
+          deal={deal}
+          isLast={idx === deals.length - 1}
+        />
+      ))}
     </>
+  );
+}
+
+function DealRow({
+  deal,
+  isLast,
+}: Readonly<{ deal: Deal; isLast: boolean }>) {
+  const participants = deal._count?.participants ?? deal.participantsCount ?? 0;
+  return (
+    <div
+      className={cn(
+        GRID_COLS,
+        'bg-white',
+        isLast ? '' : 'border-b border-grey-100',
+      )}
+    >
+      <BodyCell>
+        <Link
+          href={ROUTES.DEALS.DETAIL(deal.id)}
+          className="truncate border-b border-foreground text-[18px] leading-[24px] tracking-[0.036px] text-foreground"
+        >
+          {deal.name}
+        </Link>
+      </BodyCell>
+      <BodyCell>
+        <DealStatusBadge status={deal.status} />
+      </BodyCell>
+      <BodyCell>
+        <span className="text-[16px] leading-[20px] tracking-[0.032px] text-foreground">
+          {deal.currency}
+        </span>
+      </BodyCell>
+      <BodyCell>
+        <span className="text-[16px] leading-[20px] tracking-[0.032px] text-foreground">
+          {formatNumber(participants)}
+        </span>
+      </BodyCell>
+      <BodyCell>
+        <span className="text-[16px] leading-[20px] tracking-[0.032px] text-foreground">
+          {formatDate(deal.createdAt)}
+        </span>
+      </BodyCell>
+      <BodyCell>
+        <span className="text-[16px] leading-[20px] tracking-[0.032px] text-foreground">
+          {formatDate(deal.updatedAt)}
+        </span>
+      </BodyCell>
+    </div>
+  );
+}
+
+function RowSkeleton() {
+  return (
+    <div className={cn(GRID_COLS, 'border-b border-grey-100')}>
+      <BodyCell>
+        <Skeleton className="h-4 w-40" />
+      </BodyCell>
+      <BodyCell>
+        <Skeleton className="h-6 w-20 rounded-full" />
+      </BodyCell>
+      <BodyCell>
+        <Skeleton className="h-4 w-10" />
+      </BodyCell>
+      <BodyCell>
+        <Skeleton className="h-4 w-8" />
+      </BodyCell>
+      <BodyCell>
+        <Skeleton className="h-4 w-24" />
+      </BodyCell>
+      <BodyCell>
+        <Skeleton className="h-4 w-24" />
+      </BodyCell>
+    </div>
   );
 }

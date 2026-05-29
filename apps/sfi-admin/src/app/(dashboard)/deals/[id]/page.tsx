@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: 'Deal Overview',
 };
 
-/** FEA-7 — Deal Overview. Uses the Deal Context Mode sidebar (see DashboardShell). */
+/** FEA-7: Deal Overview. Uses the Deal Context Mode sidebar (see DashboardShell). */
 export default async function DealOverviewPage({
   params,
 }: Readonly<{ params: Promise<{ id: string }> }>) {

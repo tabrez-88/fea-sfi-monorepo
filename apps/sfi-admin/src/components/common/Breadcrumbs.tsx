@@ -15,7 +15,7 @@ type BreadcrumbsProps = Readonly<{
 }>;
 
 /**
- * Accessible breadcrumbs — `<nav aria-label="Breadcrumb">` + ordered list.
+ * Accessible breadcrumbs using `<nav aria-label="Breadcrumb">` and an ordered list.
  * The final item is rendered as plain text (current page). All earlier items
  * render as `<Link>` when `href` is provided.
  */

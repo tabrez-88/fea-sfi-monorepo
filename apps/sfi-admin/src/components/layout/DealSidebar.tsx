@@ -31,14 +31,14 @@ type DealSidebarProps = Readonly<{
 }>;
 
 /**
- * Deal Context Mode sidebar — text-only label list (Overview → Proof) that
+ * Deal Context Mode sidebar: text-only label list (Overview to Proof) that
  * renders alongside the icon-rail variant of the main Sidebar when the route
  * is inside `/deals/:id/*`. Matches the Figma Deal Overview frame
  * (`385:10602`): narrow white column, active item black-filled, no icons on
  * the nav items, no internal back link (the back link lives above the page
  * title in `DealOverviewView`).
  *
- * Non-collapsible on desktop per the Figma spec — the toggle button in the
+ * Non-collapsible on desktop per the Figma spec. The toggle button in the
  * Navbar is a no-op when in deal context.
  */
 export function DealSidebar({
@@ -81,15 +81,15 @@ export function DealSidebar({
 
   return (
     <>
-      {/* ─── Desktop column (≥lg) — always visible, not collapsible ──────── */}
+      {/* ─── Desktop column (≥lg): always visible, not collapsible ───────── */}
       <aside
-        className="hidden w-[240px] shrink-0 border-r border-border bg-white px-4 py-4 lg:block"
+        className="sticky top-[96px] hidden h-[calc(100vh-96px)] w-[240px] shrink-0 self-start overflow-y-auto border-r border-border bg-white px-4 py-4 lg:block"
         aria-label="Deal navigation"
       >
         {navList}
       </aside>
 
-      {/* ─── Mobile overlay drawer (<lg) — icon rail + deal nav side-by-side
+      {/* ─── Mobile overlay drawer (<lg): icon rail + deal nav side-by-side
            per Figma "Mobile Sidebar [Active]" deal-context frame.
            Always mounted; slides in/out for a smooth open/close animation. ─ */}
       <div

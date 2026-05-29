@@ -12,7 +12,7 @@ type RecentActivityCardProps = Readonly<{
 }>;
 
 /**
- * "Recent Activity" panel on the Deal Overview — two-column date | message
+ * "Recent Activity" panel on the Deal Overview: two-column date | message
  * list with dividers between rows. Matches Figma `385:10602`. Empty state
  * tells the user activity will appear as they work on the deal.
  */

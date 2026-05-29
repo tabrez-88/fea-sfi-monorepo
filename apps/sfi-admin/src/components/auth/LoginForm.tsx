@@ -64,7 +64,7 @@ export function LoginForm() {
           toast.error(msg);
           return;
         }
-        const msg = 'Network error — please try again.';
+        const msg = 'Network error. Please try again.';
         setFormError(msg);
         toast.error(msg);
       },

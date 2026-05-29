@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   title: 'Create Deal',
 };
 
-/** FEA-6 — Create Deal. Matches Figma node 384:1709 > "Deal Create". */
+/** FEA-6: Create Deal. Matches Figma node 384:1709 > "Deal Create". */
 export default function CreateDealPage() {
   return (
     <div className="flex flex-col gap-4">

@@ -4,14 +4,14 @@ import { cn } from '@/lib/utils';
 type StatCardProps = Readonly<{
   label: string;
   value: string | number;
-  // React Query's `isLoading` is `boolean | undefined` — accept both so
+  // React Query's `isLoading` is `boolean | undefined`. Accept both so
   // callers can spread `{...query}` without a separate guard.
   isLoading?: boolean | undefined;
   className?: string | undefined;
 }>;
 
 /**
- * Dashboard stat card — 240px wide, 1px #E0E0E0 border, 8px radius, 24px
+ * Dashboard stat card: 240px wide, 1px #E0E0E0 border, 8px radius, 24px
  * padding. Label is Heading/Small (20/24 Medium) and value is Display/Small
  * (40/48 Medium). Matches Figma node 385:11474.
  */

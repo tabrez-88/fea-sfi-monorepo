@@ -20,7 +20,7 @@ type EmptyStateProps = Readonly<{
 }>;
 
 /**
- * Shared empty-state card — illustration (icon), headline, description, and an
+ * Shared empty-state card with illustration (icon), headline, description, and an
  * optional primary action. Used by every list/table that can be empty so the
  * visual language stays consistent across the portal.
  */

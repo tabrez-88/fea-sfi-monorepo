@@ -1,5 +1,5 @@
 /**
- * Date formatters + comparators. Pure functions — no React, no side effects.
+ * Date formatters + comparators. Pure functions (no React, no side effects).
  * All inputs are ISO 8601 strings (the shape returned by the API).
  */
 
@@ -18,12 +18,12 @@ const DATE_TIME = new Intl.DateTimeFormat('en-US', {
 });
 
 export function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return DATE_SHORT.format(new Date(iso));
 }
 
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return DATE_TIME.format(new Date(iso));
 }
 

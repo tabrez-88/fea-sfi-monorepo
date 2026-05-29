@@ -27,13 +27,13 @@ type EditDealViewProps = Readonly<{
 type ModalKind = 'close' | 'suspend' | null;
 
 /**
- * FEA-8 — full Edit Deal screen. Owns:
+ * FEA-8: full Edit Deal screen. Owns:
  *  - the back link + title + [Closed Deal] + [Suspend Deal] header row
  *    (Figma: two top-right action buttons, stacked on mobile)
  *  - the shared DealForm
  *  - both confirmation modals (Close + Suspend with Notes textarea)
  *
- * No delete flow — the Figma design only supports transitioning to CLOSED /
+ * No delete flow. The Figma design only supports transitioning to CLOSED /
  * SUSPENDED via confirmations. Actual record deletion is admin-only and
  * lives outside the Edit screen.
  */

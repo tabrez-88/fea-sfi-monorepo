@@ -15,7 +15,7 @@ export function useLogout() {
         try {
           await authService.logout(refreshToken);
         } catch {
-          // Server-side revoke can fail silently — we still clear client state
+          // Server-side revoke can fail silently; we still clear client state
         }
       }
     },

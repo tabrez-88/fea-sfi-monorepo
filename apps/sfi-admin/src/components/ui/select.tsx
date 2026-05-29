@@ -37,7 +37,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        // Figma-matched: h-48, rounded-8, border-border, px-16, 16/20 text — aligned with Input
+        // Figma-matched: h-48, rounded-8, border-border, px-16, 16/20 text (aligned with Input)
         "flex w-full items-center justify-between gap-2 rounded-[8px] border border-border bg-white px-4",
         "text-[16px] leading-[20px] tracking-[0.032px] text-foreground whitespace-nowrap",
         "transition-colors outline-none focus-visible:border-foreground",

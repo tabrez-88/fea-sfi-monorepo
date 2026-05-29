@@ -23,6 +23,8 @@ export const API_ENDPOINTS = {
   PARTICIPANTS: {
     LIST: (dealId: string) => `${BASE}/deals/${dealId}/participants`,
     CREATE: (dealId: string) => `${BASE}/deals/${dealId}/participants`,
+    ROLES: (dealId: string) => `${BASE}/deals/${dealId}/participants/roles`,
+    IMPORT: (dealId: string) => `${BASE}/deals/${dealId}/participants/import`,
     DETAIL: (id: string) => `${BASE}/participants/${id}`,
   },
   RULES: {

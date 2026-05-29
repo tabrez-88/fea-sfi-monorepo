@@ -110,7 +110,7 @@ export function DealForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
-      {/* Outer card — Deal Name + Description + nested Deal Details card */}
+      {/* Outer card: Deal Name + Description + nested Deal Details card */}
       <div className="flex flex-col gap-6 rounded-[8px] border border-border bg-white p-4 sm:p-6">
         <DealFormField
           id="deal-name"
@@ -124,7 +124,7 @@ export function DealForm({
             onChange={(e) => setName(e.target.value)}
             maxLength={NAME_MAX}
             aria-invalid={Boolean(errors.name)}
-            placeholder='e.g. "The Last Horizon — Distribution Deal"'
+            placeholder='e.g. "The Last Horizon: Distribution Deal"'
             required
           />
         </DealFormField>
@@ -146,7 +146,7 @@ export function DealForm({
           />
         </DealFormField>
 
-        {/* Nested "Deal Details" card — Figma shows a heavier inner card */}
+        {/* Nested "Deal Details" card. Figma shows a heavier inner card */}
         <section className="flex flex-col gap-4 rounded-[8px] border border-border bg-white p-4 sm:p-5">
           <h2 className="text-[18px] font-semibold leading-[24px] tracking-[-0.36px] text-foreground">
             Deal Details

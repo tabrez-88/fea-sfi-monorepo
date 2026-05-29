@@ -134,13 +134,20 @@ export class CreateRuleSnapshotDto {
 
   @ApiProperty({
     description:
-      'The rule configuration to snapshot. This captures all allocation rules, formulas, and parameters that govern how revenue is distributed among participants.',
-    type: RuleConfigurationDto,
+      'The rule configuration to snapshot. Accepts both the legacy v1 shape (`distributionFees` / `recoupment` / `netProfitSplit`) and the v2 shape (`schemaVersion: 2` with `mode` + `deductions` / `poolRevenueSources` / `tiers` / `splits`). Structural validation runs at the service layer via the engine validator (`validateRuleSnapshotV2`) once `getRulesSchemaVersion()` picks the branch — keeping the DTO permissive avoids `whitelist: true` stripping or rejecting fields the engine actually needs. v2 payloads also require `SETTLEMENT_RULES_V2_ENABLED=true` in the API env.',
+    type: 'object',
+    additionalProperties: true,
+    example: {
+      schemaVersion: 2,
+      mode: 'waterfall',
+      tiers: [
+        { tier: 1, splits: [{ target: { type: 'pool', poolId: 'investor-pool' }, percentage: 100 }] },
+        { tier: 2, splits: [{ target: { type: 'individual', participantId: '550e8400-e29b-41d4-a716-446655440001' }, percentage: 100 }] },
+      ],
+    },
   })
   @IsObject()
-  @ValidateNested()
-  @Type(() => RuleConfigurationDto)
-  rules!: RuleConfigurationDto;
+  rules!: Record<string, unknown>;
 
   @ApiProperty({
     description:

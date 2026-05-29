@@ -13,6 +13,8 @@ export const QUERY_KEYS = {
     ALL: ['participants'] as const,
     LIST: (dealId: string, params?: Record<string, unknown>) =>
       ['participants', 'list', dealId, params ?? {}] as const,
+    ROLES: (dealId: string, q: string) =>
+      ['participants', 'roles', dealId, q] as const,
     DETAIL: (id: string) => ['participants', id] as const,
   },
   RULES: {

@@ -10,13 +10,15 @@ import {
   CreateParticipantDto,
   ImportParticipantRowResultDto,
   ImportRowOutcomeDto,
+  ParticipantBehaviorDto,
   ParticipantResponseDto,
+  UpdateParticipantDto,
 } from '../dto';
 import { InvestmentFields, ParticipantMapper } from '../mappers/participant.mapper';
 
-// Legacy CSV header (5 cols) — preserved for back-compat.
+// Legacy CSV header (5 cols), preserved for back-compat.
 const CSV_HEADERS_LEGACY = ['name', 'roleName', 'behaviorType', 'email', 'externalId'] as const;
-// Current CSV header (9 cols) — adds investment / pool fields.
+// 9-col header, adds investment / pool fields onto legacy 5-col.
 const CSV_HEADERS_V2 = [
   ...CSV_HEADERS_LEGACY,
   'investmentAmount',
@@ -24,7 +26,23 @@ const CSV_HEADERS_V2 = [
   'pricePerUnit',
   'poolMember',
 ] as const;
+// 8-col header (no `externalId`), shipped with the in-app Download CSV
+// Template button. Phase 1 hides the externalId field from the form +
+// template since it is too technical for most users; the column is still
+// accepted via legacy + v2 variants for back-compat with existing exports.
+const CSV_HEADERS_V2_NO_EXT_ID = [
+  'name',
+  'roleName',
+  'behaviorType',
+  'email',
+  'investmentAmount',
+  'units',
+  'pricePerUnit',
+  'poolMember',
+] as const;
 const VALID_BEHAVIORS = new Set(Object.values(ParticipantBehavior));
+
+type HeaderVariant = 'legacy' | 'v2' | 'v2NoExternalId';
 
 interface ParsedRow {
   name: string;
@@ -121,6 +139,36 @@ export class ParticipantsService {
     return ParticipantMapper.toResponse(participant);
   }
 
+  /**
+   * Return distinct role names used on a deal, optionally narrowed by a
+   * case-insensitive substring match on the role name. Powers the Add
+   * Participant form's Role Name autocomplete combobox. Results are sorted
+   * alphabetically and capped at 20 entries.
+   */
+  async findDistinctRoles(
+    userId: string,
+    dealId: string,
+    q?: string,
+  ): Promise<string[]> {
+    await this.dealsService.assertDealOwner(dealId, userId);
+
+    const trimmed = q?.trim();
+    const where: Prisma.ParticipantWhereInput = { dealId };
+    if (trimmed) {
+      where.roleName = { contains: trimmed, mode: 'insensitive' };
+    }
+
+    const rows = await this.prisma.participant.findMany({
+      where,
+      distinct: ['roleName'],
+      select: { roleName: true },
+      orderBy: { roleName: 'asc' },
+      take: 20,
+    });
+
+    return rows.map((r) => r.roleName);
+  }
+
   async findAllByDeal(userId: string, dealId: string, query: PaginationQueryDto) {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
@@ -150,16 +198,103 @@ export class ParticipantsService {
     };
   }
 
-  async findOne(id: string): Promise<ParticipantResponseDto> {
-    const participant = await this.prisma.participant.findUnique({
-      where: { id },
+  async findOne(userId: string, id: string): Promise<ParticipantResponseDto> {
+    const participant = await this.loadOwnedParticipant(userId, id);
+    return ParticipantMapper.toResponse(participant);
+  }
+
+  /**
+   * Partial update of a single participant. Any field on `UpdateParticipantDto`
+   * is optional; only the keys actually present in `dto` get written. Investment
+   * keys (`investmentAmount`, `units`, `pricePerUnit`, `poolMember`) merge into
+   * the existing `metadata` JSON rather than replace it, so custom keys added
+   * outside the typed surface survive an edit.
+   */
+  async update(
+    userId: string,
+    id: string,
+    dto: UpdateParticipantDto,
+  ): Promise<ParticipantResponseDto> {
+    const existing = await this.loadOwnedParticipant(userId, id);
+    this.logger.log(`Updating participant ${id}`);
+
+    const investment: InvestmentFields = {};
+    if (dto.investmentAmount !== undefined) investment.investmentAmount = dto.investmentAmount;
+    if (dto.units !== undefined) investment.units = dto.units;
+    if (dto.pricePerUnit !== undefined) investment.pricePerUnit = dto.pricePerUnit;
+    if (dto.poolMember !== undefined) investment.poolMember = dto.poolMember;
+
+    const existingMetadata = (existing.metadata ?? null) as Record<string, unknown> | null;
+    const baseMetadata = dto.metadata ?? existingMetadata;
+
+    const data: Prisma.ParticipantUpdateInput = {
+      metadata: ParticipantMapper.buildMetadata(baseMetadata, investment),
+    };
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.roleName !== undefined) data.roleName = dto.roleName;
+    if (dto.behaviorType !== undefined) data.behaviorType = dto.behaviorType as ParticipantBehavior;
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.externalId !== undefined) data.externalId = dto.externalId;
+
+    const updated = await this.prisma.participant.update({ where: { id }, data });
+
+    await this.auditLog.create({
+      actor: userId,
+      action: 'UPDATED',
+      entityType: 'Participant',
+      entityId: id,
+      dealId: existing.dealId,
+      metadata: {
+        name: updated.name,
+        roleName: updated.roleName,
+        behaviorType: updated.behaviorType,
+      },
     });
 
+    return ParticipantMapper.toResponse(updated);
+  }
+
+  /**
+   * Hard-delete a single participant. Removes the row from the DB and emits
+   * a `DELETED` audit log entry carrying the participant's identifying
+   * fields so the action is reconstructable later.
+   *
+   * Note: this is a hard delete. If we later need undo / restore, swap to a
+   * soft-delete `archivedAt` column (same pattern as the Documents module).
+   */
+  async remove(userId: string, id: string): Promise<void> {
+    const existing = await this.loadOwnedParticipant(userId, id);
+    this.logger.log(`Deleting participant ${id}`);
+
+    await this.prisma.participant.delete({ where: { id } });
+
+    await this.auditLog.create({
+      actor: userId,
+      action: 'DELETED',
+      entityType: 'Participant',
+      entityId: id,
+      dealId: existing.dealId,
+      metadata: {
+        name: existing.name,
+        roleName: existing.roleName,
+        behaviorType: existing.behaviorType,
+        email: existing.email,
+      },
+    });
+  }
+
+  /**
+   * Fetch a participant by id and verify the caller owns the surrounding
+   * deal. Centralizes the 404 / ownership-403 chain used by every per-id
+   * operation (findOne / update / remove).
+   */
+  private async loadOwnedParticipant(userId: string, id: string): Promise<Participant> {
+    const participant = await this.prisma.participant.findUnique({ where: { id } });
     if (!participant) {
       throw new NotFoundException(`Participant with ID ${id} not found`);
     }
-
-    return ParticipantMapper.toResponse(participant);
+    await this.dealsService.assertDealOwner(participant.dealId, userId);
+    return participant;
   }
 
   /**
@@ -189,8 +324,11 @@ export class ParticipantsService {
     dealId: string,
     buffer: Buffer,
     skipErrors = false,
+    dryRun = false,
   ): Promise<BulkImportResultDto> {
-    this.logger.log(`Importing participants from CSV for deal: ${dealId}`);
+    this.logger.log(
+      `Importing participants from CSV for deal: ${dealId} (dryRun=${dryRun})`,
+    );
 
     await this.dealsService.assertDealOwner(dealId, userId);
 
@@ -227,17 +365,53 @@ export class ParticipantsService {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!skipErrors) throw new BadRequestException(`Row ${rowNum}: ${message}`);
+        // Attach whatever shape we can extract from the raw cols so the
+        // Preview / Import Complete table still shows the row's available
+        // fields (name, email, role, etc.) even though parsing hard-failed.
+        // Helps admins identify which CSV row is broken without having to
+        // open the source file.
         rowResults.push({
           row: rowNum,
           success: false,
           outcome: ImportRowOutcomeDto.SKIPPED,
           error: message,
+          participant: this.buildRawPreviewParticipant(dealId, cols, headerVariant),
         });
       }
     }
 
     if (parsedRows.length === 0) {
       throw new BadRequestException('No valid rows found in CSV');
+    }
+
+    // Dry-run path: skip the DB transaction entirely. Used by the Preview
+    // Import modal to show the admin what WOULD be imported (with the same
+    // validation + warning surface) before they commit. Rows that parse OK
+    // come back as `outcome=skipped` (nothing written) with a synthetic
+    // `participant` shape carrying the parsed fields so the FE preview
+    // table can render row content. Hard-failed rows keep their original
+    // `skipped` outcome with the parse error message.
+    if (dryRun) {
+      const parsedByRow = new Map(parsedRows.map((p) => [p.rowNum, p.parsed]));
+      this.logger.log(
+        `CSV dry-run for deal ${dealId}: ${parsedRows.length} rows valid, ${rowResults.filter((r) => !r.success).length} would be skipped`,
+      );
+      return {
+        imported: 0,
+        failed: rowResults.filter((r) => !r.success).length,
+        rows: rowResults.map((r) => {
+          if (!r.success) return r;
+          const parsed = parsedByRow.get(r.row);
+          const next: ImportParticipantRowResultDto = {
+            ...r,
+            outcome: ImportRowOutcomeDto.SKIPPED,
+          };
+          if (parsed) {
+            next.participant = this.buildPreviewParticipant(dealId, parsed);
+          }
+          return next;
+        }),
+      };
     }
 
     // Upsert each parsed row in a single transaction. Match strategy:
@@ -371,11 +545,17 @@ export class ParticipantsService {
   // ─── Internals ────────────────────────────────────────────────────────────
 
   /**
-   * Detect whether the CSV uses the legacy 5-col header or the current
-   * 9-col header. Header comparison is case-insensitive on names but the
-   * column order is fixed.
+   * Detect which CSV header variant the file uses. Header comparison is
+   * case-insensitive on names but column order is fixed per variant.
+   *
+   * Accepted variants:
+   *   - `legacy`         5-col: name, roleName, behaviorType, email, externalId
+   *   - `v2`             9-col: legacy + investmentAmount, units, pricePerUnit, poolMember
+   *   - `v2NoExternalId` 8-col: v2 minus externalId (shipped by the in-app
+   *                      Download CSV Template button, since the UI hides
+   *                      externalId from Phase 1)
    */
-  private detectHeaderVariant(headerCols: string[]): 'legacy' | 'v2' {
+  private detectHeaderVariant(headerCols: string[]): HeaderVariant {
     const normalized = headerCols.map((h) => h.toLowerCase());
 
     const matches = (expected: readonly string[]) =>
@@ -383,10 +563,11 @@ export class ParticipantsService {
       expected.every((col, idx) => normalized[idx] === col.toLowerCase());
 
     if (matches(CSV_HEADERS_V2)) return 'v2';
+    if (matches(CSV_HEADERS_V2_NO_EXT_ID)) return 'v2NoExternalId';
     if (matches(CSV_HEADERS_LEGACY)) return 'legacy';
 
     throw new BadRequestException(
-      `Invalid CSV header. Expected one of: "${CSV_HEADERS_LEGACY.join(',')}" or "${CSV_HEADERS_V2.join(',')}"`,
+      `Invalid CSV header. Expected one of: "${CSV_HEADERS_LEGACY.join(',')}", "${CSV_HEADERS_V2.join(',')}", or "${CSV_HEADERS_V2_NO_EXT_ID.join(',')}"`,
     );
   }
 
@@ -394,9 +575,17 @@ export class ParticipantsService {
    * Parse a single CSV row by header variant. Throws `Error` with a
    * human-readable message for hard failures; appends to `warnings[]` for
    * soft failures.
+   *
+   * Strategy: for the `v2NoExternalId` variant, splice an empty placeholder
+   * at the externalId position so the rest of the parser can treat it as
+   * the 9-col v2 layout and the destructure indexes stay stable.
    */
-  private parseRow(cols: string[], headerVariant: 'legacy' | 'v2'): ParsedRow {
-    const [name, roleName, behaviorTypeRaw, email, externalId, investmentRaw, unitsRaw, priceRaw, poolRaw] = cols;
+  private parseRow(cols: string[], headerVariant: HeaderVariant): ParsedRow {
+    const effectiveCols =
+      headerVariant === 'v2NoExternalId'
+        ? [...cols.slice(0, 4), '', ...cols.slice(4)]
+        : cols;
+    const [name, roleName, behaviorTypeRaw, email, externalId, investmentRaw, unitsRaw, priceRaw, poolRaw] = effectiveCols;
 
     if (!name) throw new Error('name is required');
     if (!roleName) throw new Error('roleName is required');
@@ -407,8 +596,9 @@ export class ParticipantsService {
     const warnings: string[] = [];
     const investment: InvestmentFields = {};
     let poolMemberExplicitlyProvided = false;
+    const hasInvestmentCols = headerVariant === 'v2' || headerVariant === 'v2NoExternalId';
 
-    if (headerVariant === 'v2') {
+    if (hasInvestmentCols) {
       const investmentAmount = this.parseOptionalNumber(investmentRaw, 'investmentAmount', warnings);
       if (investmentAmount !== undefined) investment.investmentAmount = investmentAmount;
 
@@ -487,6 +677,95 @@ export class ParticipantsService {
     if (normalized === 'false' || normalized === '0' || normalized === 'no') return false;
     warnings.push(`${field} could not be parsed as a boolean ("${raw}") — field skipped`);
     return undefined;
+  }
+
+  /**
+   * Build a partial `ParticipantResponseDto` directly from raw CSV columns
+   * for rows that hard-failed `parseRow`. Mirrors the structure of
+   * `buildPreviewParticipant` but skips validation, so whatever fields the
+   * admin DID fill in show up in the Preview / Import Complete tables.
+   * Invalid `behaviorType` strings come back as `null` so the FE renders
+   * "N/A" instead of crashing the badge lookup.
+   */
+  private buildRawPreviewParticipant(
+    dealId: string,
+    cols: string[],
+    headerVariant: HeaderVariant,
+  ): ParticipantResponseDto {
+    const effectiveCols =
+      headerVariant === 'v2NoExternalId'
+        ? [...cols.slice(0, 4), '', ...cols.slice(4)]
+        : cols;
+    const [name, roleName, behaviorTypeRaw, email, externalId, investmentRaw, unitsRaw, priceRaw, poolRaw] = effectiveCols;
+
+    const validBehavior =
+      behaviorTypeRaw && VALID_BEHAVIORS.has(behaviorTypeRaw as ParticipantBehavior)
+        ? (behaviorTypeRaw as ParticipantBehaviorDto)
+        : null;
+
+    const safeNumber = (raw: string | undefined): number | null => {
+      if (raw === undefined || raw === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+
+    const safeBoolean = (raw: string | undefined): boolean | null => {
+      if (raw === undefined || raw === '') return null;
+      const normalized = raw.toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
+      if (normalized === 'false' || normalized === '0' || normalized === 'no') return false;
+      return null;
+    };
+
+    const now = new Date();
+    return {
+      id: '',
+      dealId,
+      name: name ?? '',
+      roleName: roleName ?? '',
+      // FE checks `p.behaviorType ?` and shows "N/A" when missing, so passing
+      // a null past the type cast is safe at runtime.
+      behaviorType: validBehavior as unknown as ParticipantBehaviorDto,
+      externalId: externalId || null,
+      email: email || null,
+      investmentAmount: safeNumber(investmentRaw),
+      units: safeNumber(unitsRaw),
+      pricePerUnit: safeNumber(priceRaw),
+      poolMember: safeBoolean(poolRaw),
+      metadata: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /**
+   * Build a synthetic `ParticipantResponseDto` from a parsed CSV row, used
+   * only inside the dryRun preview response. Required-but-unknown fields
+   * (`id`, dates) are placeholder defaults since nothing is persisted yet;
+   * the FE Preview table reads only the user-visible fields (name, role,
+   * behavior, email, investment columns) and never surfaces the placeholders.
+   */
+  private buildPreviewParticipant(
+    dealId: string,
+    parsed: ParsedRow,
+  ): ParticipantResponseDto {
+    const now = new Date();
+    return {
+      id: '',
+      dealId,
+      name: parsed.name,
+      roleName: parsed.roleName,
+      behaviorType: parsed.behaviorType as unknown as ParticipantBehaviorDto,
+      externalId: parsed.externalId ?? null,
+      email: parsed.email ?? null,
+      investmentAmount: parsed.investment.investmentAmount ?? null,
+      units: parsed.investment.units ?? null,
+      pricePerUnit: parsed.investment.pricePerUnit ?? null,
+      poolMember: parsed.investment.poolMember ?? null,
+      metadata: null,
+      createdAt: now,
+      updatedAt: now,
+    };
   }
 
   /**

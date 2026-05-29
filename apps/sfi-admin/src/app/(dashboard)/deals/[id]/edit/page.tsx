@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   title: 'Edit Deal',
 };
 
-/** FEA-8 — Edit Deal. Matches Figma node 384:1709 > "Deal Edit". */
+/** FEA-8: Edit Deal. Matches Figma node 384:1709 > "Deal Edit". */
 export default async function EditDealPage({
   params,
 }: Readonly<{ params: Promise<{ id: string }> }>) {

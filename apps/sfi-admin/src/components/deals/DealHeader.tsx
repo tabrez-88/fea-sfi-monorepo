@@ -11,7 +11,7 @@ type DealHeaderProps = Readonly<{
  *   <name>                   [status pill]
  *   Film deal · Created Feb 1, 2026
  *
- * Matches Figma `385:10602` — deal name large bold, subtitle 13px neutral,
+ * Matches Figma `385:10602`: deal name large bold, subtitle 13px neutral,
  * status pill right-aligned. On suspended deals the page renders the yellow
  * "unresponsive" banner separately (DealOverviewView), not here.
  */

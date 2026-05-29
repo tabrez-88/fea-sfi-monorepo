@@ -10,7 +10,7 @@ export const apiClient = axios.create({
   timeout: 15_000,
 });
 
-// ─── Request interceptor — set baseURL lazily + attach auth token ──────────────
+// ─── Request interceptor: set baseURL lazily + attach auth token ──────────────
 // `env.NEXT_PUBLIC_API_URL` is resolved here (not in `axios.create`) so the Zod
 // env schema is never evaluated at module-load time during `next build` prerender.
 apiClient.interceptors.request.use((config) => {
@@ -24,7 +24,7 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// ─── Response interceptor — redirect on 401 ───────────────────────────────────
+// ─── Response interceptor: redirect on 401 ───────────────────────────────────
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {

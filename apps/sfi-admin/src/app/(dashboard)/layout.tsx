@@ -10,7 +10,7 @@ import { DashboardShell } from '@/components/layout/DashboardShell';
  *
  * To gate a page by role, compose `RequireAuth` on the page itself with
  * `<RequireAuth roles={['ADMIN']}>`. Leaving the layout-level guard role-free
- * matches the "simple RBAC" brief — any signed-in user reaches the shell.
+ * matches the "simple RBAC" brief: any signed-in user reaches the shell.
  */
 export default function DashboardGroupLayout({
   children,

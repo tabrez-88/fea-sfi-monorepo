@@ -29,7 +29,7 @@ type DatePickerFieldProps = Readonly<{
 }>;
 
 function toIsoDateString(date: Date): string {
-  // yyyy-MM-dd, local timezone — matches <input type="date">
+  // yyyy-MM-dd, local timezone (matches <input type="date">)
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');

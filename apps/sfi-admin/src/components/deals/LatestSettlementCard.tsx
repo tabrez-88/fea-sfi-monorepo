@@ -31,15 +31,13 @@ type LatestSettlementCardProps = Readonly<{
  * "Latest Settlement" panel on the Deal Overview. Shows a key/value summary
  * of the most recent settlement run plus the proof hash with a copy button,
  * and a "View Details" link routing to the run detail page. Renders nothing
- * when the deal has no settlement runs yet — the Deal Overview falls back to
+ * when the deal has no settlement runs yet. The Deal Overview falls back to
  * `QuickActionsCard` in that case.
  */
 export function LatestSettlementCard({ dealId, settlement }: LatestSettlementCardProps) {
   if (!settlement) return null;
 
-  const truncatedProof = settlement.proof
-    ? `sha256:${settlement.proof.slice(0, 10)}…`
-    : '—';
+  const truncatedProof = settlement.proof ? `sha256:${settlement.proof.slice(0, 10)}…` : '-';
 
   async function handleCopyProof() {
     if (!settlement?.proof) return;

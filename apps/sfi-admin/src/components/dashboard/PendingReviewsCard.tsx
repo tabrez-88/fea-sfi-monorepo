@@ -17,8 +17,8 @@ import { formatCurrencyCompact } from '@/utils/format';
  *   - Nested "Revenue Batches Awaiting Validation" card (border-8 rounded)
  *     - Subtitle Bold 20
  *     - Divider line
- *     - Rows — 4 cells each separated by border-b `#D8D8D8`
- *   - Nested "Settlements Awaiting Finalization" card — same structure
+ *     - Rows: 4 cells each separated by border-b `#D8D8D8`
+ *   - Nested "Settlements Awaiting Finalization" card (same structure)
  *   - "View All Pending Reviews" link (Bold 16 underlined)
  */
 export function PendingReviewsCard() {

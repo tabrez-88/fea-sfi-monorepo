@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 type PasswordFieldProps = Omit<React.ComponentProps<'input'>, 'type'>;
 
 /**
- * Password input with a show/hide toggle. Matches the Figma input shell — 48px
+ * Password input with a show/hide toggle. Matches the Figma input shell: 48px
  * tall, 8px radius, border `#E0E0E0`, with a 15×15 lucide eye icon on the right.
  */
 export const PasswordField = React.forwardRef<HTMLInputElement, PasswordFieldProps>(

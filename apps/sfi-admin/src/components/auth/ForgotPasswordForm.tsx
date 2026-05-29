@@ -51,7 +51,7 @@ export function ForgotPasswordForm() {
           );
           return;
         }
-        setFormError('Network error — please try again.');
+        setFormError('Network error. Please try again.');
       },
     });
   };

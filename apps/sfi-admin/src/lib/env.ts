@@ -10,7 +10,7 @@ const envSchema = z.object({
 type EnvVars = z.infer<typeof envSchema>;
 
 /**
- * Lazily validated env — only parsed on first access so that `next build`
+ * Lazily validated env: only parsed on first access so that `next build`
  * can prerender static pages without requiring `NEXT_PUBLIC_API_URL` at
  * build time (it's only needed at runtime / in client bundles).
  */
@@ -26,7 +26,7 @@ export function getEnv(): EnvVars {
   return _env;
 }
 
-/** @deprecated Use `getEnv()` — kept as a proxy for backwards compatibility. */
+/** @deprecated Use `getEnv()`. Kept as a proxy for backwards compatibility. */
 export const env: EnvVars = new Proxy({} as EnvVars, {
   get(_target, prop: string) {
     return getEnv()[prop as keyof EnvVars];

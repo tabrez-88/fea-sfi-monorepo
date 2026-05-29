@@ -20,7 +20,7 @@ type StatCell = Readonly<{
 }>;
 
 /**
- * 4-card stat row at the top of the Deals List — All / Active / Draft /
+ * 4-card stat row at the top of the Deals List: All, Active, Draft,
  * Closed with live counts. Each card doubles as a status filter shortcut; the
  * currently-selected filter gets a foreground border to show what the table
  * is scoped to. On mobile the row wraps to a 2×2 grid, matching the mobile
@@ -40,7 +40,7 @@ export function DealsListStatCards({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       {cells.map((cell) => {
         const isActive = activeFilter === cell.filter;
         return (
@@ -50,20 +50,17 @@ export function DealsListStatCards({
             onClick={() => onFilterChange(cell.filter)}
             aria-pressed={isActive}
             className={cn(
-              'flex min-h-[112px] flex-col justify-between gap-3 rounded-[8px] border bg-white p-5 text-left transition-colors sm:min-h-[128px] sm:p-6',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20',
-              isActive
-                ? 'border-foreground shadow-sm'
-                : 'border-border hover:border-foreground/40',
+              'group flex min-h-[88px] flex-col justify-between gap-2 rounded-[8px] border border-border bg-white p-4 text-left text-foreground transition-colors sm:min-h-[96px]',
+              'hover:border-foreground hover:bg-foreground hover:text-background focus-visible:border-foreground focus-visible:bg-foreground focus-visible:text-background focus-visible:outline-none',
             )}
           >
-            <span className="text-[14px] font-medium text-neutral">
+            <span className="text-[14px] font-medium leading-[20px] text-neutral transition-colors group-hover:text-background/80 group-focus-visible:text-background/80">
               {cell.label}
             </span>
             {isLoading || cell.value === undefined ? (
-              <Skeleton className="h-[40px] w-16" />
+              <Skeleton className="h-[32px] w-14 group-hover:bg-background/20 group-focus-visible:bg-background/20" />
             ) : (
-              <span className="text-[40px] font-semibold leading-[44px] tracking-[-0.8px] text-foreground sm:text-[48px] sm:leading-[52px] sm:tracking-[-0.96px]">
+              <span className="text-[28px] font-semibold leading-[32px] tracking-[-0.56px]">
                 {formatNumber(cell.value)}
               </span>
             )}
