@@ -95,9 +95,10 @@ USER nestjs
 # Expose port
 EXPOSE 3001
 
-# Health check
+# Health check — 127.0.0.1, not localhost (Alpine resolves to ::1 first
+# but Nest binds to 0.0.0.0 IPv4 only)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/v1/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3001/api/v1/health || exit 1
 
 # Start application with dumb-init for proper signal handling
 CMD ["dumb-init", "node", "dist/main.js"]
