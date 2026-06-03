@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
     DETAIL: (id: string) => `${BASE}/deals/${id}`,
     UPDATE: (id: string) => `${BASE}/deals/${id}`,
     DELETE: (id: string) => `${BASE}/deals/${id}`,
+    DUPLICATE: (id: string) => `${BASE}/deals/${id}/duplicate`,
   },
   PARTICIPANTS: {
     LIST: (dealId: string) => `${BASE}/deals/${dealId}/participants`,

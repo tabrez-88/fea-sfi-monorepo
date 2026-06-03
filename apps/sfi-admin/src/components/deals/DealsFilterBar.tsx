@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ROUTES } from '@/constants/routes';
+import { DEAL_STATUS_LABEL } from '@/constants/ui';
 import { DealStatus } from '@/types/deal.types';
 
 export type DealsStatusFilter = 'ALL' | keyof typeof DealStatus;
@@ -71,10 +72,20 @@ export function DealsFilterBar({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All statuses</SelectItem>
-            <SelectItem value={DealStatus.ACTIVE}>Active</SelectItem>
-            <SelectItem value={DealStatus.DRAFT}>Draft</SelectItem>
-            <SelectItem value={DealStatus.SUSPENDED}>Suspended</SelectItem>
-            <SelectItem value={DealStatus.CLOSED}>Closed</SelectItem>
+            <SelectItem value={DealStatus.ACTIVE}>{DEAL_STATUS_LABEL.ACTIVE}</SelectItem>
+            <SelectItem value={DealStatus.DRAFT}>{DEAL_STATUS_LABEL.DRAFT}</SelectItem>
+            <SelectItem value={DealStatus.SUSPENDED}>
+              {DEAL_STATUS_LABEL.SUSPENDED}
+            </SelectItem>
+            <SelectItem value={DealStatus.CLOSED}>
+              {DEAL_STATUS_LABEL.CLOSED}
+            </SelectItem>
+            <SelectItem value={DealStatus.TERMINATED}>
+              {DEAL_STATUS_LABEL.TERMINATED}
+            </SelectItem>
+            <SelectItem value={DealStatus.ARCHIVED}>
+              {DEAL_STATUS_LABEL.ARCHIVED}
+            </SelectItem>
           </SelectContent>
         </Select>
 

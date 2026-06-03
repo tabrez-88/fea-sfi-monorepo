@@ -21,6 +21,17 @@ export enum DealStatusDto {
   ACTIVE = 'ACTIVE',
   SUSPENDED = 'SUSPENDED',
   CLOSED = 'CLOSED',
+  TERMINATED = 'TERMINATED',
+  ARCHIVED = 'ARCHIVED',
+}
+
+export enum DealCategoryDto {
+  MUSIC = 'MUSIC',
+  FILM_AND_TV = 'FILM_AND_TV',
+  LIVE_EVENTS_AND_SPORTS = 'LIVE_EVENTS_AND_SPORTS',
+  GAMES_AND_INTERACTIVE_MEDIA = 'GAMES_AND_INTERACTIVE_MEDIA',
+  CREATOR_AND_CONSUMER_IP = 'CREATOR_AND_CONSUMER_IP',
+  AI_AND_FUTURE_MEDIA = 'AI_AND_FUTURE_MEDIA',
 }
 
 export enum DealCurrencyDto {
@@ -52,6 +63,25 @@ export class CreateDealDto {
   @IsOptional()
   @IsEnum(DealStatusDto)
   status?: DealStatusDto;
+
+  @ApiPropertyOptional({
+    enum: DealCategoryDto,
+    description:
+      'Project category. Optional on create so admins can leave it blank and fill in later from Edit Deal.',
+  })
+  @IsOptional()
+  @IsEnum(DealCategoryDto)
+  category?: DealCategoryDto;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-form deal owner — typically a company or person name (Creator / SPV / Label / Studio / Production Company).',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  dealOwner?: string;
 
   @ApiPropertyOptional({
     enum: DealCurrencyDto,
@@ -103,6 +133,21 @@ export class UpdateDealDto {
   @IsEnum(DealStatusDto)
   status?: DealStatusDto;
 
+  @ApiPropertyOptional({ enum: DealCategoryDto })
+  @IsOptional()
+  @IsEnum(DealCategoryDto)
+  category?: DealCategoryDto;
+
+  @ApiPropertyOptional({
+    description:
+      'Free-form deal owner — typically a company or person name. Pass an empty string to clear.',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  dealOwner?: string;
+
   @ApiPropertyOptional({ enum: DealCurrencyDto })
   @IsOptional()
   @IsEnum(DealCurrencyDto)
@@ -153,6 +198,14 @@ export class DealResponseDto {
 
   @ApiProperty({ enum: DealStatusDto })
   status!: DealStatusDto;
+
+  @ApiPropertyOptional({ enum: DealCategoryDto })
+  category?: DealCategoryDto | null;
+
+  @ApiPropertyOptional({
+    description: 'Free-form deal owner name (Creator / SPV / Label / Studio / etc.).',
+  })
+  dealOwner?: string | null;
 
   @ApiProperty({ enum: DealCurrencyDto })
   currency!: DealCurrencyDto;
@@ -275,9 +328,21 @@ export class DealCountsResponseDto {
   @ApiProperty({ description: 'Deals in ACTIVE status', example: 6 })
   active!: number;
 
-  @ApiProperty({ description: 'Deals in SUSPENDED status', example: 0 })
+  @ApiProperty({
+    description: 'Deals in SUSPENDED status (displayed as "Paused" in the FE)',
+    example: 0,
+  })
   suspended!: number;
 
-  @ApiProperty({ description: 'Deals in CLOSED status', example: 6 })
+  @ApiProperty({
+    description: 'Deals in CLOSED status (displayed as "Completed" in the FE)',
+    example: 6,
+  })
   closed!: number;
+
+  @ApiProperty({ description: 'Deals in TERMINATED status (failed/cancelled)', example: 0 })
+  terminated!: number;
+
+  @ApiProperty({ description: 'Deals in ARCHIVED status', example: 0 })
+  archived!: number;
 }

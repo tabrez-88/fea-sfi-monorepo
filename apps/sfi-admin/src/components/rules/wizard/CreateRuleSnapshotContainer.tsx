@@ -15,6 +15,7 @@ import { buildRuleSnapshotPayload } from './build-rule-snapshot-payload';
 import { Step1BasicSettings } from './Step1BasicSettings';
 import { Step2ParticipantsRules } from './Step2ParticipantsRules';
 import { Step3Review } from './Step3Review';
+import { wizardDraftStorage } from './wizard-draft-storage';
 import {
   buildInitialWizardState,
   type WizardStep1Data,
@@ -52,8 +53,23 @@ export function CreateRuleSnapshotContainer({
 }: CreateRuleSnapshotContainerProps) {
   const router = useRouter();
   const listHref = ROUTES.DEALS.RULES(dealId);
-  const [state, setState] = useState<WizardState>(buildInitialWizardState);
+  // Lazy initial — on mount, try restoring a draft from localStorage so the
+  // admin doesn't lose a half-filled wizard to a 401-logout or accidental
+  // browser refresh. Falls back to the fresh initial state when no draft
+  // exists. Reading from localStorage is safe inside useState's initializer
+  // because Next.js mounts `'use client'` components only on the client.
+  const [state, setState] = useState<WizardState>(() => {
+    const restored = wizardDraftStorage.load(dealId);
+    return restored?.state ?? buildInitialWizardState();
+  });
   const [submitErrors, setSubmitErrors] = useState<string[]>([]);
+
+  // Persist on every state change so an unexpected unmount (logout redirect,
+  // tab close, browser refresh) doesn't lose the form data. Cleared
+  // explicitly after a successful Create Snapshot below.
+  useEffect(() => {
+    wizardDraftStorage.save(dealId, state);
+  }, [dealId, state]);
 
   const createMutation = useCreateRuleSnapshot(dealId);
   // Fetch the existing snapshot roster so Step 3 can show the next
@@ -120,6 +136,9 @@ export function CreateRuleSnapshotContainer({
     }
     createMutation.mutate(built.payload, {
       onSuccess: () => {
+        // Snapshot is persisted server-side — drop the local draft so
+        // returning to the wizard starts fresh.
+        wizardDraftStorage.clear(dealId);
         router.push(listHref);
       },
       onError: (err) => {

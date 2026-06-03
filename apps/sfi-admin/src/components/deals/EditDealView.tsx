@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
 import { useDeal } from '@/hooks/deals/useDeal';
+import { useDuplicateDeal } from '@/hooks/deals/useDuplicateDeal';
 import { useUpdateDeal } from '@/hooks/deals/useUpdateDeal';
 import { getApiErrorMessage } from '@/lib/axios';
 import type {
@@ -25,6 +26,17 @@ type EditDealViewProps = Readonly<{
 }>;
 
 type ModalKind = 'close' | 'suspend' | null;
+
+/**
+ * Deals in a terminal state (Completed / Terminated / Archived) are
+ * immutable per the Round 4 product decision. The Edit form stays
+ * visible (read-history use case) but every mutating action is gated.
+ */
+function isImmutableStatus(status: DealStatus | undefined): boolean {
+  return (
+    status === 'CLOSED' || status === 'TERMINATED' || status === 'ARCHIVED'
+  );
+}
 
 /**
  * FEA-8: full Edit Deal screen. Owns:
@@ -41,7 +53,18 @@ export function EditDealView({ dealId }: EditDealViewProps) {
   const router = useRouter();
   const { data: deal, isLoading, isError } = useDeal(dealId);
   const { mutateAsync: updateDeal, isPending: isSaving } = useUpdateDeal(dealId);
+  const { mutateAsync: duplicateDeal, isPending: isDuplicating } = useDuplicateDeal();
   const [modal, setModal] = useState<ModalKind>(null);
+
+  async function handleDuplicate() {
+    try {
+      const copy = await duplicateDeal(dealId);
+      toast.success(`Duplicated as "${copy.name}"`);
+      router.push(ROUTES.DEALS.EDIT(copy.id));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, 'Failed to duplicate deal.'));
+    }
+  }
 
   async function handleSave(values: CreateDealInput & UpdateDealInput) {
     try {
@@ -64,7 +87,7 @@ export function EditDealView({ dealId }: EditDealViewProps) {
       };
       await updateDeal(updateInput);
       toast.success(
-        payload.status === 'CLOSED' ? 'Deal closed' : 'Deal suspended',
+        payload.status === 'CLOSED' ? 'Deal completed' : 'Deal paused',
       );
       setModal(null);
       router.push(ROUTES.DEALS.DETAIL(dealId));
@@ -73,8 +96,8 @@ export function EditDealView({ dealId }: EditDealViewProps) {
         getApiErrorMessage(
           error,
           payload.status === 'CLOSED'
-            ? 'Failed to close deal.'
-            : 'Failed to suspend deal.',
+            ? 'Failed to complete deal.'
+            : 'Failed to pause deal.',
         ),
       );
     }
@@ -103,9 +126,12 @@ export function EditDealView({ dealId }: EditDealViewProps) {
     );
   }
 
-  // Disable the destructive buttons when the deal is already in that state
-  const alreadyClosed = deal.status === 'CLOSED';
+  // Disable the destructive buttons when the deal is already in that state.
+  // Immutable terminal states (Completed / Terminated / Archived) get the
+  // Duplicate Deal action instead of Complete/Pause.
+  const isImmutable = isImmutableStatus(deal.status);
   const alreadySuspended = deal.status === 'SUSPENDED';
+  const busy = isSaving || isDuplicating;
 
   return (
     <>
@@ -117,21 +143,39 @@ export function EditDealView({ dealId }: EditDealViewProps) {
             Edit Deal
           </h1>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
-            <Button
-              type="button"
-              className="bg-danger text-white hover:bg-danger/90 focus-visible:ring-danger/30"
-              disabled={alreadyClosed || isSaving}
-              onClick={() => setModal('close')}
-            >
-              {alreadyClosed ? 'Closed' : 'Closed Deal'}
-            </Button>
-            <Button
-              type="button"
-              disabled={alreadySuspended || isSaving}
-              onClick={() => setModal('suspend')}
-            >
-              {alreadySuspended ? 'Suspended' : 'Suspend Deal'}
-            </Button>
+            {isImmutable ? (
+              // Terminal-state deal: the only meaningful action is to
+              // spawn a follow-up draft. Saves the admin from retyping
+              // name + dates + parties + category for the next season.
+              <Button
+                type="button"
+                className="sm:col-span-2"
+                disabled={busy}
+                onClick={() => {
+                  void handleDuplicate();
+                }}
+              >
+                {isDuplicating ? 'Duplicating…' : 'Duplicate Deal'}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  className="bg-danger text-white hover:bg-danger/90 focus-visible:ring-danger/30"
+                  disabled={busy}
+                  onClick={() => setModal('close')}
+                >
+                  Complete Deal
+                </Button>
+                <Button
+                  type="button"
+                  disabled={alreadySuspended || busy}
+                  onClick={() => setModal('suspend')}
+                >
+                  {alreadySuspended ? 'Paused' : 'Pause Deal'}
+                </Button>
+              </>
+            )}
           </div>
         </div>
 

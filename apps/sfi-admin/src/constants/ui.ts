@@ -2,7 +2,7 @@ import type {
   RevenueBatchStatus,
   SettlementRunStatus,
 } from '@/types/dashboard.types';
-import type { DealStatus } from '@/types/deal.types';
+import type { DealCategory, DealStatus } from '@/types/deal.types';
 import type { ParticipantBehavior } from '@/types/participant.types';
 import type { RuleSnapshotStatus } from '@/types/rule-snapshot.types';
 
@@ -19,7 +19,39 @@ export const DEAL_STATUS_TONE: Record<DealStatus, StatusTone> = {
   DRAFT: 'neutral',
   ACTIVE: 'success',
   SUSPENDED: 'warning',
-  CLOSED: 'danger',
+  CLOSED: 'info',
+  TERMINATED: 'danger',
+  ARCHIVED: 'neutral',
+};
+
+/**
+ * Display label for each Deal status. The underlying enum is kept stable
+ * for BE compatibility (SUSPENDED / CLOSED still travel on the wire) but
+ * the FE relabels them per Liang's Round 4 wording — "Paused" reads
+ * less alarming than "Suspended" and "Completed" is clearer than
+ * "Closed" for the typical lifecycle.
+ */
+export const DEAL_STATUS_LABEL: Record<DealStatus, string> = {
+  DRAFT: 'Draft',
+  ACTIVE: 'Active',
+  SUSPENDED: 'Paused',
+  CLOSED: 'Completed',
+  TERMINATED: 'Terminated',
+  ARCHIVED: 'Archived',
+};
+
+/**
+ * Display label for each Deal category. Underscored enum values become
+ * human-readable strings here — keeps the rest of the UI from re-doing
+ * the same string formatting at every call site.
+ */
+export const DEAL_CATEGORY_LABEL: Record<DealCategory, string> = {
+  MUSIC: 'Music',
+  FILM_AND_TV: 'Film & TV',
+  LIVE_EVENTS_AND_SPORTS: 'Live Events & Sports',
+  GAMES_AND_INTERACTIVE_MEDIA: 'Games & Interactive Media',
+  CREATOR_AND_CONSUMER_IP: 'Creator & Consumer IP',
+  AI_AND_FUTURE_MEDIA: 'AI & Future Media',
 };
 
 export const REVENUE_BATCH_STATUS_TONE: Record<RevenueBatchStatus, StatusTone> = {
@@ -46,14 +78,17 @@ export const PARTICIPANT_BEHAVIOR_TONE: Record<ParticipantBehavior, StatusTone> 
 };
 
 /**
- * Human-readable label for each behavior chip. Matches Round 2.1 #5: display
- * "Profit Share" everywhere even though the backend enum stays `NET_PROFIT_SHARE`.
+ * Human-readable label for each behavior chip. Backend enum names stay
+ * stable (`NET_PROFIT_SHARE`, `FLAT_FEE`) but the FE labels track product
+ * copy: Round 4 (Liang) renamed Profit Share → Revenue Share and Flat
+ * Fee → Fixed Payment to better convey what each role does to a new
+ * admin reading the screen for the first time.
  */
 export const PARTICIPANT_BEHAVIOR_LABEL: Record<ParticipantBehavior, string> = {
   FEE_DEDUCTION: 'Fee Deduction',
   RECOUPMENT: 'Recoupment',
-  NET_PROFIT_SHARE: 'Profit Share',
-  FLAT_FEE: 'Flat Fee',
+  NET_PROFIT_SHARE: 'Revenue Share',
+  FLAT_FEE: 'Fixed Payment',
   PASS_THROUGH: 'Pass-Through',
 };
 

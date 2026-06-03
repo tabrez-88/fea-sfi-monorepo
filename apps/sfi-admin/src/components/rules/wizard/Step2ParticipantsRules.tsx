@@ -269,7 +269,7 @@ export function Step2ParticipantsRules({
         onChange={(next) => update('exitConditions', next)}
       />
 
-      <InvestorPoolConfigSection />
+      <InvestorPoolConfigSection dealId={dealId} />
 
       <RunningTotalsSection
         mode={values.mode}
@@ -1641,27 +1641,66 @@ function CheckBoxBox({ checked }: Readonly<{ checked: boolean }>) {
 
 /* ─── Section: Investor Pool Configuration ──────────────────────────────── */
 
-function InvestorPoolConfigSection() {
+function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
   // Reuses the participant CSV dropzone visually. The actual file-upload
   // wiring lands in a follow-up slice (pool seeding via CSV is a separate
   // BE flow from the rule snapshot create call). For now the dropzone is
   // visual and stores the selection in local state without submitting.
   const [file, setFile] = useState<File | null>(null);
+  const [parsed, setParsed] = useState<PoolCsvParseResult | null>(null);
+
+  // Deep-link to the existing Add Participant form pre-selecting
+  // Recoupment + "Part of Investor Pool" so a one-off investor can be
+  // added without bouncing through a CSV. Per Liang Round 4 item #12.
+  const addInvestorHref = `${ROUTES.DEALS.PARTICIPANTS_NEW(dealId)}?behavior=RECOUPMENT&poolMember=1`;
+
+  // Parse client-side as soon as the admin picks a file so they can
+  // sanity-check the rows before the snapshot is created. The actual
+  // pool-seeding POST lands in a follow-up slice; rendering the preview
+  // here gives the admin immediate confidence that their CSV parsed.
+  useEffect(() => {
+    if (!file) {
+      setParsed(null);
+      return;
+    }
+    let cancelled = false;
+    file
+      .text()
+      .then((text) => {
+        if (!cancelled) setParsed(parsePoolCsv(text));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setParsed({ rows: [], errors: ['Could not read the file.'] });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
 
   return (
     <SectionCard
       title="Investor Pool Configuration"
       description="Define the internal share breakdown for the Investor Pool."
       headerRight={
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => downloadPoolCsvTemplate()}
-        >
-          <Download className="size-4" aria-hidden strokeWidth={1.75} />
-          Export Template
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild type="button" variant="outline" size="sm">
+            <Link href={addInvestorHref}>
+              <Plus className="size-4" aria-hidden strokeWidth={1.75} />
+              Add Investor Manually
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => downloadPoolCsvTemplate()}
+          >
+            <Download className="size-4" aria-hidden strokeWidth={1.75} />
+            Export Template
+          </Button>
+        </div>
       }
     >
       <CsvDropzone
@@ -1676,7 +1715,131 @@ function InvestorPoolConfigSection() {
         button above to download a starter file with the expected headers and a
         sample row.
       </p>
+      {parsed && <PoolCsvPreviewTable parsed={parsed} />}
     </SectionCard>
+  );
+}
+
+/* ─── Pool CSV preview ──────────────────────────────────────────────────── */
+
+interface PoolCsvRow {
+  name: string;
+  investmentAmount: number;
+  units: number;
+}
+
+interface PoolCsvParseResult {
+  rows: PoolCsvRow[];
+  errors: string[];
+}
+
+/**
+ * Minimal client-side CSV parser tailored to the pool template
+ * (`Name, Investment Amount, Units`). Tolerant of trailing newlines,
+ * blank rows, BOM marker, and header-row reorderings. Quoted values are
+ * NOT supported — names should not contain commas (matches the
+ * server-side participant CSV constraint).
+ */
+function parsePoolCsv(text: string): PoolCsvParseResult {
+  const errors: string[] = [];
+  // Strip a leading BOM (U+FEFF) before trimming. Excel writes one when
+  // saving CSV on Windows, and a BOM left in the first header cell
+  // would break the header-name lookup below.
+  const noBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const stripped = noBom.trim();
+  if (!stripped) return { rows: [], errors: ['File is empty.'] };
+
+  const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return { rows: [], errors: ['File is empty.'] };
+
+  const header = lines[0]!.split(',').map((h) => h.trim().toLowerCase());
+  const nameIdx = header.indexOf('name');
+  const investedIdx = header.findIndex((h) =>
+    /investment\s*amount|invested/.test(h),
+  );
+  const unitsIdx = header.indexOf('units');
+  if (nameIdx === -1 || investedIdx === -1 || unitsIdx === -1) {
+    errors.push(
+      'CSV header must include Name, Investment Amount, and Units columns.',
+    );
+    return { rows: [], errors };
+  }
+
+  const rows: PoolCsvRow[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i]!.split(',').map((c) => c.trim());
+    const name = cells[nameIdx] ?? '';
+    const investedRaw = cells[investedIdx] ?? '';
+    const unitsRaw = cells[unitsIdx] ?? '';
+    if (!name) {
+      errors.push(`Row ${i + 1}: name is required.`);
+      continue;
+    }
+    const investmentAmount = Number(investedRaw.replace(/[$,]/g, ''));
+    const units = Number(unitsRaw.replace(/,/g, ''));
+    if (!Number.isFinite(investmentAmount) || investmentAmount < 0) {
+      errors.push(`Row ${i + 1}: investment amount "${investedRaw}" is invalid.`);
+      continue;
+    }
+    if (!Number.isFinite(units) || units < 0) {
+      errors.push(`Row ${i + 1}: units "${unitsRaw}" is invalid.`);
+      continue;
+    }
+    rows.push({ name, investmentAmount, units });
+  }
+  return { rows, errors };
+}
+
+function PoolCsvPreviewTable({ parsed }: Readonly<{ parsed: PoolCsvParseResult }>) {
+  const totalInvested = parsed.rows.reduce((acc, r) => acc + r.investmentAmount, 0);
+  const totalUnits = parsed.rows.reduce((acc, r) => acc + r.units, 0);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-semibold text-foreground">
+          Parsed {parsed.rows.length}{' '}
+          {parsed.rows.length === 1 ? 'investor' : 'investors'}
+          {totalUnits > 0 && (
+            <span className="font-normal text-neutral">
+              {' '}
+              · {formatNumber(totalUnits)} units · {formatCurrency(totalInvested)} total
+            </span>
+          )}
+        </p>
+      </div>
+      {parsed.errors.length > 0 && (
+        <Banner tone="danger">
+          <p className="font-semibold">CSV has issues:</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {parsed.errors.map((e) => (
+              <li key={e}>{e}</li>
+            ))}
+          </ul>
+        </Banner>
+      )}
+      {parsed.rows.length > 0 && (
+        <div className="overflow-hidden rounded-[8px] border border-border">
+          <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-x-3 border-b border-grey-200 bg-grey-50 px-3 py-2 text-[12px] font-bold text-foreground">
+            <span>Name</span>
+            <span>Investment</span>
+            <span>Units</span>
+          </div>
+          <div className="max-h-[320px] overflow-y-auto">
+            {parsed.rows.map((row, idx) => (
+              <div
+                key={`${row.name}-${idx}`}
+                className="grid grid-cols-[1.4fr_1fr_1fr] items-center gap-x-3 border-t border-grey-100 px-3 py-2 text-[13px] text-foreground first:border-t-0"
+              >
+                <span className="truncate">{row.name}</span>
+                <span>{formatCurrency(row.investmentAmount)}</span>
+                <span>{formatNumber(row.units)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

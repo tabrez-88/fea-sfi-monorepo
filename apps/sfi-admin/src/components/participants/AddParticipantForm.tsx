@@ -64,22 +64,22 @@ const BEHAVIOR_OPTIONS: ReadonlyArray<BehaviorOption> = [
   {
     value: ParticipantBehavior.FEE_DEDUCTION,
     label: 'Fee Deduction',
-    description: 'Takes a fee off the top',
+    description: 'Takes a fee before revenue distribution',
   },
   {
     value: ParticipantBehavior.RECOUPMENT,
     label: 'Recoupment',
-    description: 'Recovers investment before profit split',
+    description: 'Recovers invested capital before revenue sharing',
   },
   {
     value: ParticipantBehavior.NET_PROFIT_SHARE,
-    label: 'Profit Share',
-    description: 'Receives a % of net profit',
+    label: 'Revenue Share',
+    description: 'Receives a percentage of Gross Revenue or Net Revenue',
   },
   {
     value: ParticipantBehavior.FLAT_FEE,
-    label: 'Flat Fee',
-    description: 'Fixed $ payment, no % of revenue',
+    label: 'Fixed Payment',
+    description: 'Receives a Fixed payment, no percentage of revenue',
   },
 ];
 
@@ -187,7 +187,8 @@ export function AddParticipantForm({
       next.roleName = `Role name must be ${ROLE_MAX} characters or fewer.`;
 
     if (email && !EMAIL_RE.test(email.trim())) {
-      next.email = 'Enter a valid email address.';
+      next.email =
+        "Email format looks off (e.g. name@example.com). Leave blank if you don't have one.";
     }
 
     if (investmentAmount && Number(investmentAmount) < 0) {
@@ -316,13 +317,18 @@ export function AddParticipantForm({
           />
         )}
 
-        <Field id="participant-email" label="Email" error={errors.email}>
+        <Field
+          id="participant-email"
+          label="Email"
+          error={errors.email}
+          helpText="Optional. Leave blank if you don't have one."
+        >
           <Input
             id="participant-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Input your Email..."
+            placeholder="e.g. name@example.com"
             autoComplete="off"
             aria-invalid={Boolean(errors.email)}
             aria-describedby={errors.email ? 'participant-email-error' : undefined}

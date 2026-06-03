@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Currency, DealStatus, Prisma } from '@prisma/client';
+import { Currency, DealCategory, DealStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
@@ -45,6 +45,10 @@ export class DealsService {
         name: createDealDto.name,
         description: createDealDto.description,
         status: (createDealDto.status as DealStatus) || DealStatus.DRAFT,
+        category: createDealDto.category
+          ? (createDealDto.category as DealCategory)
+          : null,
+        dealOwner: createDealDto.dealOwner?.trim() || null,
         currency: (createDealDto.currency as Currency) || Currency.USD,
         effectiveDate: new Date(createDealDto.effectiveDate),
         terminationDate: createDealDto.terminationDate
@@ -203,6 +207,12 @@ export class DealsService {
       data.description = updateDealDto.description;
     if (updateDealDto.status !== undefined)
       data.status = updateDealDto.status as DealStatus;
+    if (updateDealDto.category !== undefined)
+      data.category = (updateDealDto.category as DealCategory) || null;
+    if (updateDealDto.dealOwner !== undefined)
+      // Empty string = explicit clear; trim so whitespace-only doesn't
+      // sneak through as a "set" value.
+      data.dealOwner = updateDealDto.dealOwner.trim() || null;
     if (updateDealDto.currency !== undefined)
       data.currency = updateDealDto.currency as Currency;
     if (updateDealDto.effectiveDate !== undefined)
@@ -270,6 +280,8 @@ export class DealsService {
       active: 0,
       suspended: 0,
       closed: 0,
+      terminated: 0,
+      archived: 0,
     };
 
     for (const group of grouped) {
@@ -288,10 +300,80 @@ export class DealsService {
         case DealStatus.CLOSED:
           counts.closed = count;
           break;
+        case DealStatus.TERMINATED:
+          counts.terminated = count;
+          break;
+        case DealStatus.ARCHIVED:
+          counts.archived = count;
+          break;
       }
     }
 
     return counts;
+  }
+
+  /**
+   * Clones an existing deal into a new DRAFT. Copies the deal's static
+   * fields (name + " (Copy)", description, category, dealOwner, currency,
+   * effective/termination dates) but does NOT carry over participants,
+   * rule snapshots, revenue batches, or settlement runs — those belong
+   * to the original. Per Liang Round 4 + the "closed deals are
+   * immutable" decision: this is the escape hatch so a closed deal can
+   * spawn a follow-up without retyping everything.
+   */
+  async duplicate(userId: string, sourceId: string): Promise<DealResponseDto> {
+    this.logger.log(`Duplicating deal: ${sourceId}`);
+
+    const source = await this.prisma.deal.findUnique({
+      where: { id: sourceId },
+      select: {
+        id: true,
+        userId: true,
+        name: true,
+        description: true,
+        category: true,
+        dealOwner: true,
+        currency: true,
+        effectiveDate: true,
+        terminationDate: true,
+        metadata: true,
+      },
+    });
+    if (!source || source.userId !== userId) {
+      throw new NotFoundException(`Deal with ID ${sourceId} not found`);
+    }
+
+    const copy = await this.prisma.deal.create({
+      data: {
+        name: `${source.name} (Copy)`,
+        description: source.description,
+        status: DealStatus.DRAFT,
+        category: source.category,
+        dealOwner: source.dealOwner,
+        currency: source.currency,
+        effectiveDate: source.effectiveDate,
+        terminationDate: source.terminationDate,
+        metadata:
+          (source.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
+        userId,
+      },
+    });
+
+    await this.auditLog.create({
+      actor: userId,
+      action: 'CREATED',
+      entityType: 'Deal',
+      entityId: copy.id,
+      dealId: copy.id,
+      metadata: {
+        name: copy.name,
+        status: copy.status,
+        currency: copy.currency,
+        duplicatedFrom: sourceId,
+      },
+    });
+
+    return DealMapper.toResponse(copy);
   }
 
   async exists(id: string): Promise<boolean> {

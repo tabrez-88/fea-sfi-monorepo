@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { DealStatus } from '@/types/deal.types';
 
-type DealStatusChangeVariant = 'close' | 'suspend';
+type DealStatusChangeVariant = 'close' | 'suspend' | 'terminate' | 'archive';
 
 type DealStatusChangeDialogProps = Readonly<{
   variant: DealStatusChangeVariant;
@@ -43,19 +43,36 @@ const COPY: Record<
   }>
 > = {
   close: {
-    title: 'Close Deal Confirmation',
-    description: 'Are you sure? This will affect all ongoing work in this deal.',
-    confirmLabel: 'Yes, Close Deal',
+    title: 'Complete Deal Confirmation',
+    description:
+      'Are you sure? Marking this deal Completed locks it for editing. You can still view it and any settlement history.',
+    confirmLabel: 'Yes, Complete Deal',
     confirmClassName: 'bg-danger text-white hover:bg-danger/90',
     status: 'CLOSED',
   },
   suspend: {
-    title: 'Suspend Deal Confirmation',
+    title: 'Pause Deal Confirmation',
     description:
-      'Are you sure? The deal will be paused, participants and settlements stay read-only until it is reactivated.',
-    confirmLabel: 'Yes, Suspend Deal',
+      'Are you sure? The deal will be paused — participants and settlements stay read-only until you reactivate it.',
+    confirmLabel: 'Yes, Pause Deal',
     confirmClassName: '',
     status: 'SUSPENDED',
+  },
+  terminate: {
+    title: 'Terminate Deal Confirmation',
+    description:
+      'Are you sure? Terminated marks the deal as failed/cancelled. This is a final state — you can still view it but not edit.',
+    confirmLabel: 'Yes, Terminate Deal',
+    confirmClassName: 'bg-danger text-white hover:bg-danger/90',
+    status: 'TERMINATED',
+  },
+  archive: {
+    title: 'Archive Deal Confirmation',
+    description:
+      'Are you sure? Archived deals are hidden from the default list. You can restore by filtering by Archived.',
+    confirmLabel: 'Yes, Archive Deal',
+    confirmClassName: '',
+    status: 'ARCHIVED',
   },
 };
 

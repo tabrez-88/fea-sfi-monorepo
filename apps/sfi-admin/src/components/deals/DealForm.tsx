@@ -15,7 +15,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { DealStatus } from '@/types/deal.types';
+import { DEAL_CATEGORY_LABEL, DEAL_STATUS_LABEL } from '@/constants/ui';
+import { DealCategory, DealStatus } from '@/types/deal.types';
 import type { CreateDealInput, Deal, UpdateDealInput } from '@/types/deal.types';
 
 type DealFormProps = Readonly<{
@@ -28,9 +29,19 @@ type DealFormProps = Readonly<{
 
 const DESCRIPTION_MAX = 2000;
 const NAME_MAX = 255;
+const DEAL_OWNER_MAX = 255;
+
+// Sentinel used as the `<SelectItem value>` for the "no category yet"
+// option. SelectItem requires a non-empty string, so this constant
+// stands in for "null / not set" inside the dropdown and is normalized
+// back to `undefined` when assembling the submit payload.
+const NO_CATEGORY = '__none__';
 
 type FieldErrors = Partial<
-  Record<'name' | 'effectiveDate' | 'terminationDate' | 'description', string>
+  Record<
+    'name' | 'effectiveDate' | 'terminationDate' | 'description' | 'dealOwner',
+    string
+  >
 >;
 
 function toDateInputValue(iso: string | null | undefined): string {
@@ -59,6 +70,10 @@ export function DealForm({
   const [name, setName] = useState(initialDeal?.name ?? '');
   const [description, setDescription] = useState(initialDeal?.description ?? '');
   const [status, setStatus] = useState<DealStatus>(initialDeal?.status ?? DealStatus.DRAFT);
+  const [category, setCategory] = useState<DealCategory | typeof NO_CATEGORY>(
+    initialDeal?.category ?? NO_CATEGORY,
+  );
+  const [dealOwner, setDealOwner] = useState(initialDeal?.dealOwner ?? '');
   const [effectiveDate, setEffectiveDate] = useState(toDateInputValue(initialDeal?.effectiveDate));
   const [terminationDate, setTerminationDate] = useState(
     toDateInputValue(initialDeal?.terminationDate),
@@ -68,6 +83,7 @@ export function DealForm({
   function validate(): FieldErrors | null {
     const next: FieldErrors = {};
     const trimmedName = name.trim();
+    const trimmedOwner = dealOwner.trim();
 
     if (!trimmedName) next.name = 'Deal name is required.';
     else if (trimmedName.length > NAME_MAX)
@@ -83,6 +99,10 @@ export function DealForm({
       next.description = `Description must be ${DESCRIPTION_MAX} characters or fewer.`;
     }
 
+    if (trimmedOwner.length > DEAL_OWNER_MAX) {
+      next.dealOwner = `Deal owner must be ${DEAL_OWNER_MAX} characters or fewer.`;
+    }
+
     return Object.keys(next).length > 0 ? next : null;
   }
 
@@ -95,18 +115,28 @@ export function DealForm({
     }
     setErrors({});
 
+    const trimmedOwner = dealOwner.trim();
+    // Send `dealOwner` on update even when empty so the BE can clear a
+    // previously-set value (the service treats `'' → null`). On create,
+    // omit when empty to keep the payload tight.
+    const isEditing = initialDeal !== undefined;
     const values: CreateDealInput & UpdateDealInput = {
       name: name.trim(),
       status,
       effectiveDate: isoFromDateValue(effectiveDate),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(terminationDate ? { terminationDate: isoFromDateValue(terminationDate) } : {}),
+      ...(category !== NO_CATEGORY ? { category } : {}),
+      ...(isEditing || trimmedOwner ? { dealOwner: trimmedOwner } : {}),
     };
 
     await onSubmit(values);
   }
 
-  const statusOptions = ['DRAFT', 'ACTIVE'] as const;
+  const statusOptions: ReadonlyArray<DealStatus> = [DealStatus.DRAFT, DealStatus.ACTIVE];
+  const categoryOptions = Object.entries(DEAL_CATEGORY_LABEL) as ReadonlyArray<
+    [DealCategory, string]
+  >;
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
@@ -146,6 +176,49 @@ export function DealForm({
           />
         </DealFormField>
 
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <DealFormField
+            id="deal-category"
+            label="Category"
+            helpText="What kind of project is this?"
+          >
+            <Select
+              value={category}
+              onValueChange={(value) =>
+                setCategory(value as DealCategory | typeof NO_CATEGORY)
+              }
+            >
+              <SelectTrigger id="deal-category" aria-label="Deal category">
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_CATEGORY}>None</SelectItem>
+                {categoryOptions.map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </DealFormField>
+
+          <DealFormField
+            id="deal-owner"
+            label="Deal Owner"
+            helpText="Creator / SPV / Label / Studio / Production Company / person"
+            {...(errors.dealOwner ? { error: errors.dealOwner } : {})}
+          >
+            <Input
+              id="deal-owner"
+              value={dealOwner}
+              onChange={(e) => setDealOwner(e.target.value)}
+              maxLength={DEAL_OWNER_MAX}
+              aria-invalid={Boolean(errors.dealOwner)}
+              placeholder="e.g. Zenith Pictures"
+            />
+          </DealFormField>
+        </div>
+
         {/* Nested "Deal Details" card. Figma shows a heavier inner card */}
         <section className="flex flex-col gap-4 rounded-[8px] border border-border bg-white p-4 sm:p-5">
           <h2 className="text-[18px] font-semibold leading-[24px] tracking-[-0.36px] text-foreground">
@@ -160,7 +233,7 @@ export function DealForm({
                 <SelectContent>
                   {statusOptions.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option.charAt(0) + option.slice(1).toLowerCase()}
+                      {DEAL_STATUS_LABEL[option]}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -49,4 +49,11 @@ export const dealsService = {
     );
     return data;
   },
+
+  async duplicate(id: string): Promise<Deal> {
+    const { data } = await apiClient.post<Deal>(
+      API_ENDPOINTS.DEALS.DUPLICATE(id),
+    );
+    return data;
+  },
 };

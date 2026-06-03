@@ -58,6 +58,20 @@ enum DealStatus {
   ACTIVE
   SUSPENDED
   CLOSED
+  TERMINATED
+  ARCHIVED
+}
+
+// Domain taxonomy for the kind of project a Deal represents. Drives the
+// "Film deal" / "Music deal" subtitle on Deal Overview, filtering, and
+// downstream reporting. Per Round 4 (Liang).
+enum DealCategory {
+  MUSIC
+  FILM_AND_TV
+  LIVE_EVENTS_AND_SPORTS
+  GAMES_AND_INTERACTIVE_MEDIA
+  CREATOR_AND_CONSUMER_IP
+  AI_AND_FUTURE_MEDIA
 }
 
 enum DocumentType {
@@ -98,18 +112,20 @@ enum SettlementRunStatus {
 // ===========================================
 
 model Deal {
-  id               String    @id @default(uuid())
-  name             String    @db.VarChar(255)
-  description      String?   @db.Text
-  status           DealStatus @default(DRAFT)
-  currency         Currency  @default(USD)
-  effectiveDate    DateTime  @map("effective_date")
-  terminationDate  DateTime? @map("termination_date")
-  notes            String?   @db.Text // free-form notes on the deal; FE currently only collects this from the Suspend Deal modal, so service-level logic auto-clears it when status moves out of SUSPENDED
+  id               String        @id @default(uuid())
+  name             String        @db.VarChar(255)
+  description      String?       @db.Text
+  status           DealStatus    @default(DRAFT)
+  category         DealCategory? // Optional — pre-existing deals migrated in without one
+  dealOwner        String?       @map("deal_owner") @db.VarChar(255) // Free-form owner name (Creator / SPV / Label / Studio / Production Company / person)
+  currency         Currency      @default(USD)
+  effectiveDate    DateTime      @map("effective_date")
+  terminationDate  DateTime?     @map("termination_date")
+  notes            String?       @db.Text // free-form notes on the deal; FE currently only collects this from the Suspend Deal modal, so service-level logic auto-clears it when status moves out of SUSPENDED
   metadata         Json?
-  userId           String    @map("user_id")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  userId           String        @map("user_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
   // Relations
   user                User                 @relation(fields: [userId], references: [id])

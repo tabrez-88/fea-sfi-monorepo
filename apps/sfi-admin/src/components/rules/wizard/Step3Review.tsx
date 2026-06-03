@@ -715,15 +715,15 @@ type BehaviorBadgeProps = Readonly<{
 
 const BEHAVIOR_STYLES: Record<ParticipantBehavior, { label: string; cls: string }> = {
   FEE_DEDUCTION: {
-    label: 'Fee Deductions',
+    label: 'Fee Deduction',
     cls: 'border-[#9A09FB] text-[#9A09FB]',
   },
   FLAT_FEE: {
-    label: 'Flat Fee',
+    label: 'Fixed Payment',
     cls: 'border-[#560590] text-[#560590]',
   },
   NET_PROFIT_SHARE: {
-    label: 'Profit Share',
+    label: 'Revenue Share',
     cls: 'border-[#0972FB] text-[#0972FB]',
   },
   RECOUPMENT: {

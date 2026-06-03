@@ -1,6 +1,11 @@
 import { Deal } from '@prisma/client';
 
-import { DealCurrencyDto, DealResponseDto, DealStatusDto } from '../dto';
+import {
+  DealCategoryDto,
+  DealCurrencyDto,
+  DealResponseDto,
+  DealStatusDto,
+} from '../dto';
 
 /**
  * Optional aggregates that can be attached to a deal at query time
@@ -22,6 +27,8 @@ export class DealMapper {
       name: deal.name,
       description: deal.description,
       status: deal.status as DealStatusDto,
+      category: deal.category as DealCategoryDto | null,
+      dealOwner: deal.dealOwner,
       currency: deal.currency as DealCurrencyDto,
       effectiveDate: deal.effectiveDate,
       terminationDate: deal.terminationDate,

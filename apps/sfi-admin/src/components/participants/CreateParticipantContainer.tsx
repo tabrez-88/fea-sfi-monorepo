@@ -1,6 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
 import { toast } from 'sonner';
 
 import { BackLink } from '@/components/common/BackLink';
@@ -8,11 +9,22 @@ import { AddParticipantForm } from '@/components/participants/AddParticipantForm
 import { ROUTES } from '@/constants/routes';
 import { useCreateParticipant } from '@/hooks/participants/useCreateParticipant';
 import { getApiErrorMessage } from '@/lib/axios';
-import type { CreateParticipantInput } from '@/types/participant.types';
+import {
+  ParticipantBehavior,
+  type CreateParticipantInput,
+} from '@/types/participant.types';
 
 type CreateParticipantContainerProps = Readonly<{
   dealId: string;
 }>;
+
+const VALID_BEHAVIORS: ReadonlySet<ParticipantBehavior> = new Set([
+  ParticipantBehavior.FEE_DEDUCTION,
+  ParticipantBehavior.RECOUPMENT,
+  ParticipantBehavior.NET_PROFIT_SHARE,
+  ParticipantBehavior.FLAT_FEE,
+  ParticipantBehavior.PASS_THROUGH,
+]);
 
 /**
  * Client container wiring the Add Participant form to its create mutation.
@@ -25,8 +37,30 @@ export function CreateParticipantContainer({
   dealId,
 }: CreateParticipantContainerProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { mutateAsync, isPending } = useCreateParticipant(dealId);
   const listHref = ROUTES.DEALS.PARTICIPANTS(dealId);
+
+  // Honor optional deep-link query params so the Rule Snapshot wizard's
+  // "Add Investor Manually" CTA can land the admin on this page with
+  // Recoupment + Pool pre-selected (no manual radio toggling).
+  // Round 4 / Liang item #12.
+  const initialValues = useMemo(() => {
+    const behaviorParam = searchParams.get('behavior') as
+      | ParticipantBehavior
+      | null;
+    const poolParam = searchParams.get('poolMember');
+    const values: Partial<CreateParticipantInput> = {};
+    if (behaviorParam && VALID_BEHAVIORS.has(behaviorParam)) {
+      values.behaviorType = behaviorParam;
+    }
+    if (poolParam === '1' || poolParam === 'true') {
+      values.poolMember = true;
+    } else if (poolParam === '0' || poolParam === 'false') {
+      values.poolMember = false;
+    }
+    return Object.keys(values).length > 0 ? values : undefined;
+  }, [searchParams]);
 
   async function handleSubmit(values: CreateParticipantInput) {
     try {
@@ -52,6 +86,7 @@ export function CreateParticipantContainer({
         dealId={dealId}
         cancelHref={listHref}
         isSubmitting={isPending}
+        {...(initialValues ? { initialValues } : {})}
         onSubmit={(input) => {
           void handleSubmit(input);
         }}

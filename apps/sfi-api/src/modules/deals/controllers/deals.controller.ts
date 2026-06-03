@@ -136,4 +136,20 @@ export class DealsController {
   ): Promise<DealResponseDto> {
     return this.dealsService.update(user.id, id, updateDealDto);
   }
+
+  @Post(':id/duplicate')
+  @ApiOperation({
+    summary: 'Duplicate a deal as a new DRAFT',
+    description:
+      'Clones an existing deal\'s static fields (name + " (Copy)", description, category, dealOwner, currency, effective/termination dates) into a new DRAFT deal. Does NOT carry over participants, rule snapshots, revenue batches, or settlement runs — those belong to the original. Returns the newly-created deal. Per Liang Round 4: this is the escape hatch so a closed/completed deal can spawn a follow-up without retyping everything (closed deals stay immutable).',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 201, description: 'New deal created', type: DealResponseDto })
+  @ApiResponse({ status: 404, description: 'Source deal not found' })
+  async duplicate(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DealResponseDto> {
+    return this.dealsService.duplicate(user.id, id);
+  }
 }
