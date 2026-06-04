@@ -147,7 +147,16 @@ export function AddParticipantForm({
   const [email, setEmail] = useState(initialValues?.email ?? '');
   const [errors, setErrors] = useState<FieldErrors>({});
 
-  const isRecoupment = behaviorType === ParticipantBehavior.RECOUPMENT;
+  // Round 4 (Liang) #9: Revenue Share also supports an investor pool
+  // (the "Revenue Share Pool" pattern — investors buy units, pool gets
+  // a % of gross/net for a defined term, no recoupment cap). Same
+  // Investment / Units / Price Per Unit fields apply; the recoupment
+  // semantics just don't fire downstream in the engine when the
+  // snapshot mode is revenue_share. Both behaviors expose the same
+  // form card to keep the data model uniform.
+  const showInvestmentCard =
+    behaviorType === ParticipantBehavior.RECOUPMENT ||
+    behaviorType === ParticipantBehavior.NET_PROFIT_SHARE;
 
   const computedPrice = useMemo(() => {
     const inv = Number(investmentAmount);
@@ -225,7 +234,7 @@ export function AddParticipantForm({
 
     if (email.trim()) input.email = email.trim();
 
-    if (isRecoupment) {
+    if (showInvestmentCard) {
       input.poolMember = poolMember;
       const inv = parseOptionalNumber(investmentAmount);
       const u = parseOptionalNumber(units);
@@ -300,7 +309,7 @@ export function AddParticipantForm({
           when you build a Rule Snapshot.
         </Banner>
 
-        {isRecoupment && (
+        {showInvestmentCard && (
           <InvestmentDetailsCard
             poolMember={poolMember}
             onPoolMemberChange={setPoolMember}

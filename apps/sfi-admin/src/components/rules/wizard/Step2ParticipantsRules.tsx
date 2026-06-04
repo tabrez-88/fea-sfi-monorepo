@@ -134,77 +134,46 @@ export function Step2ParticipantsRules({
   }
 
   /**
-   * One-shot auto-populate, combined for two seed flows so they share a
-   * single `onChange` call. Splitting them caused a clobber bug: each
-   * effect spread the same stale `values` closure, so whichever ran
-   * second overwrote the first's update before the next render arrived.
+   * One-shot auto-populate for Allocation Targets on first mount.
    *
-   * Seeded on first mount (each independently gated):
-   *   1. Deductions: when the Deductions Layer is on, the rows array is
-   *      empty, and the deal has Fee Deduction participants — seed one
-   *      card per participant.
-   *   2. Allocation Targets: when only the default `[POOL_TARGET_ID]` is
-   *      selected and the deal has eligible candidates — pre-check all
-   *      of them so the distribution tables show the full deal roster.
+   * Round 4 (Liang) item #15: the Deductions Layer USED to auto-seed
+   * the rows with every Fee Deduction participant on the deal. Liang
+   * pushed back — that pre-fill bled across deals (her test deal
+   * inherited fee rows from a previous one) and she preferred a blank
+   * slate. The deductions auto-seed is now an explicit user action
+   * (the "Quick add Fee Deduction participants" button below); only
+   * Allocation Targets stays auto-seeded because that aggregate set
+   * has no cross-deal contamination risk.
    *
-   * The admin can still uncheck targets or remove deduction rows after
-   * the seed; the `populatedRef` lock keeps the effect from re-firing.
+   * The `populatedRef` lock prevents re-firing after the admin
+   * un-checks targets or before later participant queries hydrate.
    */
   const populatedRef = useRef(false);
   useEffect(() => {
     if (populatedRef.current) return;
 
-    let nextDeductions: DeductionRow[] | null = null;
-    let nextSelectedTargets: string[] | null = null;
-
-    const shouldSeedDeductions =
-      values.deductionsEnabled &&
-      values.deductions.length === 0 &&
-      feeDeductionParticipants.length > 0;
-    if (shouldSeedDeductions) {
-      nextDeductions = feeDeductionParticipants.map((p) => ({
-        id: cryptoRandomId(),
-        participantId: p.id,
-        name: p.name,
-        role: p.roleName,
-        feeType: 'percent_gross',
-        amount: '',
-        included: true,
-      }));
-    }
-
     const onlyPoolSelected =
       values.selectedTargets.length === 1 &&
       values.selectedTargets[0] === POOL_TARGET_ID;
     const shouldSeedTargets = onlyPoolSelected && allocationCandidates.length > 0;
-    if (shouldSeedTargets) {
-      nextSelectedTargets = [
-        POOL_TARGET_ID,
-        ...allocationCandidates.map((p) => p.id),
-      ];
-    }
 
-    // Nothing to do this render — wait until the queries hydrate before
-    // locking, in case participants arrive on a later render.
-    if (nextDeductions === null && nextSelectedTargets === null) {
-      const deductionsAlreadyAuthored =
-        values.deductions.length > 0 || !values.deductionsEnabled;
-      const targetsAlreadyAuthored = !onlyPoolSelected;
-      if (deductionsAlreadyAuthored && targetsAlreadyAuthored) {
-        populatedRef.current = true;
-      }
+    if (!shouldSeedTargets) {
+      // Either already populated, hand-edited, or the participants
+      // query hasn't hydrated yet. Lock only when there's nothing
+      // left to do — otherwise wait for a later render.
+      if (!onlyPoolSelected) populatedRef.current = true;
       return;
     }
 
     populatedRef.current = true;
     onChange({
       ...values,
-      ...(nextDeductions !== null ? { deductions: nextDeductions } : {}),
-      ...(nextSelectedTargets !== null
-        ? { selectedTargets: nextSelectedTargets }
-        : {}),
+      selectedTargets: [
+        POOL_TARGET_ID,
+        ...allocationCandidates.map((p) => p.id),
+      ],
     });
-  }, [values, feeDeductionParticipants, allocationCandidates, onChange]);
+  }, [values, allocationCandidates, onChange]);
 
   const selectedTargets = values.selectedTargets;
   const hasSelectedTargets = selectedTargets.length > 0;
@@ -228,6 +197,7 @@ export function Step2ParticipantsRules({
         dealId={dealId}
         enabled={values.deductionsEnabled}
         rows={values.deductions}
+        feeDeductionParticipants={feeDeductionParticipants}
         onEnabledChange={(enabled) => update('deductionsEnabled', enabled)}
         onRowsChange={(rows) => update('deductions', rows)}
       />
@@ -493,6 +463,13 @@ type DeductionsLayerSectionProps = Readonly<{
   dealId: string;
   enabled: boolean;
   rows: ReadonlyArray<DeductionRow>;
+  /**
+   * All FEE_DEDUCTION-behavior participants on the deal. Used by the
+   * "Quick add" button so the admin can populate the deductions layer
+   * from existing participants in one click, instead of typing each
+   * one. Empty when the deal has no fee-deduction participants yet.
+   */
+  feeDeductionParticipants: ReadonlyArray<Participant>;
   onEnabledChange: (next: boolean) => void;
   onRowsChange: (next: DeductionRow[]) => void;
 }>;
@@ -507,6 +484,7 @@ function DeductionsLayerSection({
   dealId,
   enabled,
   rows,
+  feeDeductionParticipants,
   onEnabledChange,
   onRowsChange,
 }: DeductionsLayerSectionProps) {
@@ -532,6 +510,36 @@ function DeductionsLayerSection({
     onRowsChange(rows.filter((r) => r.id !== id));
   }
 
+  // Quick-add: seed the deductions layer with one row per existing
+  // FEE_DEDUCTION participant on the deal. Skips participants that
+  // already have a linked row so re-clicking the button doesn't
+  // duplicate rows (Round 4 / Liang #15: she pushed back on the old
+  // auto-seed because it leaked rows from past deals, so this stays
+  // opt-in via the button).
+  function quickAddAll() {
+    const existingLinkedIds = new Set(
+      rows.map((r) => r.participantId).filter((id): id is string => Boolean(id)),
+    );
+    const newRows: DeductionRow[] = feeDeductionParticipants
+      .filter((p) => !existingLinkedIds.has(p.id))
+      .map((p) => ({
+        id: cryptoRandomId(),
+        participantId: p.id,
+        name: p.name,
+        role: p.roleName,
+        feeType: 'percent_gross',
+        amount: '',
+        included: true,
+      }));
+    if (newRows.length === 0) return;
+    onRowsChange([...rows, ...newRows]);
+  }
+
+  const hasUnlinkedFeeParticipants =
+    feeDeductionParticipants.some(
+      (p) => !rows.some((r) => r.participantId === p.id),
+    );
+
   return (
     <SectionCard
       title="Deductions Layer"
@@ -544,7 +552,8 @@ function DeductionsLayerSection({
         <div className="flex flex-col gap-3">
           {rows.length === 0 ? (
             <div className="rounded-[8px] border border-dashed border-border bg-grey-50/40 px-4 py-6 text-center text-[13px] text-neutral">
-              No deduction participants yet. Click below to add one.
+              No deduction participants yet. Click below to add one
+              {hasUnlinkedFeeParticipants ? ', or quick-add all existing Fee Deduction participants on this deal.' : '.'}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -559,15 +568,38 @@ function DeductionsLayerSection({
               ))}
             </div>
           )}
-          {/* Black-filled full-width button, matches Figma `1299:9808` */}
-          <Button
-            type="button"
-            onClick={() => setConfirmAddOpen(true)}
-            className="w-full"
-          >
-            <Plus className="size-4" aria-hidden />
-            Add Deduction Participant
-          </Button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {/* Quick-add ahead of the manual add when there are existing
+                fee-deduction participants to import. Outline style so
+                the manual "Add Deduction Participant" stays the primary
+                action (matches the original Figma flow). */}
+            {hasUnlinkedFeeParticipants && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={quickAddAll}
+                className="w-full sm:w-auto"
+              >
+                <Plus className="size-4" aria-hidden />
+                Quick add{' '}
+                {
+                  feeDeductionParticipants.filter(
+                    (p) => !rows.some((r) => r.participantId === p.id),
+                  ).length
+                }{' '}
+                from Participants
+              </Button>
+            )}
+            {/* Black-filled full-width button, matches Figma `1299:9808` */}
+            <Button
+              type="button"
+              onClick={() => setConfirmAddOpen(true)}
+              className="w-full sm:flex-1"
+            >
+              <Plus className="size-4" aria-hidden />
+              Add Deduction Participant
+            </Button>
+          </div>
         </div>
       )}
 
