@@ -7,8 +7,10 @@ import { toast } from 'sonner';
 import { BackLink } from '@/components/common/BackLink';
 import { AddParticipantForm } from '@/components/participants/AddParticipantForm';
 import { ROUTES } from '@/constants/routes';
+import { useDeal } from '@/hooks/deals/useDeal';
 import { useCreateParticipant } from '@/hooks/participants/useCreateParticipant';
 import { getApiErrorMessage } from '@/lib/axios';
+import { Currency } from '@/types/deal.types';
 import {
   ParticipantBehavior,
   type CreateParticipantInput,
@@ -39,6 +41,12 @@ export function CreateParticipantContainer({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { mutateAsync, isPending } = useCreateParticipant(dealId);
+  // Round 4 (Liang) #17: Investment Amount / Price Per Unit fields used
+  // to hardcode "$". Read the deal's currency so the form's symbol +
+  // locale formatting follows the actual deal currency (USD / EUR /
+  // GBP / etc.). Falls back to USD until the deal loads.
+  const dealQuery = useDeal(dealId);
+  const currency: Currency = dealQuery.data?.currency ?? Currency.USD;
   const listHref = ROUTES.DEALS.PARTICIPANTS(dealId);
 
   // Honor optional deep-link query params so the Rule Snapshot wizard's
@@ -84,6 +92,7 @@ export function CreateParticipantContainer({
 
       <AddParticipantForm
         dealId={dealId}
+        currency={currency}
         cancelHref={listHref}
         isSubmitting={isPending}
         {...(initialValues ? { initialValues } : {})}

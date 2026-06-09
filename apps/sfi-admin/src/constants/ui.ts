@@ -41,6 +41,31 @@ export const DEAL_STATUS_LABEL: Record<DealStatus, string> = {
 };
 
 /**
+ * Verbatim status definitions from Liang's Part 2 reply (2026-06-05).
+ * Surfaced as hover tooltips on the status badge + as inline help text
+ * below the Status select in Create / Edit Deal forms so the admin
+ * doesn't have to guess which lifecycle state applies.
+ *
+ * Key conceptual distinction:
+ *   - Completed = Ended as Planned
+ *   - Terminated = Ended Early
+ */
+export const DEAL_STATUS_DEFINITION: Record<DealStatus, string> = {
+  DRAFT:
+    'The deal is still being configured. Participants, revenue sources, settlement rules, and other details may still be incomplete. The deal is not yet active.',
+  ACTIVE:
+    'The deal is currently in effect. Revenue may be reported, settlement runs may be executed, and participants may receive allocations according to the Rule Snapshot.',
+  SUSPENDED:
+    'The deal has been temporarily suspended. No new settlement runs should occur while the deal is paused, but it may be reactivated later.',
+  CLOSED:
+    'Ended as planned. Examples: reaching the end of a fixed term, satisfying a recoupment requirement, or completing a project lifecycle.',
+  TERMINATED:
+    'Ended before its originally planned completion. Examples: contract cancellation, acquisition, buyout, restructuring, or legal termination.',
+  ARCHIVED:
+    'Retained as a historical record. Hidden from active workflows but remain available for audit, reporting, and reference purposes.',
+};
+
+/**
  * Display label for each Deal category. Underscored enum values become
  * human-readable strings here — keeps the rest of the UI from re-doing
  * the same string formatting at every call site.

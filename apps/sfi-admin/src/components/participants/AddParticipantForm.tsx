@@ -10,14 +10,60 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { Currency } from '@/types/deal.types';
 import {
   ParticipantBehavior,
   type CreateParticipantInput,
 } from '@/types/participant.types';
-import { formatCurrency } from '@/utils/format';
+// (formatCurrency import dropped — replaced by the local currency-aware
+// formatter below so each AddParticipantForm renders in the deal's own
+// currency rather than hardcoded USD.)
+
+/**
+ * Currency-aware money formatter. Replaces the global `formatCurrency`
+ * (USD-locked) so participant Investment / Price Per Unit fields render
+ * in the parent deal's actual currency (Liang Round 4 #17).
+ *
+ * Built per-render via `useMemo` in the consumer to avoid re-creating
+ * the Intl object on every keystroke.
+ */
+function createCurrencyFormatter(currency: Currency): (n: number) => string {
+  const fmt = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  });
+  return (n: number) => fmt.format(n);
+}
+
+/**
+ * Currency code → glyph for inline placeholder hints (Intl doesn't
+ * cleanly expose the symbol alone). Covers the 7 currencies the Deal
+ * model accepts; anything else falls back to the ISO code.
+ */
+const CURRENCY_SYMBOL: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CHF: 'CHF',
+  CAD: 'C$',
+  AUD: 'A$',
+};
+
+function currencySymbol(currency: Currency): string {
+  return CURRENCY_SYMBOL[currency] ?? currency;
+}
 
 type AddParticipantFormProps = Readonly<{
   dealId: string;
+  /**
+   * Parent deal's currency. Drives the symbol + locale formatting on
+   * Investment Amount / Price Per Unit fields + the "Computed: X / N = Y"
+   * helper. Defaults to USD for the rare case the caller doesn't have
+   * the deal record handy.
+   */
+  currency?: Currency;
   /** Used by the bottom Cancel button when `onCancel` is not provided. */
   cancelHref?: string;
   /**
@@ -108,6 +154,7 @@ function parseOptionalNumber(value: string): number | undefined {
  */
 export function AddParticipantForm({
   dealId,
+  currency = Currency.USD,
   cancelHref,
   onCancel,
   isSubmitting,
@@ -117,6 +164,8 @@ export function AddParticipantForm({
   submittingLabel = 'Adding...',
   disabled = false,
 }: AddParticipantFormProps) {
+  const formatMoney = useMemo(() => createCurrencyFormatter(currency), [currency]);
+  const symbol = currencySymbol(currency);
   const [name, setName] = useState(initialValues?.name ?? '');
   const [roleName, setRoleName] = useState(initialValues?.roleName ?? '');
   const [behaviorType, setBehaviorType] = useState<ParticipantBehavior>(
@@ -323,6 +372,8 @@ export function AddParticipantForm({
             onPriceReset={handleResetPrice}
             computedPrice={computedPrice}
             errors={errors}
+            currencySymbol={symbol}
+            formatMoney={formatMoney}
           />
         )}
 
@@ -458,6 +509,10 @@ type InvestmentDetailsCardProps = Readonly<{
   onPriceReset: () => void;
   computedPrice: number | null;
   errors: FieldErrors;
+  /** Display-only glyph for placeholder hints (e.g. "$", "€", "£"). */
+  currencySymbol: string;
+  /** Formats numeric amounts in the parent deal's currency + locale. */
+  formatMoney: (n: number) => string;
 }>;
 
 function InvestmentDetailsCard({
@@ -473,6 +528,8 @@ function InvestmentDetailsCard({
   onPriceReset,
   computedPrice,
   errors,
+  currencySymbol,
+  formatMoney,
 }: InvestmentDetailsCardProps) {
   const investmentNum = Number(investmentAmount);
   const unitsNum = Number(units);
@@ -487,7 +544,9 @@ function InvestmentDetailsCard({
           onChange={onPoolMemberChange}
         />
         <p className="pl-[28px] text-[12px] leading-[16px] text-neutral">
-          Pool members split pool payouts proportionally by units held.
+          Pool members split pool payouts proportionally by units held.{' '}
+          Uncheck for participants who receive a fixed % share
+          independently (Studio, Director, Publisher, Creator SPV, etc.).
         </p>
       </div>
 
@@ -506,7 +565,7 @@ function InvestmentDetailsCard({
               step="any"
               value={investmentAmount}
               onChange={(e) => onInvestmentChange(e.target.value)}
-              placeholder="$50,000"
+              placeholder={`${currencySymbol}50,000`}
             />
           </Field>
           <Field id="units-held" label="Units Held" error={errors.units}>
@@ -532,7 +591,7 @@ function InvestmentDetailsCard({
             step="any"
             value={displayedPrice}
             onChange={(e) => onPriceChange(e.target.value)}
-            placeholder="$100"
+            placeholder={`${currencySymbol}100`}
           />
         </Field>
 
@@ -540,8 +599,8 @@ function InvestmentDetailsCard({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-[13px] leading-[18px] text-neutral">
               <span className="font-semibold text-foreground">Computed: </span>
-              {formatCurrency(investmentNum)} ÷ {unitsNum.toLocaleString()} ={' '}
-              {formatCurrency(computedPrice)}
+              {formatMoney(investmentNum)} ÷ {unitsNum.toLocaleString()} ={' '}
+              {formatMoney(computedPrice)}
             </p>
             {priceManuallySet && (
               <Button

@@ -73,7 +73,13 @@ export function buildRuleSnapshotPayload(
   } else if (step2.mode === 'recoup') {
     const tierSplits = buildSplits(step2.recoupRows, participants, errors, 'recoup splits');
     if (tierSplits.length > 0) {
-      tiers = [withExitConditions({ tier: 1, splits: tierSplits }, step2.exitConditions)];
+      tiers = [
+        withExitConditions(
+          { tier: 1, splits: tierSplits },
+          step2.exitConditions,
+          step1.effectiveFrom,
+        ),
+      ];
     }
   } else {
     // waterfall
@@ -118,7 +124,11 @@ export function buildRuleSnapshotPayload(
     // copy in `Step2ParticipantsRules.tsx` ExitConditionsSection.
     if (tier1Splits.length > 0) {
       tierRules.push(
-        withExitConditions({ tier: 1, splits: tier1Splits }, step2.exitConditions),
+        withExitConditions(
+          { tier: 1, splits: tier1Splits },
+          step2.exitConditions,
+          step1.effectiveFrom,
+        ),
       );
     }
     if (tier2Splits.length > 0) {
@@ -202,17 +212,44 @@ function buildDeductions(
   return out;
 }
 
+/**
+ * Round 4 (Liang) #16: the pool's percentage is no longer entered in
+ * the Pool Revenue Source section. Derive it from the pool's row in
+ * the mode-specific split table (revenue_share → splitRows,
+ * recoup → recoupRows, waterfall → tier2Rows is the post-recoup share
+ * the engine treats as the "pool revenue source" for downstream
+ * profit math). Returns an empty array when the pool isn't selected
+ * as an allocation target or has no positive percentage anywhere.
+ */
 function buildPoolRevenueSources(
   step2: WizardStep2Data,
-  errors: string[],
+  _errors: string[],
 ): PoolRevenueSourceRule[] {
   const poolSelected = step2.selectedTargets.includes(POOL_TARGET_ID);
   if (!poolSelected) return [];
-  const pct = Number(step2.poolRevenue.percentage);
-  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-    errors.push('Pool revenue percentage must be 0-100.');
-    return [];
+
+  // Pick the most meaningful split row for the pool's revenue source %:
+  //   - revenue_share: pool's row in `splitRows`
+  //   - recoup: pool's row in `recoupRows` (the recoup-phase % of revenue)
+  //   - waterfall: pool's row in `tier2Rows` (the post-recoup share; the
+  //     engine reads this for `poolRevenueSources`. Tier 1's pool % is
+  //     about routing to recoup, not the long-term revenue source.)
+  let rawPct: string | undefined;
+  switch (step2.mode) {
+    case 'revenue_share':
+      rawPct = step2.splitRows[POOL_TARGET_ID];
+      break;
+    case 'recoup':
+      rawPct = step2.recoupRows[POOL_TARGET_ID];
+      break;
+    case 'waterfall':
+      rawPct = step2.tier2Rows[POOL_TARGET_ID];
+      break;
   }
+  if (rawPct === undefined || rawPct === '') return [];
+  const pct = Number(rawPct);
+  if (!Number.isFinite(pct) || pct <= 0 || pct > 100) return [];
+
   return [{ poolId: POOL_ID, percentage: pct, basis: step2.poolRevenue.basis }];
 }
 
@@ -246,16 +283,53 @@ function buildSplits(
 function withExitConditions(
   tier: WaterfallTierRule,
   exit: ExitConditionsData,
+  effectiveFrom: string,
 ): WaterfallTierRule {
   const out: WaterfallTierRule = { ...tier };
   if (exit.hardCapEnabled) {
     const hc = Number(exit.hardCapMultiplier);
     if (Number.isFinite(hc) && hc > 0) out.hardCapMultiplier = hc;
   }
-  if (exit.deadlineEnabled && exit.deadline) {
-    out.deadline = exit.deadline;
+  const computedDeadline = computeTermDeadline(exit, effectiveFrom);
+  if (computedDeadline !== null) {
+    out.deadline = computedDeadline;
   }
   return out;
+}
+
+/**
+ * Compute an ISO date deadline from the wizard's term inputs.
+ * Returns `null` for perpetual / blank / invalid inputs (engine treats
+ * absent `deadline` as no-term).
+ *
+ * `effectiveFrom` is the snapshot's start date from Step 1; falls back
+ * to "today" if the admin somehow reaches Step 2 without it (validator
+ * should catch that earlier, but defensive default keeps things sane).
+ */
+function computeTermDeadline(
+  exit: ExitConditionsData,
+  effectiveFrom: string,
+): string | null {
+  if (exit.termMode !== 'fixed') return null;
+  const length = Number(exit.termLength);
+  if (!Number.isFinite(length) || length <= 0) return null;
+
+  const start = effectiveFrom ? new Date(effectiveFrom) : new Date();
+  if (Number.isNaN(start.getTime())) return null;
+
+  const end = new Date(start);
+  switch (exit.termUnit) {
+    case 'days':
+      end.setUTCDate(end.getUTCDate() + length);
+      break;
+    case 'months':
+      end.setUTCMonth(end.getUTCMonth() + length);
+      break;
+    case 'years':
+      end.setUTCFullYear(end.getUTCFullYear() + length);
+      break;
+  }
+  return end.toISOString();
 }
 
 function buildParticipantInputs(

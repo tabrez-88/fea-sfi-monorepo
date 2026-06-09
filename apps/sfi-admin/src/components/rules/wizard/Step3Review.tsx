@@ -669,7 +669,7 @@ function InvestorPoolConfigCard({ step2, participants }: InvestorPoolConfigProps
         />
         <SummaryRow
           label="Pool Revenue Source"
-          value={`${formatNumber(Number(step2.poolRevenue.percentage) || 0)}% of ${
+          value={`${formatNumber(poolSourcePercentage(step2))}% of ${
             step2.poolRevenue.basis === 'GROSS' ? 'Gross' : 'Net'
           }`}
         />
@@ -778,4 +778,27 @@ function numericValue(raw: string | undefined): number | null {
   if (raw === undefined || raw === '') return null;
   const n = Number(raw);
   return Number.isFinite(n) && n !== 0 ? n : null;
+}
+
+/**
+ * Round 4 (Liang) #16: the pool's revenue-source percentage is no
+ * longer entered separately — it's the pool's row in the mode-specific
+ * split table. Mirror the payload assembler's derivation here so the
+ * Review preview matches what'll actually be sent.
+ */
+function poolSourcePercentage(step2: WizardStep2Data): number {
+  let raw: string | undefined;
+  switch (step2.mode) {
+    case 'revenue_share':
+      raw = step2.splitRows[POOL_TARGET_ID];
+      break;
+    case 'recoup':
+      raw = step2.recoupRows[POOL_TARGET_ID];
+      break;
+    case 'waterfall':
+      raw = step2.tier2Rows[POOL_TARGET_ID];
+      break;
+  }
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }

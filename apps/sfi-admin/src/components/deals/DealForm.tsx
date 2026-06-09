@@ -15,7 +15,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { DEAL_CATEGORY_LABEL, DEAL_STATUS_LABEL } from '@/constants/ui';
+import {
+  DEAL_CATEGORY_LABEL,
+  DEAL_STATUS_DEFINITION,
+  DEAL_STATUS_LABEL,
+} from '@/constants/ui';
 import { DealCategory, DealStatus } from '@/types/deal.types';
 import type { CreateDealInput, Deal, UpdateDealInput } from '@/types/deal.types';
 
@@ -225,14 +229,22 @@ export function DealForm({
             Deal Details
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <DealFormField id="deal-status" label="Status">
+            <DealFormField
+              id="deal-status"
+              label="Status"
+              helpText={DEAL_STATUS_DEFINITION[status]}
+            >
               <Select value={status} onValueChange={(value) => setStatus(value as DealStatus)}>
                 <SelectTrigger id="deal-status" aria-label="Deal status">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {statusOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
+                    <SelectItem
+                      key={option}
+                      value={option}
+                      title={DEAL_STATUS_DEFINITION[option]}
+                    >
                       {DEAL_STATUS_LABEL[option]}
                     </SelectItem>
                   ))}

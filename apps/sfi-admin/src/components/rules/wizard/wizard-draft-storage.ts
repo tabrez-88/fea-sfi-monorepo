@@ -18,7 +18,13 @@ import type { WizardState } from './wizard-state.types';
  */
 
 const STORAGE_PREFIX = 'sfi_rule_wizard_draft';
-const SCHEMA_VERSION = 1;
+// v2: Round 4 (Liang) replaced `deadlineEnabled` + `deadline` on
+// `ExitConditionsData` with `termMode` + `termLength` + `termUnit`.
+// v3: Round 4 (Liang) #16 dropped `poolRevenue.percentage` — the pool's
+// percentage now comes from its row in the splits, so the wizard only
+// stores the `basis` selector locally.
+// Bumping the version silently discards older drafts on first re-open.
+const SCHEMA_VERSION = 3;
 
 interface DraftEnvelope {
   version: number;

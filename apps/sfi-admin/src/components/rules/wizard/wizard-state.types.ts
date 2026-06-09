@@ -70,13 +70,37 @@ export const POOL_TARGET_ID = '__pool__';
  */
 export type DistributionRowMap = Record<string, string>;
 
+/**
+ * Time unit on the Deal Term picker. Per Round 4 (Liang): she wants
+ * Days / Months / Years so short-cycle deals (e.g. 90 days) and long
+ * catalog deals (e.g. 10 years) both feel natural.
+ */
+export type TermUnit = 'days' | 'months' | 'years';
+
+/**
+ * Deal Term mode. `perpetual` means no expiry deadline (engine sees
+ * `deadline: undefined`). `fixed` means the snapshot expires after
+ * `termLength × termUnit` from the effective date.
+ */
+export type TermMode = 'perpetual' | 'fixed';
+
 export interface ExitConditionsData {
   hardCapEnabled: boolean;
   /** String for form-input convenience; parsed on submit. */
   hardCapMultiplier: string;
-  deadlineEnabled: boolean;
-  /** ISO date string (yyyy-MM-dd) or empty. */
-  deadline: string;
+  /**
+   * Replaces the prior `deadlineEnabled` + `deadline` pair. The wizard
+   * collects a Length + Unit and the payload assembler computes a
+   * concrete `deadline` ISO date from `step1.effectiveFrom + (length × unit)`.
+   *
+   * `perpetual` mode emits no deadline (engine treats as no-term).
+   * `fixed` mode emits the computed deadline.
+   */
+  termMode: TermMode;
+  /** String for form-input convenience; parsed on submit. Ignored when `termMode === 'perpetual'`. */
+  termLength: string;
+  /** Time unit for `termLength`. Ignored when `termMode === 'perpetual'`. */
+  termUnit: TermUnit;
 }
 
 export interface WizardStep2Data {
@@ -89,8 +113,15 @@ export interface WizardStep2Data {
    * investor pool; other ids are participant ids.
    */
   selectedTargets: string[];
+  /**
+   * Pool revenue source basis ONLY — Round 4 (Liang) #16. The percentage
+   * the pool receives is derived from its row in `splitRows` /
+   * `tier2Rows` so the admin doesn't enter the same number twice and the
+   * splits sum to a clean 100%. The payload assembler reads the pool's
+   * split-row value and combines with this basis to build the wire
+   * `PoolRevenueSourceRule`.
+   */
   poolRevenue: {
-    percentage: string;
     basis: PoolRevenueBasis;
   };
   /** Recoup mode: per-target recoup multiplier %. */
@@ -127,7 +158,6 @@ export function buildInitialWizardState(): WizardState {
       deductions: [],
       selectedTargets: [POOL_TARGET_ID],
       poolRevenue: {
-        percentage: '100',
         basis: 'NET',
       },
       recoupRows: {},
@@ -137,8 +167,13 @@ export function buildInitialWizardState(): WizardState {
       exitConditions: {
         hardCapEnabled: false,
         hardCapMultiplier: '',
-        deadlineEnabled: false,
-        deadline: '',
+        // Default Perpetual so admins who don't think about expiry
+        // get a no-op default (engine sees no deadline). Switching to
+        // Fixed seeds the most common shape: 5 Years (catalog default
+        // from Liang's test pack).
+        termMode: 'perpetual',
+        termLength: '5',
+        termUnit: 'years',
       },
     },
   };

@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { BackLink } from '@/components/common/BackLink';
 import { Stepper } from '@/components/common/Stepper';
@@ -18,6 +19,7 @@ import { Step3Review } from './Step3Review';
 import { wizardDraftStorage } from './wizard-draft-storage';
 import {
   buildInitialWizardState,
+  POOL_TARGET_ID,
   type WizardStep1Data,
   type WizardStep2Data,
   type WizardState,
@@ -92,7 +94,47 @@ export function CreateRuleSnapshotContainer({
     sortBy: 'createdAt',
     sortOrder: 'desc',
   });
-  const participants = participantsQuery.data?.data ?? [];
+  // Memoize so the array reference is stable when the underlying data
+  // hasn't changed — keeps the sanitization effect's dep array from
+  // firing on every render. (`useMemo` with `participantsQuery.data`
+  // as the dep means the array re-creates only on actual data change.)
+  const participants = useMemo(
+    () => participantsQuery.data?.data ?? [],
+    [participantsQuery.data],
+  );
+
+  // Round 4 (Liang) #23: when the wizard restores a draft from
+  // localStorage, validate every participant-id reference against the
+  // freshly-fetched participants list. Drop any IDs that no longer
+  // exist on the deal (typical case: the admin edited the deal's
+  // participants between two wizard sessions) and surface a toast so
+  // the admin knows rows were cleared. Without this, Create Snapshot
+  // returns a "Participants not found in this deal: <UUID>, <UUID>"
+  // error that's mysterious to anyone who doesn't remember they
+  // deleted a participant earlier.
+  //
+  // Runs ONCE per mount, gated on `participantsQuery.isSuccess` so it
+  // fires only after the live list arrives (not on the initial empty
+  // array). Subsequent in-session edits to participants don't
+  // re-sanitize — the admin sees + drives those changes themselves.
+  const sanitizedRef = useRef(false);
+  useEffect(() => {
+    if (sanitizedRef.current) return;
+    if (!participantsQuery.isSuccess) return;
+    sanitizedRef.current = true;
+
+    const validIds = new Set(participants.map((p) => p.id));
+    const { state: sanitized, droppedCount } = sanitizeDraftState(
+      state,
+      validIds,
+    );
+    if (droppedCount === 0) return;
+
+    setState(sanitized);
+    toast.info(
+      `Restored your draft, but ${droppedCount} reference${droppedCount === 1 ? '' : 's'} to participants no longer on this deal ${droppedCount === 1 ? 'was' : 'were'} cleared.`,
+    );
+  }, [participantsQuery.isSuccess, participants, state]);
 
   const nextVersion = useMemo(() => {
     const top = snapshotsQuery.data?.data?.[0];
@@ -176,6 +218,7 @@ export function CreateRuleSnapshotContainer({
         <Step2ParticipantsRules
           dealId={dealId}
           values={state.step2}
+          effectiveFrom={state.step1.effectiveFrom}
           onChange={handleStep2Change}
           onPrev={() => goToStep(1)}
           onNext={handleStep2Next}
@@ -196,4 +239,74 @@ export function CreateRuleSnapshotContainer({
       )}
     </div>
   );
+}
+
+/**
+ * Prune any participant-id reference in the wizard state that doesn't
+ * appear in the freshly-fetched participants list. Returns the cleaned
+ * state plus a count of how many references were dropped (used to
+ * decide whether to surface a toast).
+ *
+ * Pure function, easy to unit-test. Walks every field on Step 2 that
+ * carries a participantId:
+ *   - selectedTargets: filter to known IDs + POOL_TARGET_ID sentinel
+ *   - distribution rows (4 maps): drop keys not in the known set
+ *   - deductions: drop entries with an unknown linked participantId
+ */
+function sanitizeDraftState(
+  state: WizardState,
+  validIds: Set<string>,
+): { state: WizardState; droppedCount: number } {
+  let dropped = 0;
+
+  const cleanedTargets = state.step2.selectedTargets.filter((id) => {
+    if (id === POOL_TARGET_ID) return true;
+    if (validIds.has(id)) return true;
+    dropped++;
+    return false;
+  });
+
+  function cleanRowMap(rows: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [id, value] of Object.entries(rows)) {
+      if (id === POOL_TARGET_ID || validIds.has(id)) {
+        out[id] = value;
+      } else {
+        dropped++;
+      }
+    }
+    return out;
+  }
+
+  const cleanedRecoup = cleanRowMap(state.step2.recoupRows);
+  const cleanedTier1 = cleanRowMap(state.step2.tier1Rows);
+  const cleanedTier2 = cleanRowMap(state.step2.tier2Rows);
+  const cleanedSplits = cleanRowMap(state.step2.splitRows);
+
+  const cleanedDeductions = state.step2.deductions.filter((d) => {
+    if (!d.participantId) return true; // net-new rows have no id yet
+    if (validIds.has(d.participantId)) return true;
+    dropped++;
+    return false;
+  });
+
+  if (dropped === 0) {
+    return { state, droppedCount: 0 };
+  }
+
+  return {
+    state: {
+      ...state,
+      step2: {
+        ...state.step2,
+        selectedTargets: cleanedTargets,
+        recoupRows: cleanedRecoup,
+        tier1Rows: cleanedTier1,
+        tier2Rows: cleanedTier2,
+        splitRows: cleanedSplits,
+        deductions: cleanedDeductions,
+      },
+    },
+    droppedCount: dropped,
+  };
 }

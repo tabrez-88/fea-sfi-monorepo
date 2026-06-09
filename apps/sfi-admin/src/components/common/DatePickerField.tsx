@@ -109,6 +109,12 @@ export function DatePickerField({
                 onChange('');
               }
             }}
+            // Round 4 (Liang) #18: month + year dropdowns in the header
+            // so admins can jump by year (catalog deals span 5-10y, so
+            // clicking month-by-month was a usability complaint).
+            captionLayout="dropdown"
+            startMonth={new Date(new Date().getFullYear() - 10, 0, 1)}
+            endMonth={new Date(new Date().getFullYear() + 50, 11, 31)}
             autoFocus
           />
           {value && (

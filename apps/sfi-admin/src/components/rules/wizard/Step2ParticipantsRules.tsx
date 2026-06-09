@@ -13,7 +13,6 @@ import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { Banner } from '@/components/common/Banner';
-import { DatePickerField } from '@/components/common/DatePickerField';
 import { CsvDropzone } from '@/components/participants/import/CsvDropzone';
 import { RoleNameInput } from '@/components/participants/RoleNameInput';
 import { Button } from '@/components/ui/button';
@@ -36,8 +35,12 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
+import { useDeal } from '@/hooks/deals/useDeal';
+import { useCreateParticipant } from '@/hooks/participants/useCreateParticipant';
 import { useParticipants } from '@/hooks/participants/useParticipants';
+import { getApiErrorMessage } from '@/lib/axios';
 import { cn } from '@/lib/utils';
+import { Currency } from '@/types/deal.types';
 import { ParticipantBehavior, type Participant } from '@/types/participant.types';
 import type { SettlementMode } from '@/types/rule-snapshot.types';
 import { formatCurrency, formatNumber } from '@/utils/format';
@@ -49,12 +52,19 @@ import {
   type DistributionRowMap,
   type ExitConditionsData,
   type PoolRevenueBasis,
+  type TermUnit,
   type WizardStep2Data,
 } from './wizard-state.types';
 
 type Step2Props = Readonly<{
   dealId: string;
   values: WizardStep2Data;
+  /**
+   * Step 1's effective date (ISO yyyy-MM-dd or empty). Threaded down to
+   * the Exit Conditions section so the Deal Term picker can compute and
+   * display the End Date relative to the snapshot's start, not "today".
+   */
+  effectiveFrom: string;
   onChange: (next: WizardStep2Data) => void;
   onPrev: () => void;
   onNext: (values: WizardStep2Data) => void;
@@ -77,6 +87,7 @@ type Step2Props = Readonly<{
 export function Step2ParticipantsRules({
   dealId,
   values,
+  effectiveFrom,
   onChange,
   onPrev,
   onNext,
@@ -117,10 +128,15 @@ export function Step2ParticipantsRules({
   const allocationCandidates = useMemo(
     () =>
       participants.filter((p) => {
+        // Fee Deduction goes in the Deductions Layer above, not the
+        // splits. Pool members of ANY behavior aggregate into the
+        // Investor Pool target — listing them individually here would
+        // double-count their share (Round 4 #14 — fix expanded from
+        // RECOUPMENT-only to all behaviors after Liang's Revenue Share
+        // Pool work landed and started leaking pool members into the
+        // splits as duplicate rows).
         if (p.behaviorType === ParticipantBehavior.FEE_DEDUCTION) return false;
-        if (p.behaviorType === ParticipantBehavior.RECOUPMENT && p.poolMember === true) {
-          return false;
-        }
+        if (p.poolMember === true) return false;
         return true;
       }),
     [participants],
@@ -212,7 +228,6 @@ export function Step2ParticipantsRules({
       />
 
       <PoolRevenueSourceSection
-        percentage={values.poolRevenue.percentage}
         basis={values.poolRevenue.basis}
         deductionsEnabled={values.deductionsEnabled}
         onChange={(next) => update('poolRevenue', next)}
@@ -222,7 +237,7 @@ export function Step2ParticipantsRules({
         mode={values.mode}
         selectedTargets={selectedTargets}
         participants={participants}
-        poolMemberCount={poolMembers.length}
+        poolMembers={poolMembers}
         recoupRows={values.recoupRows}
         tier1Rows={values.tier1Rows}
         tier2Rows={values.tier2Rows}
@@ -236,6 +251,7 @@ export function Step2ParticipantsRules({
       <ExitConditionsSection
         mode={values.mode}
         data={values.exitConditions}
+        effectiveFrom={effectiveFrom}
         onChange={(next) => update('exitConditions', next)}
       />
 
@@ -895,79 +911,50 @@ function TargetRow({ checked, onToggle, label, sublabel, sublabelInParens }: Tar
 /* ─── Section: Pool Revenue Source ──────────────────────────────────────── */
 
 type PoolRevenueSourceSectionProps = Readonly<{
-  percentage: string;
   basis: PoolRevenueBasis;
   deductionsEnabled: boolean;
-  onChange: (next: { percentage: string; basis: PoolRevenueBasis }) => void;
+  onChange: (next: { basis: PoolRevenueBasis }) => void;
 }>;
 
+/**
+ * Round 4 (Liang) #16: stripped to a basis picker only. The pool's
+ * percentage is no longer entered here — it comes from the pool's row
+ * in the Revenue Split / Tier 2 table. Asking for it twice produced a
+ * 120% double-count and confused Liang on her first test. This section
+ * now exists solely to answer "is the pool's % taken from gross or
+ * net revenue?" and surfaces the explanation tooltips for #20.
+ */
 function PoolRevenueSourceSection({
-  percentage,
   basis,
   deductionsEnabled,
   onChange,
 }: PoolRevenueSourceSectionProps) {
-  const percentageNum = Number(percentage);
-  const isValidPct = Number.isFinite(percentageNum) && percentageNum >= 0 && percentageNum <= 100;
-  const remaining = isValidPct ? Math.max(0, 100 - percentageNum) : null;
-
   return (
     <SectionCard
       title="Pool Revenue Source"
-      description="Sets where the pool's payouts come from. Pick Gross Revenue (Type B in industry terms, % of top-line) or Net Revenue (Type A, % of what's left after deductions). The remaining % stays with the creator."
+      description="Sets whether the pool's share comes from Gross Revenue (before deductions) or Net Revenue (after deductions). The actual percentage is set on the Investor Pool row in the splits table below."
     >
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <Label className="text-[12px] font-medium text-foreground">
-            Take <span className="text-danger">*</span>
-          </Label>
-          <div className="relative max-w-[200px]">
-            <Input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              max={100}
-              step="any"
-              value={percentage}
-              onChange={(e) => onChange({ percentage: e.target.value, basis })}
-              placeholder="20"
-              className="h-9 pr-7 text-[13px]"
-            />
-            <span
-              aria-hidden
-              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[12px] text-neutral"
-            >
-              %
-            </span>
-          </div>
-        </div>
         <div className="flex flex-col gap-2">
           <Label className="text-[12px] font-medium text-foreground">
             From <span className="text-danger">*</span>
           </Label>
           <StackedRadio
             checked={basis === 'GROSS'}
-            onSelect={() => onChange({ percentage, basis: 'GROSS' })}
+            onSelect={() => onChange({ basis: 'GROSS' })}
             label="Gross Revenue"
+            sublabel="Pool's share is taken from the top, before any deductions. Use this when there are no deductions, or when the pool should ignore deductions."
           />
           <StackedRadio
             checked={basis === 'NET'}
-            onSelect={() => onChange({ percentage, basis: 'NET' })}
+            onSelect={() => onChange({ basis: 'NET' })}
             label="% of Net Revenue"
-            sublabel="Net Revenue = Gross Revenue minus Deductions"
+            sublabel="Pool's share is taken AFTER deductions are applied. Use this when deductions exist and the pool should pay its share of them first."
             disabled={!deductionsEnabled}
             disabledHint="Enable Deductions to use Net"
           />
         </div>
       </div>
-      {remaining !== null && remaining > 0 && (
-        <Banner tone="warning">
-          The remaining {remaining}% stays with the creator (not routed through tiers).
-        </Banner>
-      )}
-      {!isValidPct && (
-        <p className="text-[12px] text-danger">Percentage must be 0 to 100.</p>
-      )}
     </SectionCard>
   );
 }
@@ -1031,8 +1018,14 @@ type DistributionBodySectionProps = Readonly<{
   mode: SettlementMode;
   selectedTargets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
-  /** Pool member count surfaced beside the Investor Pool row labels. */
-  poolMemberCount: number;
+  /**
+   * Full pool members list. Used by `labelForTarget` to show the pool
+   * member's actual name when there's exactly one (Liang #24 — admins
+   * name the pool meaningfully and expect to see that name in
+   * Allocation Targets, not a generic "Investor Pool" label) and as
+   * "Investor Pool (N members)" when there are several.
+   */
+  poolMembers: ReadonlyArray<Participant>;
   recoupRows: DistributionRowMap;
   tier1Rows: DistributionRowMap;
   tier2Rows: DistributionRowMap;
@@ -1056,6 +1049,14 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
     );
   }
 
+  // Round 4 (Liang) #25: name the pool by participant when there's
+  // exactly one pool member so the empty-state hints below reference
+  // the same label the admin sees in Allocation Targets above.
+  const poolLabel =
+    props.poolMembers.length === 1
+      ? `"${props.poolMembers[0]!.name}"`
+      : 'the Investor Pool';
+
   if (mode === 'revenue_share') {
     return (
       <SectionCard
@@ -1069,7 +1070,7 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
           onChange={props.onSplitChange}
           targets={selectedTargets}
           participants={props.participants}
-          poolMemberCount={props.poolMemberCount}
+          poolMembers={props.poolMembers}
           placeholder="50"
         />
       </SectionCard>
@@ -1089,7 +1090,7 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
           onChange={props.onRecoupChange}
           targets={selectedTargets}
           participants={props.participants}
-          poolMemberCount={props.poolMemberCount}
+          poolMembers={props.poolMembers}
           placeholder="120"
         />
       </SectionCard>
@@ -1138,9 +1139,9 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
         onChange={props.onTier1Change}
         targets={tier1Targets}
         participants={props.participants}
-        poolMemberCount={props.poolMemberCount}
+        poolMembers={props.poolMembers}
         placeholder="100"
-        emptyHint="No recoupment-eligible targets selected. Add the Investor Pool or a Recoupment participant in Allocation Targets above to define a Tier 1 recoup."
+        emptyHint={`No recoupment-eligible targets selected. Add ${poolLabel} or a Recoupment participant in Allocation Targets above to define a Tier 1 recoup.`}
         layout="form"
       />
       <TierCard
@@ -1153,9 +1154,9 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
         onChange={props.onTier2Change}
         targets={tier2Targets}
         participants={props.participants}
-        poolMemberCount={props.poolMemberCount}
+        poolMembers={props.poolMembers}
         placeholder="20"
-        emptyHint="No profit-share targets selected. Pick the Investor Pool or a Profit Share / Flat Fee participant in Allocation Targets above to define a Tier 2 split."
+        emptyHint={`No profit-share targets selected. Pick ${poolLabel} or a Profit Share / Flat Fee participant in Allocation Targets above to define a Tier 2 split.`}
         showRunningTotal
         layout="table"
       />
@@ -1178,12 +1179,11 @@ type TierCardProps = Readonly<{
   targets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
   /**
-   * Number of pool-member participants on the deal. Surfaced as
-   * "Investor Pool (N participants)" next to the pool row label so
-   * admins can see at-a-glance how many investors back the pool target.
-   * Falls back to "Investor Pool" alone when 0 / undefined.
+   * Pool members on the deal. Used by `labelForTarget` so the pool row
+   * shows the actual participant name when there's exactly one member
+   * (Liang #24) and "Investor Pool (N members)" when there are several.
    */
-  poolMemberCount?: number | undefined;
+  poolMembers?: ReadonlyArray<Participant> | undefined;
   placeholder: string;
   /** When true, renders a "Running Total: N%" footer (green when 100, red otherwise). */
   showRunningTotal?: boolean;
@@ -1214,7 +1214,7 @@ function TierCard({
   onChange,
   targets,
   participants,
-  poolMemberCount,
+  poolMembers,
   placeholder,
   showRunningTotal = false,
   emptyHint,
@@ -1281,7 +1281,7 @@ function TierCard({
               valueSuffix,
               rows,
               participants,
-              poolMemberCount,
+              poolMembers,
               placeholder,
               updateCell,
             })}
@@ -1315,7 +1315,11 @@ type DistributionBodyProps = Readonly<{
   rows: DistributionRowMap;
   targets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
-  poolMemberCount?: number | undefined;
+  /**
+   * Pool members for `labelForTarget` so the pool row shows the actual
+   * participant name when there's exactly one member (Round 4 / Liang #24).
+   */
+  poolMembers?: ReadonlyArray<Participant> | undefined;
   placeholder: string;
   updateCell: (targetId: string, value: string) => void;
 }>;
@@ -1361,7 +1365,7 @@ function DistributionFormBody({
   rows,
   targets,
   participants,
-  poolMemberCount,
+  poolMembers,
   placeholder,
   updateCell,
 }: DistributionBodyProps) {
@@ -1377,7 +1381,7 @@ function DistributionFormBody({
           className="grid grid-cols-1 items-center gap-2 sm:grid-cols-[1fr_180px] sm:gap-x-3"
         >
           <TargetReadOnlyBox
-            label={labelForTarget(targetId, participants, poolMemberCount)}
+            label={labelForTarget(targetId, participants, poolMembers)}
           />
           <ValueInputCell
             value={rows[targetId] ?? ''}
@@ -1402,7 +1406,7 @@ function DistributionTableBody({
   rows,
   targets,
   participants,
-  poolMemberCount,
+  poolMembers,
   placeholder,
   updateCell,
 }: DistributionBodyProps) {
@@ -1418,7 +1422,7 @@ function DistributionTableBody({
           className="grid grid-cols-[1fr_180px] items-center gap-x-3 border-t border-grey-100 px-4 py-2"
         >
           <TargetReadOnlyBox
-            label={labelForTarget(targetId, participants, poolMemberCount)}
+            label={labelForTarget(targetId, participants, poolMembers)}
           />
           <ValueInputCell
             value={rows[targetId] ?? ''}
@@ -1445,7 +1449,7 @@ type DistributionTableProps = Readonly<{
   onChange: (next: DistributionRowMap) => void;
   targets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
-  poolMemberCount?: number | undefined;
+  poolMembers?: ReadonlyArray<Participant> | undefined;
   placeholder: string;
 }>;
 
@@ -1456,7 +1460,7 @@ function DistributionTable({
   onChange,
   targets,
   participants,
-  poolMemberCount,
+  poolMembers,
   placeholder,
 }: DistributionTableProps) {
   function updateCell(targetId: string, value: string) {
@@ -1469,7 +1473,7 @@ function DistributionTable({
       rows={rows}
       targets={targets}
       participants={participants}
-      poolMemberCount={poolMemberCount}
+      poolMembers={poolMembers}
       placeholder={placeholder}
       updateCell={updateCell}
     />
@@ -1520,12 +1524,21 @@ function ValueInputCell({ value, onChange, placeholder, suffix }: ValueInputCell
 function labelForTarget(
   targetId: string,
   participants: ReadonlyArray<Participant>,
-  poolMemberCount?: number,
+  poolMembers?: ReadonlyArray<Participant>,
 ): string {
   if (targetId === POOL_TARGET_ID) {
-    if (poolMemberCount && poolMemberCount > 0) {
-      const noun = poolMemberCount === 1 ? 'participant' : 'participants';
-      return `Investor Pool (${poolMemberCount} ${noun})`;
+    // Round 4 (Liang) #24: when there's exactly 1 pool member, show
+    // that participant's name as the target label. Admins name their
+    // pool member meaningfully (e.g. "FEA Investor Pool 120% of
+    // Capital Raise") and expect to see that name in Allocation
+    // Targets, not the generic "Investor Pool (1 participant)" which
+    // they read as a separate target and uncheck by mistake.
+    if (poolMembers && poolMembers.length === 1) {
+      return poolMembers[0]!.name;
+    }
+    if (poolMembers && poolMembers.length > 1) {
+      const noun = poolMembers.length === 1 ? 'member' : 'members';
+      return `Investor Pool (${poolMembers.length} ${noun})`;
     }
     return 'Investor Pool';
   }
@@ -1538,33 +1551,42 @@ function labelForTarget(
 type ExitConditionsSectionProps = Readonly<{
   mode: SettlementMode;
   data: ExitConditionsData;
+  /**
+   * Snapshot effective date from Step 1. Used as the Start Date for the
+   * Deal Term picker so the displayed End Date matches what the engine
+   * will see. Empty string when the admin hasn't picked a Step 1 date
+   * yet — DealTermPicker falls back to "today" for the display.
+   */
+  effectiveFrom: string;
   onChange: (next: ExitConditionsData) => void;
 }>;
 
-function ExitConditionsSection({ mode, data, onChange }: ExitConditionsSectionProps) {
+function ExitConditionsSection({
+  mode,
+  data,
+  effectiveFrom,
+  onChange,
+}: ExitConditionsSectionProps) {
   // Hard Cap only applies to Recoup + Waterfall (Revenue Share has no
   // capital recovery concept). Per Round 3 Comment 12.
   const supportsHardCap = mode !== 'revenue_share';
 
   // Description copy mirrors how many conditions the mode exposes — singular
-  // when Revenue Share only renders Deadline, plural otherwise.
+  // when Revenue Share only renders Deal Term, plural otherwise.
   const description = supportsHardCap
     ? 'Distribution stops when any of the checked conditions fires.'
-    : 'Distribution stops when the checked condition fires.';
+    : 'Distribution stops when the deal term expires.';
 
   // Warning banner copy:
-  //   - Revenue Share: spell out the constraint (Deadline only, deal term)
+  //   - Revenue Share: spell out the constraint (Term only, deal term)
   //     so admins don't go looking for Hard Cap.
-  //   - Recoup + Waterfall: bind to the recoup phase only. Chunk 3's
-  //     payload assembler must attach `deadline` / `hardCapMultiplier` to
-  //     the Tier 1 rule only in waterfall mode
-  //     (`tier1Rule.deadline = data.deadline`,
-  //     `tier1Rule.recoupMultiplier = data.hardCapMultiplier`); Tier 2
-  //     stays unbounded so the post-recoup split keeps running after the
-  //     recoup phase exits.
+  //   - Recoup + Waterfall: bind to the recoup phase only. The payload
+  //     assembler attaches `deadline` / `hardCapMultiplier` to the
+  //     Tier 1 rule only; Tier 2 stays unbounded so the post-recoup
+  //     split keeps running after the recoup phase exits.
   const applyHint =
     mode === 'revenue_share'
-      ? 'Revenue Share mode only supports the Deadline condition (deal term).'
+      ? 'Revenue Share mode only supports a deal-term expiry.'
       : 'Exit conditions apply to the recoup phase.';
 
   return (
@@ -1599,24 +1621,143 @@ function ExitConditionsSection({ mode, data, onChange }: ExitConditionsSectionPr
           </ExitConditionBox>
         )}
         <ExitConditionBox>
-          <CheckedToggleRow
-            label="Deadline"
-            checked={data.deadlineEnabled}
-            onChange={(checked) => onChange({ ...data, deadlineEnabled: checked })}
+          <p className="text-[14px] font-semibold leading-[20px] text-foreground">
+            Deal Term
+          </p>
+          <DealTermPicker
+            data={data}
+            effectiveFrom={effectiveFrom}
+            onChange={onChange}
           />
-          {data.deadlineEnabled && (
-            <DatePickerField
-              value={data.deadline}
-              onChange={(next) => onChange({ ...data, deadline: next })}
-              placeholder="Pick a deadline"
-              ariaLabel="Exit deadline"
-            />
-          )}
         </ExitConditionBox>
       </div>
       <Banner tone="warning">{applyHint}</Banner>
     </SectionCard>
   );
+}
+
+/**
+ * Round 4 (Liang) replacement for the bare Deadline date picker.
+ * Renders the two-mode Term widget she spec'd:
+ *
+ *   ○ Perpetual
+ *   ○ Fixed Term
+ *     Length: [N]
+ *     Unit: ○ Days ○ Months ○ Years
+ *     Start Date: <effectiveFrom or today>
+ *     End Date:   <Start + (N × unit)>
+ *
+ * The End Date is display-only; the payload assembler recomputes it
+ * server-bound from the same inputs to keep one source of truth.
+ */
+type DealTermPickerProps = Readonly<{
+  data: ExitConditionsData;
+  effectiveFrom: string;
+  onChange: (next: ExitConditionsData) => void;
+}>;
+
+function DealTermPicker({ data, effectiveFrom, onChange }: DealTermPickerProps) {
+  const isFixed = data.termMode === 'fixed';
+
+  const start = effectiveFrom ? new Date(effectiveFrom) : new Date();
+  const lengthNum = Number(data.termLength);
+  const computedEnd =
+    isFixed && Number.isFinite(lengthNum) && lengthNum > 0
+      ? addUnit(start, lengthNum, data.termUnit)
+      : null;
+
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <StackedRadio
+          checked={data.termMode === 'perpetual'}
+          onSelect={() => onChange({ ...data, termMode: 'perpetual' })}
+          label="Perpetual"
+          sublabel="Distribution continues with no expiry date."
+        />
+        <StackedRadio
+          checked={data.termMode === 'fixed'}
+          onSelect={() => onChange({ ...data, termMode: 'fixed' })}
+          label="Fixed Term"
+          sublabel="Distribution stops on a computed end date."
+        />
+      </div>
+
+      {isFixed && (
+        <div className="flex flex-col gap-3 rounded-[6px] border border-grey-100 bg-grey-50/40 px-4 py-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr]">
+            <div className="flex flex-col gap-1">
+              <Label className="text-[12px] font-medium text-foreground">
+                Length
+              </Label>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step="1"
+                value={data.termLength}
+                onChange={(e) => onChange({ ...data, termLength: e.target.value })}
+                placeholder="5"
+                className="h-9 text-[13px]"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-[12px] font-medium text-foreground">Unit</Label>
+              <div className="flex flex-wrap gap-3">
+                {(['days', 'months', 'years'] as const).map((unit) => (
+                  <label
+                    key={unit}
+                    className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground"
+                  >
+                    <input
+                      type="radio"
+                      name="term-unit"
+                      checked={data.termUnit === unit}
+                      onChange={() => onChange({ ...data, termUnit: unit })}
+                      className="size-[14px] accent-foreground"
+                    />
+                    <span className="capitalize">{unit}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-[12px] text-neutral">
+            <div>
+              <div className="font-medium text-foreground">Start Date</div>
+              <div>{fmt.format(start)}</div>
+            </div>
+            <div>
+              <div className="font-medium text-foreground">End Date</div>
+              <div>{computedEnd ? fmt.format(computedEnd) : '—'}</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function addUnit(start: Date, length: number, unit: TermUnit): Date {
+  const end = new Date(start);
+  switch (unit) {
+    case 'days':
+      end.setUTCDate(end.getUTCDate() + length);
+      break;
+    case 'months':
+      end.setUTCMonth(end.getUTCMonth() + length);
+      break;
+    case 'years':
+      end.setUTCFullYear(end.getUTCFullYear() + length);
+      break;
+  }
+  return end;
 }
 
 /**
@@ -1681,10 +1822,10 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
   const [file, setFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<PoolCsvParseResult | null>(null);
 
-  // Deep-link to the existing Add Participant form pre-selecting
-  // Recoupment + "Part of Investor Pool" so a one-off investor can be
-  // added without bouncing through a CSV. Per Liang Round 4 item #12.
-  const addInvestorHref = `${ROUTES.DEALS.PARTICIPANTS_NEW(dealId)}?behavior=RECOUPMENT&poolMember=1`;
+  // Round 4 (Liang) #19: replaces the previous deep-link to
+  // /participants/new with an inline modal so the admin can add a
+  // single investor without navigating away from the wizard.
+  const [addInvestorOpen, setAddInvestorOpen] = useState(false);
 
   // Parse client-side as soon as the admin picks a file so they can
   // sanity-check the rows before the snapshot is created. The actual
@@ -1717,11 +1858,14 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
       description="Define the internal share breakdown for the Investor Pool."
       headerRight={
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild type="button" variant="outline" size="sm">
-            <Link href={addInvestorHref}>
-              <Plus className="size-4" aria-hidden strokeWidth={1.75} />
-              Add Investor Manually
-            </Link>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setAddInvestorOpen(true)}
+          >
+            <Plus className="size-4" aria-hidden strokeWidth={1.75} />
+            Add Investor Manually
           </Button>
           <Button
             type="button"
@@ -1748,7 +1892,228 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
         sample row.
       </p>
       {parsed && <PoolCsvPreviewTable parsed={parsed} />}
+
+      <AddInvestorInlineDialog
+        dealId={dealId}
+        open={addInvestorOpen}
+        onOpenChange={setAddInvestorOpen}
+      />
     </SectionCard>
+  );
+}
+
+/* ─── Inline "Add Investor Manually" modal ──────────────────────────────── */
+
+type AddInvestorInlineDialogProps = Readonly<{
+  dealId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}>;
+
+/**
+ * Round 4 (Liang) #19: a small inline form so the admin can add a
+ * single pool-member investor without leaving the wizard. Posts to the
+ * same Create Participant endpoint as the full page but pre-fills
+ * `behaviorType: RECOUPMENT` + `poolMember: true` + a sensible role
+ * name. On success, the participants query invalidates so the wizard's
+ * pool member count + Allocation Targets refresh live.
+ */
+function AddInvestorInlineDialog({
+  dealId,
+  open,
+  onOpenChange,
+}: AddInvestorInlineDialogProps) {
+  const dealQuery = useDeal(dealId);
+  const currency: Currency = dealQuery.data?.currency ?? Currency.USD;
+  const currencyGlyph = useMemo(() => {
+    const map: Record<string, string> = {
+      USD: '$', EUR: '€', GBP: '£', JPY: '¥', CHF: 'CHF', CAD: 'C$', AUD: 'A$',
+    };
+    return map[currency] ?? currency;
+  }, [currency]);
+
+  const createMutation = useCreateParticipant(dealId);
+
+  const [name, setName] = useState('');
+  const [investmentAmount, setInvestmentAmount] = useState('');
+  const [units, setUnits] = useState('');
+  const [pricePerUnit, setPricePerUnit] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setName('');
+    setInvestmentAmount('');
+    setUnits('');
+    setPricePerUnit('');
+    setError(null);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next) reset();
+    onOpenChange(next);
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError('Name is required.');
+      return;
+    }
+    const inv = investmentAmount.trim() === '' ? undefined : Number(investmentAmount);
+    const u = units.trim() === '' ? undefined : Number(units);
+    const p = pricePerUnit.trim() === '' ? undefined : Number(pricePerUnit);
+    if (inv !== undefined && (!Number.isFinite(inv) || inv < 0)) {
+      setError('Investment amount must be a non-negative number.');
+      return;
+    }
+    if (u !== undefined && (!Number.isFinite(u) || u < 0)) {
+      setError('Units must be a non-negative number.');
+      return;
+    }
+    if (p !== undefined && (!Number.isFinite(p) || p < 0)) {
+      setError('Price per unit must be a non-negative number.');
+      return;
+    }
+    try {
+      await createMutation.mutateAsync({
+        name: trimmedName,
+        roleName: 'Investor',
+        behaviorType: ParticipantBehavior.RECOUPMENT,
+        poolMember: true,
+        ...(inv !== undefined ? { investmentAmount: inv } : {}),
+        ...(u !== undefined ? { units: u } : {}),
+        ...(p !== undefined ? { pricePerUnit: p } : {}),
+      });
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to add investor. Please try again.'));
+    }
+  }
+
+  const isSubmitting = createMutation.isPending;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>Add Investor Manually</DialogTitle>
+          <DialogDescription className="text-[14px] leading-[20px] text-neutral">
+            Adds a single investor to the Investor Pool on this deal. The
+            participant is created with behavior{' '}
+            <span className="font-semibold text-foreground">Recoupment</span>
+            {' '}and{' '}
+            <span className="font-semibold text-foreground">
+              Part of Investor Pool
+            </span>{' '}
+            checked.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="add-investor-name"
+              className="text-[13px] font-medium text-foreground"
+            >
+              Name <span className="text-danger">*</span>
+            </Label>
+            <Input
+              id="add-investor-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Alice Investor"
+              autoFocus
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="add-investor-amount"
+                className="text-[13px] font-medium text-foreground"
+              >
+                Investment Amount
+              </Label>
+              <Input
+                id="add-investor-amount"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="any"
+                value={investmentAmount}
+                onChange={(e) => setInvestmentAmount(e.target.value)}
+                placeholder={`${currencyGlyph}50,000`}
+                disabled={isSubmitting}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="add-investor-units"
+                className="text-[13px] font-medium text-foreground"
+              >
+                Units
+              </Label>
+              <Input
+                id="add-investor-units"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step="1"
+                value={units}
+                onChange={(e) => setUnits(e.target.value)}
+                placeholder="100"
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="add-investor-price"
+              className="text-[13px] font-medium text-foreground"
+            >
+              Price per Unit
+            </Label>
+            <Input
+              id="add-investor-price"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="any"
+              value={pricePerUnit}
+              onChange={(e) => setPricePerUnit(e.target.value)}
+              placeholder={`${currencyGlyph}500`}
+              disabled={isSubmitting}
+            />
+            <p className="text-[12px] leading-[16px] text-neutral">
+              Optional. Leave blank to auto-compute from Investment / Units.
+            </p>
+          </div>
+
+          {error && (
+            <Banner tone="danger">{error}</Banner>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Adding…' : 'Add Investor'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1766,11 +2131,19 @@ interface PoolCsvParseResult {
 }
 
 /**
- * Minimal client-side CSV parser tailored to the pool template
- * (`Name, Investment Amount, Units`). Tolerant of trailing newlines,
- * blank rows, BOM marker, and header-row reorderings. Quoted values are
- * NOT supported — names should not contain commas (matches the
- * server-side participant CSV constraint).
+ * Client-side CSV parser tailored to the pool template
+ * (`Name, Investment Amount, Units`). Tolerant of:
+ *   - trailing newlines + blank rows
+ *   - leading BOM (Excel-on-Windows artefact)
+ *   - header-row reorderings + label variants
+ *   - currency symbols + thousands separators inside numbers
+ *     (e.g. `$33,000` works whether quoted or not, thanks to the
+ *     RFC 4180 tokenizer below)
+ *
+ * Round 4 (Liang) #22: rewrote the bare `.split(',')` to a proper
+ * tokenizer because Excel exports of `Investor A,"$33,000",33` were
+ * being mis-split into 4 cells, surfacing as "investment amount '$33'
+ * is invalid" errors.
  */
 function parsePoolCsv(text: string): PoolCsvParseResult {
   const errors: string[] = [];
@@ -1784,7 +2157,7 @@ function parsePoolCsv(text: string): PoolCsvParseResult {
   const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0);
   if (lines.length === 0) return { rows: [], errors: ['File is empty.'] };
 
-  const header = lines[0]!.split(',').map((h) => h.trim().toLowerCase());
+  const header = tokenizeCsvLine(lines[0]!).map((h) => h.trim().toLowerCase());
   const nameIdx = header.indexOf('name');
   const investedIdx = header.findIndex((h) =>
     /investment\s*amount|invested/.test(h),
@@ -1799,7 +2172,7 @@ function parsePoolCsv(text: string): PoolCsvParseResult {
 
   const rows: PoolCsvRow[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i]!.split(',').map((c) => c.trim());
+    const cells = tokenizeCsvLine(lines[i]!).map((c) => c.trim());
     const name = cells[nameIdx] ?? '';
     const investedRaw = cells[investedIdx] ?? '';
     const unitsRaw = cells[unitsIdx] ?? '';
@@ -1820,6 +2193,54 @@ function parsePoolCsv(text: string): PoolCsvParseResult {
     rows.push({ name, investmentAmount, units });
   }
   return { rows, errors };
+}
+
+/**
+ * Tokenize one CSV line into cells, honoring RFC 4180 double-quoted
+ * fields: commas inside `"..."` are treated as literal, and `""`
+ * inside a quoted field is the escape for a literal `"`. Unquoted
+ * fields split on plain commas as before.
+ *
+ * Without this, Excel exports of `Investor A,"$33,000",33` are split
+ * into 4 cells (`Investor A`, `"$33`, `000"`, `33`) and the dollar
+ * amount stops parsing as a number. Pure-comma rows (`Investor A,33000,33`)
+ * still work because the function falls through the quote branches
+ * untouched.
+ */
+function tokenizeCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        // Lookahead: `""` inside a quoted field is a literal quote.
+        if (line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === ',') {
+        cells.push(current);
+        current = '';
+      } else if (ch === '"' && current.length === 0) {
+        // Opening quote on a fresh cell. Quotes mid-cell are treated
+        // as literal characters (lenient — RFC says invalid, but
+        // real-world CSV often has them).
+        inQuotes = true;
+      } else {
+        current += ch;
+      }
+    }
+  }
+  cells.push(current);
+  return cells;
 }
 
 function PoolCsvPreviewTable({ parsed }: Readonly<{ parsed: PoolCsvParseResult }>) {
