@@ -5,12 +5,14 @@ import {
   Check,
   ChevronDown,
   Download,
+  Loader2,
   Pencil,
   Plus,
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 
 import { Banner } from '@/components/common/Banner';
 import { CsvDropzone } from '@/components/participants/import/CsvDropzone';
@@ -1049,13 +1051,12 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
     );
   }
 
-  // Round 4 (Liang) #25: name the pool by participant when there's
-  // exactly one pool member so the empty-state hints below reference
-  // the same label the admin sees in Allocation Targets above.
-  const poolLabel =
-    props.poolMembers.length === 1
-      ? `"${props.poolMembers[0]!.name}"`
-      : 'the Investor Pool';
+  // Round 5 (Liang): reverted the Round 4 #25 dynamic poolLabel.
+  // Empty-state hints reference "the Investor Pool" generically so they
+  // stay consistent with the Allocation Targets label (also reverted
+  // back to "Investor Pool (N members)") and don't shift wording when
+  // the pool happens to have exactly one named member.
+  const poolLabel = 'the Investor Pool';
 
   if (mode === 'revenue_share') {
     return (
@@ -1527,16 +1528,15 @@ function labelForTarget(
   poolMembers?: ReadonlyArray<Participant>,
 ): string {
   if (targetId === POOL_TARGET_ID) {
-    // Round 4 (Liang) #24: when there's exactly 1 pool member, show
-    // that participant's name as the target label. Admins name their
-    // pool member meaningfully (e.g. "FEA Investor Pool 120% of
-    // Capital Raise") and expect to see that name in Allocation
-    // Targets, not the generic "Investor Pool (1 participant)" which
-    // they read as a separate target and uncheck by mistake.
-    if (poolMembers && poolMembers.length === 1) {
-      return poolMembers[0]!.name;
-    }
-    if (poolMembers && poolMembers.length > 1) {
+    // Round 5 (Liang): pool label stays "Investor Pool (N members)"
+    // regardless of count. Reverted the Round 4 #24 single-member-name
+    // collapse because future deals will have multiple named pools
+    // (Investor Pool, Songwriter Pool, Actor Pool), some with just one
+    // member each. Keeping the pool concept visible avoids confusion
+    // when those land. Generic label also signals "this is the
+    // aggregate, not an individual" so the admin doesn't read it as a
+    // separate participant target.
+    if (poolMembers && poolMembers.length > 0) {
       const noun = poolMembers.length === 1 ? 'member' : 'members';
       return `Investor Pool (${poolMembers.length} ${noun})`;
     }
@@ -1815,25 +1815,36 @@ function CheckBoxBox({ checked }: Readonly<{ checked: boolean }>) {
 /* ─── Section: Investor Pool Configuration ──────────────────────────────── */
 
 function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
-  // Reuses the participant CSV dropzone visually. The actual file-upload
-  // wiring lands in a follow-up slice (pool seeding via CSV is a separate
-  // BE flow from the rule snapshot create call). For now the dropzone is
-  // visual and stores the selection in local state without submitting.
+  // Round 5 (Liang): the CSV dropzone now actually persists. Previously
+  // it parsed + previewed only, with the comment "actual file-upload
+  // wiring lands in a follow-up slice" — Liang hit this on Deal 04
+  // (imported 5 investors, pool stayed at 1 in Allocation Targets, she
+  // saved an incorrect snapshot). Each parsed row now POSTs through
+  // useCreateParticipant with `behaviorType: RECOUPMENT, poolMember:
+  // true, roleName: 'Investor'` so the freshly-created pool members
+  // show up in the wizard's Allocation Targets count via the standard
+  // React Query invalidate chain.
   const [file, setFile] = useState<File | null>(null);
   const [parsed, setParsed] = useState<PoolCsvParseResult | null>(null);
+  const [importStatus, setImportStatus] = useState<PoolImportStatus>({
+    kind: 'idle',
+  });
 
   // Round 4 (Liang) #19: replaces the previous deep-link to
   // /participants/new with an inline modal so the admin can add a
   // single investor without navigating away from the wizard.
   const [addInvestorOpen, setAddInvestorOpen] = useState(false);
 
+  const createMutation = useCreateParticipant(dealId);
+
   // Parse client-side as soon as the admin picks a file so they can
-  // sanity-check the rows before the snapshot is created. The actual
-  // pool-seeding POST lands in a follow-up slice; rendering the preview
-  // here gives the admin immediate confidence that their CSV parsed.
+  // sanity-check the rows BEFORE confirming the import. The "Import N
+  // investors" button below runs the actual POSTs once the admin
+  // confirms the preview is correct.
   useEffect(() => {
     if (!file) {
       setParsed(null);
+      setImportStatus({ kind: 'idle' });
       return;
     }
     let cancelled = false;
@@ -1851,6 +1862,61 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
       cancelled = true;
     };
   }, [file]);
+
+  async function handleConfirmImport() {
+    if (!parsed || parsed.rows.length === 0) return;
+    setImportStatus({ kind: 'importing', total: parsed.rows.length, done: 0 });
+
+    const failures: Array<{ name: string; reason: string }> = [];
+    let done = 0;
+
+    for (const row of parsed.rows) {
+      try {
+        const pricePerUnit =
+          row.units > 0 ? row.investmentAmount / row.units : undefined;
+        await createMutation.mutateAsync({
+          name: row.name,
+          roleName: 'Investor',
+          behaviorType: ParticipantBehavior.RECOUPMENT,
+          poolMember: true,
+          investmentAmount: row.investmentAmount,
+          units: row.units,
+          ...(pricePerUnit !== undefined ? { pricePerUnit } : {}),
+        });
+      } catch (err) {
+        failures.push({
+          name: row.name,
+          reason: getApiErrorMessage(err, 'Create failed.'),
+        });
+      } finally {
+        done += 1;
+        setImportStatus({ kind: 'importing', total: parsed.rows.length, done });
+      }
+    }
+
+    const imported = parsed.rows.length - failures.length;
+    setImportStatus({ kind: 'done', imported, failures });
+
+    if (failures.length === 0) {
+      toast.success(
+        `Imported ${imported} pool ${imported === 1 ? 'member' : 'members'} into the deal.`,
+      );
+      // Clear the dropzone so the dashed CSV preview disappears and the
+      // wizard's Allocation Targets count reflects the new pool size.
+      setFile(null);
+      setParsed(null);
+    } else if (imported > 0) {
+      toast.warning(
+        `Imported ${imported} of ${parsed.rows.length}. ${failures.length} row${failures.length === 1 ? '' : 's'} failed (see details below).`,
+      );
+    } else {
+      toast.error('None of the rows could be imported. See details below.');
+    }
+  }
+
+  const importing = importStatus.kind === 'importing';
+  const hasParsedRows = (parsed?.rows.length ?? 0) > 0;
+  const canConfirm = hasParsedRows && !importing;
 
   return (
     <SectionCard
@@ -1883,6 +1949,7 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
         file={file}
         onFileChange={setFile}
         idleCopy="Drag & drop pool CSV here,"
+        disabled={importing}
       />
       <p className="text-[12px] leading-[16px] text-neutral">
         Format: <span className="font-semibold">Name</span>,{' '}
@@ -1893,6 +1960,61 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
       </p>
       {parsed && <PoolCsvPreviewTable parsed={parsed} />}
 
+      {hasParsedRows && importStatus.kind !== 'done' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-border bg-grey-50/40 px-3 py-3">
+          <p className="text-[13px] text-foreground">
+            {importing ? (
+              <>
+                Importing {importStatus.done} of {importStatus.total}
+                ...
+              </>
+            ) : (
+              <>
+                Ready to import {parsed!.rows.length}{' '}
+                {parsed!.rows.length === 1 ? 'investor' : 'investors'} as pool
+                members.
+              </>
+            )}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void handleConfirmImport()}
+            disabled={!canConfirm}
+          >
+            {importing ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Importing...
+              </>
+            ) : (
+              <>
+                <Plus className="size-4" aria-hidden strokeWidth={1.75} />
+                Confirm Import ({parsed!.rows.length})
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {importStatus.kind === 'done' && importStatus.failures.length > 0 && (
+        <Banner tone="warning">
+          <p className="font-semibold">
+            Imported {importStatus.imported} of{' '}
+            {importStatus.imported + importStatus.failures.length}.{' '}
+            {importStatus.failures.length} row
+            {importStatus.failures.length === 1 ? '' : 's'} failed:
+          </p>
+          <ul className="ml-4 mt-1 list-disc space-y-0.5">
+            {importStatus.failures.map((f) => (
+              <li key={f.name}>
+                <span className="font-semibold">{f.name}</span>: {f.reason}
+              </li>
+            ))}
+          </ul>
+        </Banner>
+      )}
+
       <AddInvestorInlineDialog
         dealId={dealId}
         open={addInvestorOpen}
@@ -1901,6 +2023,15 @@ function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
     </SectionCard>
   );
 }
+
+type PoolImportStatus =
+  | { kind: 'idle' }
+  | { kind: 'importing'; total: number; done: number }
+  | {
+      kind: 'done';
+      imported: number;
+      failures: ReadonlyArray<{ name: string; reason: string }>;
+    };
 
 /* ─── Inline "Add Investor Manually" modal ──────────────────────────────── */
 
