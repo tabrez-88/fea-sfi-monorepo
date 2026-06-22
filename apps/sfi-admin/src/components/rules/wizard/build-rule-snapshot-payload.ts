@@ -118,10 +118,12 @@ export function buildRuleSnapshotPayload(
       tier2AllowedTargets,
     );
     const tierRules: WaterfallTierRule[] = [];
-    // Exit conditions bind to the recoup phase only — Tier 1 in waterfall
-    // mode. Tier 2 (Post Recoup Split) stays unbounded so the post-recoup
-    // split keeps running after the recoup phase exits. This mirrors the
-    // copy in `Step2ParticipantsRules.tsx` ExitConditionsSection.
+    // Exit conditions split across the two tiers:
+    //   - Hard Cap Multiplier binds to Tier 1 (recoup cap).
+    //   - Deal Term applies snapshot-wide so post-recoup splits also
+    //     stop at expiry. Without this Tier 2 would run forever once
+    //     Tier 1 capped out (Liang's Deal 04: post-recoup participation
+    //     should last 5 years then exit).
     if (tier1Splits.length > 0) {
       tierRules.push(
         withExitConditions(
@@ -132,7 +134,13 @@ export function buildRuleSnapshotPayload(
       );
     }
     if (tier2Splits.length > 0) {
-      tierRules.push({ tier: 2, splits: tier2Splits });
+      tierRules.push(
+        withTermOnly(
+          { tier: 2, splits: tier2Splits },
+          step2.exitConditions,
+          step1.effectiveFrom,
+        ),
+      );
     }
     if (tierRules.length > 0) tiers = tierRules;
   }
@@ -263,12 +271,28 @@ function buildSplits(
   const targetIds = restrictToTargetIds ?? Object.keys(rows);
   const splits: AllocationSplit[] = [];
   let sum = 0;
+  // Tier 1 in waterfall mode is share-of-revenue, NOT the recoup
+  // multiplier. The recoup cap lives in Hard Cap Multiplier in Exit
+  // Conditions. When admins enter `125` here they usually mean "recoup
+  // 125% of invested" — surface the correct field in the error so
+  // they don't have to guess.
+  const isWaterfallTier1 = contextLabel === 'Tier 1 splits';
   for (const id of targetIds) {
     const raw = rows[id];
     if (raw === undefined || raw === '') continue;
     const pct = Number(raw);
     if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-      errors.push(`${contextLabel}: percentage for "${labelForTarget(id, participants)}" must be 0-100.`);
+      const label = labelForTarget(id, participants);
+      if (Number.isFinite(pct) && pct > 100 && isWaterfallTier1) {
+        const suggested = (pct / 100).toFixed(2);
+        errors.push(
+          `${contextLabel}: "${label}" is ${pct}% (max 100). This column is share of revenue. For a ${pct}% recoup cap, set Allocation to 100 and add Hard Cap Multiplier ${suggested} in Exit Conditions below.`,
+        );
+      } else {
+        errors.push(
+          `${contextLabel}: percentage for "${label}" must be 0-100.`,
+        );
+      }
       continue;
     }
     splits.push({ target: toAllocationTarget(id), percentage: pct });
@@ -290,6 +314,24 @@ function withExitConditions(
     const hc = Number(exit.hardCapMultiplier);
     if (Number.isFinite(hc) && hc > 0) out.hardCapMultiplier = hc;
   }
+  const computedDeadline = computeTermDeadline(exit, effectiveFrom);
+  if (computedDeadline !== null) {
+    out.deadline = computedDeadline;
+  }
+  return out;
+}
+
+/**
+ * Tier 2 variant: write the snapshot-wide Deal Term as a deadline but
+ * skip Hard Cap Multiplier (recoup cap is meaningless on post-recoup
+ * splits since investors don't receive capital back here).
+ */
+function withTermOnly(
+  tier: WaterfallTierRule,
+  exit: ExitConditionsData,
+  effectiveFrom: string,
+): WaterfallTierRule {
+  const out: WaterfallTierRule = { ...tier };
   const computedDeadline = computeTermDeadline(exit, effectiveFrom);
   if (computedDeadline !== null) {
     out.deadline = computedDeadline;

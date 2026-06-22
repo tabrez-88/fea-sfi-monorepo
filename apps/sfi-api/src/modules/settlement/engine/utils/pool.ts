@@ -97,7 +97,7 @@ export function resolvePool(
   const warnings = buildWarnings(strategy, counts, enriched.length);
   const shares = computeShares(poolAmount, enriched, strategy);
 
-  const fixedShares = applyRoundingRemainder(poolAmount, shares);
+  const fixedShares = applyRoundingRemainder(poolAmount, shares, ordered);
 
   return {
     strategy,
@@ -325,18 +325,47 @@ function shareEqually(poolAmount: number, members: EnrichedMember[]): PoolMember
 }
 
 /**
- * Rounding fix-up — push any cent-level remainder to the first member so
- * `sum(shares) === poolAmount` exactly.
+ * Rounding fix-up — push any cent-level remainder to the last-to-join
+ * member so `sum(shares) === poolAmount` exactly. Matches Liang's spec:
+ * "the last investor or a defined remainder account". When createdAt is
+ * absent (legacy snapshots or test fixtures) falls back to the last
+ * share by id ordering.
  */
 function applyRoundingRemainder(
   poolAmount: number,
   shares: PoolMemberShare[],
+  members: ParticipantInput[],
 ): PoolMemberShare[] {
   if (shares.length === 0) return shares;
   const allocated = sum(shares.map((s) => s.amount));
   const remainder = roundMoney(poolAmount - allocated);
   if (remainder === 0) return shares;
-  return shares.map((s, i) =>
-    i === 0 ? { ...s, amount: roundMoney(s.amount + remainder) } : s,
+
+  const remainderId = pickRemainderRecipient(members, shares);
+  return shares.map((s) =>
+    s.participantId === remainderId
+      ? { ...s, amount: roundMoney(s.amount + remainder) }
+      : s,
   );
+}
+
+function pickRemainderRecipient(
+  members: ParticipantInput[],
+  shares: PoolMemberShare[],
+): string {
+  const datedMembers = members.filter((m) => typeof m.createdAt === 'string');
+  if (datedMembers.length > 0) {
+    // Latest-to-join. Date.parse handles ISO strings; tie-break by id so
+    // ordering stays deterministic when two members share a timestamp.
+    const latest = [...datedMembers].sort((a, b) => {
+      const ta = Date.parse(a.createdAt!);
+      const tb = Date.parse(b.createdAt!);
+      if (tb !== ta) return tb - ta;
+      return b.id.localeCompare(a.id);
+    })[0];
+    if (latest) return latest.id;
+  }
+  // Fallback: last share by id ordering (shares are already id-sorted
+  // by the caller, so this is the alphabetically last participantId).
+  return shares.at(-1)!.participantId;
 }

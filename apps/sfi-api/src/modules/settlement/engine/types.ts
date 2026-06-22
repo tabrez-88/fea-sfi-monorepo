@@ -125,6 +125,14 @@ export interface ParticipantInput {
   units?: number;
   investmentAmount?: number;
   pricePerUnit?: number;
+
+  /**
+   * ISO date the participant was added to the deal. Threaded through so
+   * the pool's cent-rounding remainder lands on the last-to-join member
+   * (Liang spec: "last investor or a defined remainder account"). When
+   * absent the resolver falls back to the last-by-id share.
+   */
+  createdAt?: string;
 }
 
 /**

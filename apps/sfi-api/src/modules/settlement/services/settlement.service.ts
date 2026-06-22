@@ -646,7 +646,13 @@ export class SettlementService {
       ruleSnapshotParticipants: {
         participantId: string;
         participantData: unknown;
-        participant: { id: string; name: string; roleName: string; behaviorType: string };
+        participant: {
+          id: string;
+          name: string;
+          roleName: string;
+          behaviorType: string;
+          createdAt: Date;
+        };
       }[];
     };
     settlementRevenueLinks: {
@@ -709,6 +715,9 @@ export class SettlementService {
             investmentAmount: data.investmentAmount,
           }),
           ...(typeof data?.pricePerUnit === 'number' && { pricePerUnit: data.pricePerUnit }),
+          // Routed through so the pool's cent-rounding remainder can land on
+          // the last-to-join member (resolver in `utils/pool.ts`).
+          createdAt: rsp.participant.createdAt.toISOString(),
         };
       }),
       rules: settlementRules,

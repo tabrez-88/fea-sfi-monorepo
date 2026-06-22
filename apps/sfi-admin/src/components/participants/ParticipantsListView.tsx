@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Pagination } from '@/components/common/Pagination';
 import { ImportFlowDialog } from '@/components/participants/import/ImportFlowDialog';
 import { ParticipantBehaviorBadge } from '@/components/participants/ParticipantBehaviorBadge';
+import { InvestorPoolManagementCard } from '@/components/participants/pool/InvestorPoolManagementCard';
 import { RoleNameChip } from '@/components/participants/RoleNameChip';
 import { Button } from '@/components/ui/button';
 import {
@@ -212,6 +213,18 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
           </Button>
         </div>
       </div>
+
+      {/* Investor Pool management card. Same UI as the rule snapshot
+          wizard so admins can build / extend the pool BEFORE entering
+          the wizard. Reuses the same import flow (CSV) + inline Add
+          Investor modal, all going through useCreateParticipant which
+          refreshes the participants list below via the React Query
+          invalidate chain. */}
+      <InvestorPoolManagementCard
+        dealId={dealId}
+        title="Investor Pool"
+        description="Drop a CSV or add investors manually. Members are created with Recoupment behavior and Part of Investor Pool checked so they appear under the pool group below and are ready to use in any rule snapshot."
+      />
 
       {/* Single bordered card holds the sub-header, filter pills, and table. */}
       <section

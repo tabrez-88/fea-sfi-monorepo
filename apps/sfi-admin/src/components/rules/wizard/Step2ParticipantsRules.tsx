@@ -4,18 +4,15 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
-  Download,
-  Loader2,
   Pencil,
   Plus,
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { toast } from 'sonner';
 
 import { Banner } from '@/components/common/Banner';
-import { CsvDropzone } from '@/components/participants/import/CsvDropzone';
+import { InvestorPoolManagementCard } from '@/components/participants/pool/InvestorPoolManagementCard';
 import { RoleNameInput } from '@/components/participants/RoleNameInput';
 import { Button } from '@/components/ui/button';
 import {
@@ -37,12 +34,8 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
-import { useDeal } from '@/hooks/deals/useDeal';
-import { useCreateParticipant } from '@/hooks/participants/useCreateParticipant';
 import { useParticipants } from '@/hooks/participants/useParticipants';
-import { getApiErrorMessage } from '@/lib/axios';
 import { cn } from '@/lib/utils';
-import { Currency } from '@/types/deal.types';
 import { ParticipantBehavior, type Participant } from '@/types/participant.types';
 import type { SettlementMode } from '@/types/rule-snapshot.types';
 import { formatCurrency, formatNumber } from '@/utils/format';
@@ -244,6 +237,8 @@ export function Step2ParticipantsRules({
         tier1Rows={values.tier1Rows}
         tier2Rows={values.tier2Rows}
         splitRows={values.splitRows}
+        exitConditions={values.exitConditions}
+        onExitConditionsChange={(next) => update('exitConditions', next)}
         onRecoupChange={(rows) => update('recoupRows', rows)}
         onTier1Change={(rows) => update('tier1Rows', rows)}
         onTier2Change={(rows) => update('tier2Rows', rows)}
@@ -257,7 +252,18 @@ export function Step2ParticipantsRules({
         onChange={(next) => update('exitConditions', next)}
       />
 
-      <InvestorPoolConfigSection dealId={dealId} />
+      <InvestorPoolManagementCard
+        dealId={dealId}
+        shell={(body, headerRight) => (
+          <SectionCard
+            title="Investor Pool Configuration"
+            description="Define the internal share breakdown for the Investor Pool."
+            headerRight={headerRight}
+          >
+            {body}
+          </SectionCard>
+        )}
+      />
 
       <RunningTotalsSection
         mode={values.mode}
@@ -1021,17 +1027,22 @@ type DistributionBodySectionProps = Readonly<{
   selectedTargets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
   /**
-   * Full pool members list. Used by `labelForTarget` to show the pool
-   * member's actual name when there's exactly one (Liang #24 — admins
-   * name the pool meaningfully and expect to see that name in
-   * Allocation Targets, not a generic "Investor Pool" label) and as
-   * "Investor Pool (N members)" when there are several.
+   * Full pool members list. Used by `labelForTarget` so the pool row
+   * label shows the live "(N members)" count next to "Investor Pool".
    */
   poolMembers: ReadonlyArray<Participant>;
   recoupRows: DistributionRowMap;
   tier1Rows: DistributionRowMap;
   tier2Rows: DistributionRowMap;
   splitRows: DistributionRowMap;
+  /**
+   * Exit conditions surfaced inline beside the recoup-phase table so
+   * Hard Cap Multiplier sits next to its target (per-pool-investor cap
+   * that gates Tier 1 / recoup mode exit). Deal Term still lives in
+   * the separate Exit Conditions section below.
+   */
+  exitConditions: ExitConditionsData;
+  onExitConditionsChange: (next: ExitConditionsData) => void;
   onRecoupChange: (next: DistributionRowMap) => void;
   onTier1Change: (next: DistributionRowMap) => void;
   onTier2Change: (next: DistributionRowMap) => void;
@@ -1051,11 +1062,6 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
     );
   }
 
-  // Round 5 (Liang): reverted the Round 4 #25 dynamic poolLabel.
-  // Empty-state hints reference "the Investor Pool" generically so they
-  // stay consistent with the Allocation Targets label (also reverted
-  // back to "Investor Pool (N members)") and don't shift wording when
-  // the pool happens to have exactly one named member.
   const poolLabel = 'the Investor Pool';
 
   if (mode === 'revenue_share') {
@@ -1093,6 +1099,17 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
           participants={props.participants}
           poolMembers={props.poolMembers}
           placeholder="120"
+        />
+        <HardCapInlineRow
+          enabled={props.exitConditions.hardCapEnabled}
+          multiplier={props.exitConditions.hardCapMultiplier}
+          onEnabledChange={(b) =>
+            props.onExitConditionsChange({ ...props.exitConditions, hardCapEnabled: b })
+          }
+          onMultiplierChange={(v) =>
+            props.onExitConditionsChange({ ...props.exitConditions, hardCapMultiplier: v })
+          }
+          exitTarget="the next phase"
         />
       </SectionCard>
     );
@@ -1133,7 +1150,7 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
       <TierCard
         tierLabel="Tier 1"
         title="Recoupment Phase"
-        description="All revenue flows to this target until the multiplier is reached."
+        description="Allocation is the share of revenue routed to each target during recoupment (must sum to 100%). Hard Cap Multiplier below caps how much each pool member can recoup (e.g. 1.25 = 125% of invested capital), then flow exits to Tier 2."
         valueColumnLabel="Allocation"
         valueSuffix="%"
         rows={props.tier1Rows}
@@ -1144,6 +1161,25 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
         placeholder="100"
         emptyHint={`No recoupment-eligible targets selected. Add ${poolLabel} or a Recoupment participant in Allocation Targets above to define a Tier 1 recoup.`}
         layout="form"
+        footer={
+          <HardCapInlineRow
+            enabled={props.exitConditions.hardCapEnabled}
+            multiplier={props.exitConditions.hardCapMultiplier}
+            onEnabledChange={(b) =>
+              props.onExitConditionsChange({
+                ...props.exitConditions,
+                hardCapEnabled: b,
+              })
+            }
+            onMultiplierChange={(v) =>
+              props.onExitConditionsChange({
+                ...props.exitConditions,
+                hardCapMultiplier: v,
+              })
+            }
+            exitTarget="Tier 2"
+          />
+        }
       />
       <TierCard
         tierLabel="Tier 2"
@@ -1179,11 +1215,7 @@ type TierCardProps = Readonly<{
   onChange: (next: DistributionRowMap) => void;
   targets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
-  /**
-   * Pool members on the deal. Used by `labelForTarget` so the pool row
-   * shows the actual participant name when there's exactly one member
-   * (Liang #24) and "Investor Pool (N members)" when there are several.
-   */
+  /** Pool members on the deal. Drives the live "(N members)" count on the pool row label. */
   poolMembers?: ReadonlyArray<Participant> | undefined;
   placeholder: string;
   /** When true, renders a "Running Total: N%" footer (green when 100, red otherwise). */
@@ -1203,6 +1235,8 @@ type TierCardProps = Readonly<{
    *               (Tier 2 / Post Recoup Split), scales to many participants.
    */
   layout: TierLayout;
+  /** Optional content rendered below the body (e.g. Hard Cap on Tier 1). */
+  footer?: ReactNode;
 }>;
 
 function TierCard({
@@ -1220,6 +1254,7 @@ function TierCard({
   showRunningTotal = false,
   emptyHint,
   layout,
+  footer,
 }: TierCardProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -1301,8 +1336,68 @@ function TierCard({
                 Running Total: {formatNumber(runningTotal)}%
               </p>
             )}
+            {footer}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Inline Hard Cap row (Tier 1 / Recoup mode) ─────────────────────────── */
+
+type HardCapInlineRowProps = Readonly<{
+  enabled: boolean;
+  multiplier: string;
+  onEnabledChange: (next: boolean) => void;
+  onMultiplierChange: (next: string) => void;
+  /** Where flow exits when the cap fires. Labels the helper text below the input. */
+  exitTarget: string;
+}>;
+
+/**
+ * Per-pool-investor Hard Cap, rendered inline beside the recoup table
+ * (Tier 1 in waterfall, the only tier in Recoup mode). State stays on
+ * `exitConditions.hardCapMultiplier` so the payload assembler keeps
+ * writing it to the tier without a schema change.
+ */
+function HardCapInlineRow({
+  enabled,
+  multiplier,
+  onEnabledChange,
+  onMultiplierChange,
+  exitTarget,
+}: HardCapInlineRowProps) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[6px] border border-dashed border-border bg-grey-50/40 px-3 py-3">
+      <label className="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+          className="peer sr-only"
+        />
+        <CheckBoxBox checked={enabled} />
+        <span className="text-[13px] font-semibold text-foreground">
+          Hard Cap Multiplier
+        </span>
+      </label>
+      {enabled && (
+        <div className="grid grid-cols-1 gap-1 pl-7 sm:grid-cols-[140px_1fr]">
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="0.01"
+            value={multiplier}
+            onChange={(e) => onMultiplierChange(e.target.value)}
+            placeholder="1.25"
+            className="h-9 text-[13px]"
+          />
+          <p className="text-[12px] text-neutral sm:self-center">
+            × of each investor&apos;s invested capital. Exits to {exitTarget} when reached.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -1316,10 +1411,7 @@ type DistributionBodyProps = Readonly<{
   rows: DistributionRowMap;
   targets: ReadonlyArray<string>;
   participants: ReadonlyArray<Participant>;
-  /**
-   * Pool members for `labelForTarget` so the pool row shows the actual
-   * participant name when there's exactly one member (Round 4 / Liang #24).
-   */
+  /** Pool members for `labelForTarget` so the pool row shows the live "(N members)" count. */
   poolMembers?: ReadonlyArray<Participant> | undefined;
   placeholder: string;
   updateCell: (targetId: string, value: string) => void;
@@ -1528,14 +1620,10 @@ function labelForTarget(
   poolMembers?: ReadonlyArray<Participant>,
 ): string {
   if (targetId === POOL_TARGET_ID) {
-    // Round 5 (Liang): pool label stays "Investor Pool (N members)"
-    // regardless of count. Reverted the Round 4 #24 single-member-name
-    // collapse because future deals will have multiple named pools
-    // (Investor Pool, Songwriter Pool, Actor Pool), some with just one
-    // member each. Keeping the pool concept visible avoids confusion
-    // when those land. Generic label also signals "this is the
-    // aggregate, not an individual" so the admin doesn't read it as a
-    // separate participant target.
+    // Pool is always rendered as a pool, never collapsed to a member
+    // name. Future deals carry multiple named pools (Investor /
+    // Songwriter / Actor) and the aggregate label must stay distinct
+    // from the individual targets listed beneath it.
     if (poolMembers && poolMembers.length > 0) {
       const noun = poolMembers.length === 1 ? 'member' : 'members';
       return `Investor Pool (${poolMembers.length} ${noun})`;
@@ -1567,59 +1655,22 @@ function ExitConditionsSection({
   effectiveFrom,
   onChange,
 }: ExitConditionsSectionProps) {
-  // Hard Cap only applies to Recoup + Waterfall (Revenue Share has no
-  // capital recovery concept). Per Round 3 Comment 12.
-  const supportsHardCap = mode !== 'revenue_share';
-
-  // Description copy mirrors how many conditions the mode exposes — singular
-  // when Revenue Share only renders Deal Term, plural otherwise.
-  const description = supportsHardCap
-    ? 'Distribution stops when any of the checked conditions fires.'
-    : 'Distribution stops when the deal term expires.';
-
-  // Warning banner copy:
-  //   - Revenue Share: spell out the constraint (Term only, deal term)
-  //     so admins don't go looking for Hard Cap.
-  //   - Recoup + Waterfall: bind to the recoup phase only. The payload
-  //     assembler attaches `deadline` / `hardCapMultiplier` to the
-  //     Tier 1 rule only; Tier 2 stays unbounded so the post-recoup
-  //     split keeps running after the recoup phase exits.
+  // Hard Cap moved inline into Tier 1 / Recoup mode tables (lives next
+  // to the target it bounds). This section now exposes Deal Term only,
+  // which is snapshot-wide regardless of mode.
   const applyHint =
     mode === 'revenue_share'
       ? 'Revenue Share mode only supports a deal-term expiry.'
-      : 'Exit conditions apply to the recoup phase.';
+      : mode === 'recoup'
+        ? 'Deal Term stops the recoupment phase at expiry. Hard Cap lives beside the recoup table above.'
+        : 'Deal Term applies snapshot-wide: both Tier 1 (recoupment) and Tier 2 (post-recoup splits) stop at expiry. Hard Cap lives beside Tier 1 above.';
 
   return (
-    <SectionCard title="Exit Conditions (Optional)" description={description}>
+    <SectionCard
+      title="Exit Conditions (Optional)"
+      description="Distribution stops when the deal term expires."
+    >
       <div className="flex flex-col gap-3">
-        {supportsHardCap && (
-          <ExitConditionBox>
-            <CheckedToggleRow
-              label="Hard Cap Multiplier"
-              checked={data.hardCapEnabled}
-              onChange={(checked) => onChange({ ...data, hardCapEnabled: checked })}
-            />
-            {data.hardCapEnabled && (
-              <div className="grid grid-cols-1 gap-1 sm:grid-cols-[160px_1fr]">
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="0.01"
-                  value={data.hardCapMultiplier}
-                  onChange={(e) =>
-                    onChange({ ...data, hardCapMultiplier: e.target.value })
-                  }
-                  placeholder="1.40"
-                  className="h-9 text-[13px]"
-                />
-                <p className="text-[12px] text-neutral sm:self-center">
-                  × of invested. Per-investor cap inside the pool.
-                </p>
-              </div>
-            )}
-          </ExitConditionBox>
-        )}
         <ExitConditionBox>
           <p className="text-[14px] font-semibold leading-[20px] text-foreground">
             Deal Term
@@ -1773,29 +1824,6 @@ function ExitConditionBox({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-type CheckedToggleRowProps = Readonly<{
-  label: string;
-  checked: boolean;
-  onChange: (next: boolean) => void;
-}>;
-
-function CheckedToggleRow({ label, checked, onChange }: CheckedToggleRowProps) {
-  return (
-    <label className="flex cursor-pointer items-center gap-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="peer sr-only"
-      />
-      <CheckBoxBox checked={checked} />
-      <span className="text-[14px] font-semibold leading-[20px] text-foreground">
-        {label}
-      </span>
-    </label>
-  );
-}
-
 function CheckBoxBox({ checked }: Readonly<{ checked: boolean }>) {
   return (
     <span
@@ -1812,643 +1840,6 @@ function CheckBoxBox({ checked }: Readonly<{ checked: boolean }>) {
   );
 }
 
-/* ─── Section: Investor Pool Configuration ──────────────────────────────── */
-
-function InvestorPoolConfigSection({ dealId }: Readonly<{ dealId: string }>) {
-  // Round 5 (Liang): the CSV dropzone now actually persists. Previously
-  // it parsed + previewed only, with the comment "actual file-upload
-  // wiring lands in a follow-up slice" — Liang hit this on Deal 04
-  // (imported 5 investors, pool stayed at 1 in Allocation Targets, she
-  // saved an incorrect snapshot). Each parsed row now POSTs through
-  // useCreateParticipant with `behaviorType: RECOUPMENT, poolMember:
-  // true, roleName: 'Investor'` so the freshly-created pool members
-  // show up in the wizard's Allocation Targets count via the standard
-  // React Query invalidate chain.
-  const [file, setFile] = useState<File | null>(null);
-  const [parsed, setParsed] = useState<PoolCsvParseResult | null>(null);
-  const [importStatus, setImportStatus] = useState<PoolImportStatus>({
-    kind: 'idle',
-  });
-
-  // Round 4 (Liang) #19: replaces the previous deep-link to
-  // /participants/new with an inline modal so the admin can add a
-  // single investor without navigating away from the wizard.
-  const [addInvestorOpen, setAddInvestorOpen] = useState(false);
-
-  const createMutation = useCreateParticipant(dealId);
-
-  // Parse client-side as soon as the admin picks a file so they can
-  // sanity-check the rows BEFORE confirming the import. The "Import N
-  // investors" button below runs the actual POSTs once the admin
-  // confirms the preview is correct.
-  useEffect(() => {
-    if (!file) {
-      setParsed(null);
-      setImportStatus({ kind: 'idle' });
-      return;
-    }
-    let cancelled = false;
-    file
-      .text()
-      .then((text) => {
-        if (!cancelled) setParsed(parsePoolCsv(text));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setParsed({ rows: [], errors: ['Could not read the file.'] });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [file]);
-
-  async function handleConfirmImport() {
-    if (!parsed || parsed.rows.length === 0) return;
-    setImportStatus({ kind: 'importing', total: parsed.rows.length, done: 0 });
-
-    const failures: Array<{ name: string; reason: string }> = [];
-    let done = 0;
-
-    for (const row of parsed.rows) {
-      try {
-        const pricePerUnit =
-          row.units > 0 ? row.investmentAmount / row.units : undefined;
-        await createMutation.mutateAsync({
-          name: row.name,
-          roleName: 'Investor',
-          behaviorType: ParticipantBehavior.RECOUPMENT,
-          poolMember: true,
-          investmentAmount: row.investmentAmount,
-          units: row.units,
-          ...(pricePerUnit !== undefined ? { pricePerUnit } : {}),
-        });
-      } catch (err) {
-        failures.push({
-          name: row.name,
-          reason: getApiErrorMessage(err, 'Create failed.'),
-        });
-      } finally {
-        done += 1;
-        setImportStatus({ kind: 'importing', total: parsed.rows.length, done });
-      }
-    }
-
-    const imported = parsed.rows.length - failures.length;
-    setImportStatus({ kind: 'done', imported, failures });
-
-    if (failures.length === 0) {
-      toast.success(
-        `Imported ${imported} pool ${imported === 1 ? 'member' : 'members'} into the deal.`,
-      );
-      // Clear the dropzone so the dashed CSV preview disappears and the
-      // wizard's Allocation Targets count reflects the new pool size.
-      setFile(null);
-      setParsed(null);
-    } else if (imported > 0) {
-      toast.warning(
-        `Imported ${imported} of ${parsed.rows.length}. ${failures.length} row${failures.length === 1 ? '' : 's'} failed (see details below).`,
-      );
-    } else {
-      toast.error('None of the rows could be imported. See details below.');
-    }
-  }
-
-  const importing = importStatus.kind === 'importing';
-  const hasParsedRows = (parsed?.rows.length ?? 0) > 0;
-  const canConfirm = hasParsedRows && !importing;
-
-  return (
-    <SectionCard
-      title="Investor Pool Configuration"
-      description="Define the internal share breakdown for the Investor Pool."
-      headerRight={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setAddInvestorOpen(true)}
-          >
-            <Plus className="size-4" aria-hidden strokeWidth={1.75} />
-            Add Investor Manually
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => downloadPoolCsvTemplate()}
-          >
-            <Download className="size-4" aria-hidden strokeWidth={1.75} />
-            Export Template
-          </Button>
-        </div>
-      }
-    >
-      <CsvDropzone
-        file={file}
-        onFileChange={setFile}
-        idleCopy="Drag & drop pool CSV here,"
-        disabled={importing}
-      />
-      <p className="text-[12px] leading-[16px] text-neutral">
-        Format: <span className="font-semibold">Name</span>,{' '}
-        <span className="font-semibold">Investment Amount</span>,{' '}
-        <span className="font-semibold">Units</span>. Use the Export Template
-        button above to download a starter file with the expected headers and a
-        sample row.
-      </p>
-      {parsed && <PoolCsvPreviewTable parsed={parsed} />}
-
-      {hasParsedRows && importStatus.kind !== 'done' && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-border bg-grey-50/40 px-3 py-3">
-          <p className="text-[13px] text-foreground">
-            {importing ? (
-              <>
-                Importing {importStatus.done} of {importStatus.total}
-                ...
-              </>
-            ) : (
-              <>
-                Ready to import {parsed!.rows.length}{' '}
-                {parsed!.rows.length === 1 ? 'investor' : 'investors'} as pool
-                members.
-              </>
-            )}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void handleConfirmImport()}
-            disabled={!canConfirm}
-          >
-            {importing ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-                Importing...
-              </>
-            ) : (
-              <>
-                <Plus className="size-4" aria-hidden strokeWidth={1.75} />
-                Confirm Import ({parsed!.rows.length})
-              </>
-            )}
-          </Button>
-        </div>
-      )}
-
-      {importStatus.kind === 'done' && importStatus.failures.length > 0 && (
-        <Banner tone="warning">
-          <p className="font-semibold">
-            Imported {importStatus.imported} of{' '}
-            {importStatus.imported + importStatus.failures.length}.{' '}
-            {importStatus.failures.length} row
-            {importStatus.failures.length === 1 ? '' : 's'} failed:
-          </p>
-          <ul className="ml-4 mt-1 list-disc space-y-0.5">
-            {importStatus.failures.map((f) => (
-              <li key={f.name}>
-                <span className="font-semibold">{f.name}</span>: {f.reason}
-              </li>
-            ))}
-          </ul>
-        </Banner>
-      )}
-
-      <AddInvestorInlineDialog
-        dealId={dealId}
-        open={addInvestorOpen}
-        onOpenChange={setAddInvestorOpen}
-      />
-    </SectionCard>
-  );
-}
-
-type PoolImportStatus =
-  | { kind: 'idle' }
-  | { kind: 'importing'; total: number; done: number }
-  | {
-      kind: 'done';
-      imported: number;
-      failures: ReadonlyArray<{ name: string; reason: string }>;
-    };
-
-/* ─── Inline "Add Investor Manually" modal ──────────────────────────────── */
-
-type AddInvestorInlineDialogProps = Readonly<{
-  dealId: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}>;
-
-/**
- * Round 4 (Liang) #19: a small inline form so the admin can add a
- * single pool-member investor without leaving the wizard. Posts to the
- * same Create Participant endpoint as the full page but pre-fills
- * `behaviorType: RECOUPMENT` + `poolMember: true` + a sensible role
- * name. On success, the participants query invalidates so the wizard's
- * pool member count + Allocation Targets refresh live.
- */
-function AddInvestorInlineDialog({
-  dealId,
-  open,
-  onOpenChange,
-}: AddInvestorInlineDialogProps) {
-  const dealQuery = useDeal(dealId);
-  const currency: Currency = dealQuery.data?.currency ?? Currency.USD;
-  const currencyGlyph = useMemo(() => {
-    const map: Record<string, string> = {
-      USD: '$', EUR: '€', GBP: '£', JPY: '¥', CHF: 'CHF', CAD: 'C$', AUD: 'A$',
-    };
-    return map[currency] ?? currency;
-  }, [currency]);
-
-  const createMutation = useCreateParticipant(dealId);
-
-  const [name, setName] = useState('');
-  const [investmentAmount, setInvestmentAmount] = useState('');
-  const [units, setUnits] = useState('');
-  const [pricePerUnit, setPricePerUnit] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  function reset() {
-    setName('');
-    setInvestmentAmount('');
-    setUnits('');
-    setPricePerUnit('');
-    setError(null);
-  }
-
-  function handleOpenChange(next: boolean) {
-    if (!next) reset();
-    onOpenChange(next);
-  }
-
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError('Name is required.');
-      return;
-    }
-    const inv = investmentAmount.trim() === '' ? undefined : Number(investmentAmount);
-    const u = units.trim() === '' ? undefined : Number(units);
-    const p = pricePerUnit.trim() === '' ? undefined : Number(pricePerUnit);
-    if (inv !== undefined && (!Number.isFinite(inv) || inv < 0)) {
-      setError('Investment amount must be a non-negative number.');
-      return;
-    }
-    if (u !== undefined && (!Number.isFinite(u) || u < 0)) {
-      setError('Units must be a non-negative number.');
-      return;
-    }
-    if (p !== undefined && (!Number.isFinite(p) || p < 0)) {
-      setError('Price per unit must be a non-negative number.');
-      return;
-    }
-    try {
-      await createMutation.mutateAsync({
-        name: trimmedName,
-        roleName: 'Investor',
-        behaviorType: ParticipantBehavior.RECOUPMENT,
-        poolMember: true,
-        ...(inv !== undefined ? { investmentAmount: inv } : {}),
-        ...(u !== undefined ? { units: u } : {}),
-        ...(p !== undefined ? { pricePerUnit: p } : {}),
-      });
-      reset();
-      onOpenChange(false);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to add investor. Please try again.'));
-    }
-  }
-
-  const isSubmitting = createMutation.isPending;
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>Add Investor Manually</DialogTitle>
-          <DialogDescription className="text-[14px] leading-[20px] text-neutral">
-            Adds a single investor to the Investor Pool on this deal. The
-            participant is created with behavior{' '}
-            <span className="font-semibold text-foreground">Recoupment</span>
-            {' '}and{' '}
-            <span className="font-semibold text-foreground">
-              Part of Investor Pool
-            </span>{' '}
-            checked.
-          </DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label
-              htmlFor="add-investor-name"
-              className="text-[13px] font-medium text-foreground"
-            >
-              Name <span className="text-danger">*</span>
-            </Label>
-            <Input
-              id="add-investor-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Alice Investor"
-              autoFocus
-              disabled={isSubmitting}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor="add-investor-amount"
-                className="text-[13px] font-medium text-foreground"
-              >
-                Investment Amount
-              </Label>
-              <Input
-                id="add-investor-amount"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="any"
-                value={investmentAmount}
-                onChange={(e) => setInvestmentAmount(e.target.value)}
-                placeholder={`${currencyGlyph}50,000`}
-                disabled={isSubmitting}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label
-                htmlFor="add-investor-units"
-                className="text-[13px] font-medium text-foreground"
-              >
-                Units
-              </Label>
-              <Input
-                id="add-investor-units"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step="1"
-                value={units}
-                onChange={(e) => setUnits(e.target.value)}
-                placeholder="100"
-                disabled={isSubmitting}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label
-              htmlFor="add-investor-price"
-              className="text-[13px] font-medium text-foreground"
-            >
-              Price per Unit
-            </Label>
-            <Input
-              id="add-investor-price"
-              type="number"
-              inputMode="decimal"
-              min={0}
-              step="any"
-              value={pricePerUnit}
-              onChange={(e) => setPricePerUnit(e.target.value)}
-              placeholder={`${currencyGlyph}500`}
-              disabled={isSubmitting}
-            />
-            <p className="text-[12px] leading-[16px] text-neutral">
-              Optional. Leave blank to auto-compute from Investment / Units.
-            </p>
-          </div>
-
-          {error && (
-            <Banner tone="danger">{error}</Banner>
-          )}
-
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding…' : 'Add Investor'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/* ─── Pool CSV preview ──────────────────────────────────────────────────── */
-
-interface PoolCsvRow {
-  name: string;
-  investmentAmount: number;
-  units: number;
-}
-
-interface PoolCsvParseResult {
-  rows: PoolCsvRow[];
-  errors: string[];
-}
-
-/**
- * Client-side CSV parser tailored to the pool template
- * (`Name, Investment Amount, Units`). Tolerant of:
- *   - trailing newlines + blank rows
- *   - leading BOM (Excel-on-Windows artefact)
- *   - header-row reorderings + label variants
- *   - currency symbols + thousands separators inside numbers
- *     (e.g. `$33,000` works whether quoted or not, thanks to the
- *     RFC 4180 tokenizer below)
- *
- * Round 4 (Liang) #22: rewrote the bare `.split(',')` to a proper
- * tokenizer because Excel exports of `Investor A,"$33,000",33` were
- * being mis-split into 4 cells, surfacing as "investment amount '$33'
- * is invalid" errors.
- */
-function parsePoolCsv(text: string): PoolCsvParseResult {
-  const errors: string[] = [];
-  // Strip a leading BOM (U+FEFF) before trimming. Excel writes one when
-  // saving CSV on Windows, and a BOM left in the first header cell
-  // would break the header-name lookup below.
-  const noBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-  const stripped = noBom.trim();
-  if (!stripped) return { rows: [], errors: ['File is empty.'] };
-
-  const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return { rows: [], errors: ['File is empty.'] };
-
-  const header = tokenizeCsvLine(lines[0]!).map((h) => h.trim().toLowerCase());
-  const nameIdx = header.indexOf('name');
-  const investedIdx = header.findIndex((h) =>
-    /investment\s*amount|invested/.test(h),
-  );
-  const unitsIdx = header.indexOf('units');
-  if (nameIdx === -1 || investedIdx === -1 || unitsIdx === -1) {
-    errors.push(
-      'CSV header must include Name, Investment Amount, and Units columns.',
-    );
-    return { rows: [], errors };
-  }
-
-  const rows: PoolCsvRow[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = tokenizeCsvLine(lines[i]!).map((c) => c.trim());
-    const name = cells[nameIdx] ?? '';
-    const investedRaw = cells[investedIdx] ?? '';
-    const unitsRaw = cells[unitsIdx] ?? '';
-    if (!name) {
-      errors.push(`Row ${i + 1}: name is required.`);
-      continue;
-    }
-    const investmentAmount = Number(investedRaw.replace(/[$,]/g, ''));
-    const units = Number(unitsRaw.replace(/,/g, ''));
-    if (!Number.isFinite(investmentAmount) || investmentAmount < 0) {
-      errors.push(`Row ${i + 1}: investment amount "${investedRaw}" is invalid.`);
-      continue;
-    }
-    if (!Number.isFinite(units) || units < 0) {
-      errors.push(`Row ${i + 1}: units "${unitsRaw}" is invalid.`);
-      continue;
-    }
-    rows.push({ name, investmentAmount, units });
-  }
-  return { rows, errors };
-}
-
-/**
- * Tokenize one CSV line into cells, honoring RFC 4180 double-quoted
- * fields: commas inside `"..."` are treated as literal, and `""`
- * inside a quoted field is the escape for a literal `"`. Unquoted
- * fields split on plain commas as before.
- *
- * Without this, Excel exports of `Investor A,"$33,000",33` are split
- * into 4 cells (`Investor A`, `"$33`, `000"`, `33`) and the dollar
- * amount stops parsing as a number. Pure-comma rows (`Investor A,33000,33`)
- * still work because the function falls through the quote branches
- * untouched.
- */
-function tokenizeCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        // Lookahead: `""` inside a quoted field is a literal quote.
-        if (line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === ',') {
-        cells.push(current);
-        current = '';
-      } else if (ch === '"' && current.length === 0) {
-        // Opening quote on a fresh cell. Quotes mid-cell are treated
-        // as literal characters (lenient — RFC says invalid, but
-        // real-world CSV often has them).
-        inQuotes = true;
-      } else {
-        current += ch;
-      }
-    }
-  }
-  cells.push(current);
-  return cells;
-}
-
-function PoolCsvPreviewTable({ parsed }: Readonly<{ parsed: PoolCsvParseResult }>) {
-  const totalInvested = parsed.rows.reduce((acc, r) => acc + r.investmentAmount, 0);
-  const totalUnits = parsed.rows.reduce((acc, r) => acc + r.units, 0);
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <p className="text-[13px] font-semibold text-foreground">
-          Parsed {parsed.rows.length}{' '}
-          {parsed.rows.length === 1 ? 'investor' : 'investors'}
-          {totalUnits > 0 && (
-            <span className="font-normal text-neutral">
-              {' '}
-              · {formatNumber(totalUnits)} units · {formatCurrency(totalInvested)} total
-            </span>
-          )}
-        </p>
-      </div>
-      {parsed.errors.length > 0 && (
-        <Banner tone="danger">
-          <p className="font-semibold">CSV has issues:</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5">
-            {parsed.errors.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
-        </Banner>
-      )}
-      {parsed.rows.length > 0 && (
-        <div className="overflow-hidden rounded-[8px] border border-border">
-          <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-x-3 border-b border-grey-200 bg-grey-50 px-3 py-2 text-[12px] font-bold text-foreground">
-            <span>Name</span>
-            <span>Investment</span>
-            <span>Units</span>
-          </div>
-          <div className="max-h-[320px] overflow-y-auto">
-            {parsed.rows.map((row, idx) => (
-              <div
-                key={`${row.name}-${idx}`}
-                className="grid grid-cols-[1.4fr_1fr_1fr] items-center gap-x-3 border-t border-grey-100 px-3 py-2 text-[13px] text-foreground first:border-t-0"
-              >
-                <span className="truncate">{row.name}</span>
-                <span>{formatCurrency(row.investmentAmount)}</span>
-                <span>{formatNumber(row.units)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Client-side download of the Investor Pool CSV starter template. Inline
- * (rather than going through `rules.service`) because the BE pool-seeding
- * endpoint isn't wired yet — there's nothing to share with a service
- * function. Move this to a service when the upload flow lands.
- */
-function downloadPoolCsvTemplate(filename = 'investor-pool-template.csv'): void {
-  const csv = [
-    'Name,Investment Amount,Units',
-    'Alice Investor,5000,10',
-    'Bob Capital,12500,25',
-  ].join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
 
 /* ─── Section: Running Totals (inline strip) ────────────────────────────── */
 
