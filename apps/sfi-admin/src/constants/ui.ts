@@ -3,6 +3,7 @@ import type {
   SettlementRunStatus,
 } from '@/types/dashboard.types';
 import type { DealCategory, DealStatus } from '@/types/deal.types';
+import type { DocumentType } from '@/types/document.types';
 import type { ParticipantBehavior } from '@/types/participant.types';
 import type { RuleSnapshotStatus } from '@/types/rule-snapshot.types';
 
@@ -86,6 +87,18 @@ export const REVENUE_BATCH_STATUS_TONE: Record<RevenueBatchStatus, StatusTone> =
   PROCESSED: 'info',
 };
 
+/**
+ * Screen 3.1 uses Liang's friendlier label "Locked in Settlement" for the
+ * PROCESSED status — the batch is locked because a finalized settlement
+ * consumed it. Backend enum stays `PROCESSED` for wire compatibility.
+ */
+export const REVENUE_BATCH_STATUS_LABEL: Record<RevenueBatchStatus, string> = {
+  PENDING: 'Pending',
+  VALIDATED: 'Validated',
+  PROCESSED: 'Locked in Settlement',
+  REJECTED: 'Rejected',
+};
+
 export const SETTLEMENT_RUN_STATUS_TONE: Record<SettlementRunStatus, StatusTone> = {
   DRAFT: 'neutral',
   PREVIEWED: 'neutral',
@@ -120,6 +133,66 @@ export const PARTICIPANT_BEHAVIOR_LABEL: Record<ParticipantBehavior, string> = {
 export const RULE_SNAPSHOT_STATUS_TONE: Record<RuleSnapshotStatus, StatusTone> = {
   ACTIVE: 'success',
   CLOSED: 'neutral',
+};
+
+/**
+ * Tone + label for each `DocumentType`. Screen 3.4 uses the label as the
+ * badge text and groups the tabs by broader category (Contracts /
+ * Revenue Reports / Settlement Reports / Other) — see
+ * `DOCUMENT_TYPE_GROUPS` below for the tab mapping.
+ */
+export const DOCUMENT_TYPE_TONE: Record<DocumentType, StatusTone> = {
+  CONTRACT: 'info',
+  AMENDMENT: 'info',
+  REVENUE_REPORT: 'success',
+  SETTLEMENT_REPORT: 'warning',
+  AUDIT_REPORT: 'neutral',
+  PROOF_RECORD: 'neutral',
+  OFFERING_DOCUMENT: 'info',
+  INVESTOR_AGREEMENT: 'info',
+  DISCLOSURE: 'warning',
+  REVENUE_SHARE_TERMS: 'info',
+  OTHER: 'neutral',
+};
+
+export const DOCUMENT_TYPE_LABEL: Record<DocumentType, string> = {
+  CONTRACT: 'Contract',
+  AMENDMENT: 'Amendment',
+  REVENUE_REPORT: 'Revenue Report',
+  SETTLEMENT_REPORT: 'Settlement Report',
+  AUDIT_REPORT: 'Audit Report',
+  PROOF_RECORD: 'Proof Record',
+  OFFERING_DOCUMENT: 'Offering',
+  INVESTOR_AGREEMENT: 'Investor Agreement',
+  DISCLOSURE: 'Disclosure',
+  REVENUE_SHARE_TERMS: 'Revenue Share Terms',
+  OTHER: 'Other',
+};
+
+/**
+ * Screen 3.4 filter tabs group multiple raw DocumentType values under
+ * one visible tab. Frontend maps the active tab to the underlying doc
+ * types when it filters the visible rows.
+ */
+export const DOCUMENT_TYPE_GROUPS = {
+  ALL: 'All',
+  CONTRACTS: 'Contracts',
+  REVENUE_REPORTS: 'Revenue Reports',
+  SETTLEMENT_REPORTS: 'Settlement Reports',
+  OTHER: 'Other',
+} as const;
+
+export type DocumentTypeGroup =
+  (typeof DOCUMENT_TYPE_GROUPS)[keyof typeof DOCUMENT_TYPE_GROUPS];
+
+export const DOCUMENT_TYPE_GROUP_MEMBERS: Record<
+  Exclude<DocumentTypeGroup, 'All'>,
+  ReadonlyArray<DocumentType>
+> = {
+  Contracts: ['CONTRACT', 'AMENDMENT', 'OFFERING_DOCUMENT', 'INVESTOR_AGREEMENT', 'REVENUE_SHARE_TERMS'],
+  'Revenue Reports': ['REVENUE_REPORT'],
+  'Settlement Reports': ['SETTLEMENT_REPORT', 'AUDIT_REPORT', 'PROOF_RECORD'],
+  Other: ['DISCLOSURE', 'OTHER'],
 };
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;

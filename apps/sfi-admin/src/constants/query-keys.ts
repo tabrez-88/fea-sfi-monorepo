@@ -27,7 +27,18 @@ export const QUERY_KEYS = {
     ALL: ['revenue'] as const,
     LIST: (dealId: string, params?: Record<string, unknown>) =>
       ['revenue', 'list', dealId, params ?? {}] as const,
+    SUMMARY: (dealId: string) => ['revenue', 'summary', dealId] as const,
     DETAIL: (id: string) => ['revenue', id] as const,
+  },
+  DOCUMENTS: {
+    ALL: ['documents'] as const,
+    LIST_BY_DEAL: (dealId: string, params?: Record<string, unknown>) =>
+      ['documents', 'deal', dealId, params ?? {}] as const,
+    LIST_BY_BATCH: (batchId: string, params?: Record<string, unknown>) =>
+      ['documents', 'batch', batchId, params ?? {}] as const,
+    LIST_BY_RUN: (runId: string, params?: Record<string, unknown>) =>
+      ['documents', 'run', runId, params ?? {}] as const,
+    DETAIL: (id: string) => ['documents', id] as const,
   },
   SETTLEMENT: {
     ALL: ['settlement'] as const,

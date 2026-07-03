@@ -34,9 +34,23 @@ export const API_ENDPOINTS = {
   },
   REVENUE: {
     LIST: (dealId: string) => `${BASE}/deals/${dealId}/revenue-batches`,
+    SUMMARY: (dealId: string) => `${BASE}/deals/${dealId}/revenue-batches/summary`,
+    CREATE: (dealId: string) => `${BASE}/deals/${dealId}/revenue-batches`,
     DETAIL: (id: string) => `${BASE}/revenue-batches/${id}`,
     VALIDATE: (id: string) => `${BASE}/revenue-batches/${id}/validate`,
     REJECT: (id: string) => `${BASE}/revenue-batches/${id}/reject`,
+  },
+  DOCUMENTS: {
+    LIST_BY_DEAL: (dealId: string) => `${BASE}/deals/${dealId}/documents`,
+    UPLOAD_BY_DEAL: (dealId: string) => `${BASE}/deals/${dealId}/documents`,
+    LIST_BY_BATCH: (batchId: string) =>
+      `${BASE}/revenue-batches/${batchId}/documents`,
+    LIST_BY_RUN: (runId: string) =>
+      `${BASE}/settlement-runs/${runId}/documents`,
+    DETAIL: (id: string) => `${BASE}/documents/${id}`,
+    ARCHIVE: (id: string) => `${BASE}/documents/${id}/archive`,
+    RESTORE: (id: string) => `${BASE}/documents/${id}/restore`,
+    DELETE: (id: string) => `${BASE}/documents/${id}`,
   },
   SETTLEMENT: {
     RUNS: (dealId: string) => `${BASE}/deals/${dealId}/settlement-runs`,
