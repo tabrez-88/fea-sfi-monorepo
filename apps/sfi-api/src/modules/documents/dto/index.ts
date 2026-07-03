@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsDateString,
   IsEnum,
   IsIn,
   IsObject,
@@ -366,4 +367,32 @@ export class DocumentListQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsUUID()
   uploadedByUserId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Case-insensitive search on `fileName`. Powers Screen 3.4 search bar. Whitespace-only strings are ignored.',
+    example: 'contract',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  search?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Return only documents uploaded on or after this ISO date. Powers Screen 3.4 date-range filter.',
+    example: '2026-01-01',
+  })
+  @IsOptional()
+  @IsDateString()
+  uploadedFrom?: string;
+
+  @ApiPropertyOptional({
+    description: 'Return only documents uploaded on or before this ISO date.',
+    example: '2026-12-31',
+  })
+  @IsOptional()
+  @IsDateString()
+  uploadedTo?: string;
 }

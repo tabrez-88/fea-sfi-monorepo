@@ -10,10 +10,15 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import {
   CreateDealDto,
+  DealCategoryDto,
   DealCountsResponseDto,
+  DealCurrencyDto,
+  DealImportOutcomeDto,
   DealListQueryDto,
   DealResponseDto,
   DealStatusDto,
+  ImportDealRowResultDto,
+  ImportDealsResultDto,
   UpdateDealDto,
 } from '../dto';
 import { DealMapper } from '../mappers/deal.mapper';
@@ -398,4 +403,361 @@ export class DealsService {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
   }
+
+  // ────────────────────────────────────────────────────────────────
+  // MS-3 Wave 6 (Liang MS3-R2) — Deal Registration CSV import
+  //
+  // Bulk-create Deals from a CSV export (typically produced by FEA).
+  // Matches on (userId, externalDealId) so re-running an import with
+  // updated rows upserts instead of duplicating.
+  //
+  // Expected header (case-insensitive): name, externalDealId, category,
+  // dealOwner, currency, effectiveDate, terminationDate, status,
+  // description, notes. Only `name` and `effectiveDate` are hard-required
+  // per row; every other column is optional.
+  // ────────────────────────────────────────────────────────────────
+
+  async importFromCsv(
+    userId: string,
+    buffer: Buffer,
+    skipErrors = false,
+    dryRun = false,
+  ): Promise<ImportDealsResultDto> {
+    this.logger.log(`Importing deals from CSV for user: ${userId} (dryRun=${dryRun})`);
+
+    const lines = buffer
+      .toString('utf8')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+
+    if (lines.length < 2) {
+      throw new BadRequestException('CSV must contain a header row and at least one data row');
+    }
+
+    const header = splitCsvRow(lines[0]!).map((h) => h.trim().toLowerCase());
+    const idx = buildDealHeaderIndex(header);
+    if (idx.name === -1 || idx.effectiveDate === -1) {
+      throw new BadRequestException(
+        'CSV header must include at least `name` and `effectiveDate` columns.',
+      );
+    }
+
+    const dataLines = lines.slice(1);
+    const rowResults: ImportDealRowResultDto[] = [];
+    const parsedRows: Array<{ rowNum: number; parsed: ParsedDealRow }> = [];
+
+    for (let i = 0; i < dataLines.length; i++) {
+      const rowNum = i + 1;
+      const cols = splitCsvRow(dataLines[i]!);
+      try {
+        const parsed = parseDealRow(cols, idx, rowNum);
+        parsedRows.push({ rowNum, parsed });
+        rowResults.push({
+          row: rowNum,
+          success: true,
+          outcome: DealImportOutcomeDto.CREATED,
+          warnings: parsed.warnings.length > 0 ? parsed.warnings : undefined,
+          deal: {
+            name: parsed.name,
+            externalDealId: parsed.externalDealId ?? null,
+            category: parsed.category ?? null,
+          },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!skipErrors) throw new BadRequestException(`Row ${rowNum}: ${message}`);
+        rowResults.push({
+          row: rowNum,
+          success: false,
+          outcome: DealImportOutcomeDto.SKIPPED,
+          error: message,
+        });
+      }
+    }
+
+    if (parsedRows.length === 0) {
+      throw new BadRequestException('No valid rows found in CSV');
+    }
+
+    if (dryRun) {
+      this.logger.log(
+        `CSV dry-run: ${parsedRows.length} rows valid, ${rowResults.filter((r) => !r.success).length} would be skipped`,
+      );
+      return {
+        imported: 0,
+        failed: rowResults.filter((r) => !r.success).length,
+        rows: rowResults.map((r) =>
+          r.success ? { ...r, outcome: DealImportOutcomeDto.SKIPPED } : r,
+        ),
+      };
+    }
+
+    // Persist inside a transaction. Upsert on (userId, externalDealId)
+    // when externalDealId is supplied so re-imports refresh existing
+    // rows instead of creating duplicates. Without externalDealId every
+    // row creates a new deal.
+    const resultsByRow = new Map<number, { dealId: string; outcome: DealImportOutcomeDto }>();
+    await this.prisma.$transaction(async (tx) => {
+      for (const { rowNum, parsed } of parsedRows) {
+        const existing = parsed.externalDealId
+          ? await tx.deal.findFirst({
+              where: { userId, externalDealId: parsed.externalDealId },
+              select: { id: true },
+            })
+          : null;
+
+        if (existing) {
+          const updated = await tx.deal.update({
+            where: { id: existing.id },
+            data: buildDealPersistData(parsed, false),
+          });
+          resultsByRow.set(rowNum, {
+            dealId: updated.id,
+            outcome: DealImportOutcomeDto.UPDATED,
+          });
+        } else {
+          const created = await tx.deal.create({
+            data: {
+              ...(buildDealPersistData(parsed, true) as Prisma.DealUncheckedCreateInput),
+              userId,
+            },
+          });
+          resultsByRow.set(rowNum, {
+            dealId: created.id,
+            outcome: DealImportOutcomeDto.CREATED,
+          });
+        }
+      }
+    });
+
+    // Attach the persistence results to the row list.
+    const finalRows = rowResults.map((r) => {
+      if (!r.success) return r;
+      const persisted = resultsByRow.get(r.row);
+      if (!persisted) return r;
+      return { ...r, outcome: persisted.outcome, dealId: persisted.dealId };
+    });
+
+    const imported = finalRows.filter((r) => r.success).length;
+    this.logger.log(`Imported ${imported} deals (failed: ${finalRows.length - imported})`);
+
+    // Emit one audit row per created / updated deal so the audit stream
+    // reads consistently with single-create audit entries. Bulk import
+    // shouldn't hide individual deal changes from the timeline.
+    for (const r of finalRows) {
+      if (!r.success || !r.dealId) continue;
+      await this.auditLog.create({
+        actor: userId,
+        action: r.outcome === DealImportOutcomeDto.UPDATED ? 'UPDATED' : 'CREATED',
+        entityType: 'Deal',
+        entityId: r.dealId,
+        dealId: r.dealId,
+        metadata: {
+          source: 'CSV_IMPORT',
+          row: r.row,
+        },
+      });
+    }
+
+    return { imported, failed: finalRows.length - imported, rows: finalRows };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// Deal CSV — parser helpers (module-scoped so they stay pure)
+// ────────────────────────────────────────────────────────────────
+
+interface DealHeaderIndex {
+  name: number;
+  externalDealId: number;
+  category: number;
+  dealOwner: number;
+  currency: number;
+  effectiveDate: number;
+  terminationDate: number;
+  status: number;
+  description: number;
+  notes: number;
+}
+
+interface ParsedDealRow {
+  name: string;
+  externalDealId?: string;
+  category?: DealCategoryDto;
+  dealOwner?: string;
+  currency?: DealCurrencyDto;
+  effectiveDate: Date;
+  terminationDate?: Date;
+  status?: DealStatusDto;
+  description?: string;
+  notes?: string;
+  warnings: string[];
+}
+
+/**
+ * Map a CSV header row to its column indexes. Accepts common variants
+ * (case-insensitive, snake_case, or spaces) so a CRM export doesn't
+ * need renaming before it can be imported.
+ */
+function buildDealHeaderIndex(header: string[]): DealHeaderIndex {
+  const find = (...variants: string[]): number => {
+    for (const v of variants) {
+      const idx = header.indexOf(v);
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+  return {
+    name: find('name', 'deal name', 'asset name'),
+    externalDealId: find('externaldealid', 'external_deal_id', 'external id', 'asset id', 'deal id'),
+    category: find('category', 'asset category', 'deal category'),
+    dealOwner: find('dealowner', 'deal_owner', 'deal owner', 'owner'),
+    currency: find('currency'),
+    effectiveDate: find('effectivedate', 'effective_date', 'effective date', 'issue date'),
+    terminationDate: find('terminationdate', 'termination_date', 'termination date', 'end date'),
+    status: find('status', 'deal status'),
+    description: find('description'),
+    notes: find('notes'),
+  };
+}
+
+function parseDealRow(cols: string[], idx: DealHeaderIndex, rowNum: number): ParsedDealRow {
+  const warnings: string[] = [];
+  const get = (i: number): string => (i >= 0 ? (cols[i] ?? '').trim() : '');
+
+  const name = get(idx.name);
+  if (!name) {
+    throw new Error(`Row ${rowNum}: 'name' is required`);
+  }
+
+  const effectiveDateRaw = get(idx.effectiveDate);
+  if (!effectiveDateRaw) {
+    throw new Error(`Row ${rowNum}: 'effectiveDate' is required`);
+  }
+  const effectiveDate = new Date(effectiveDateRaw);
+  if (Number.isNaN(effectiveDate.getTime())) {
+    throw new Error(`Row ${rowNum}: 'effectiveDate' is not a valid date (${effectiveDateRaw})`);
+  }
+
+  const terminationRaw = get(idx.terminationDate);
+  let terminationDate: Date | undefined;
+  if (terminationRaw) {
+    const t = new Date(terminationRaw);
+    if (Number.isNaN(t.getTime())) {
+      warnings.push(`terminationDate '${terminationRaw}' is not a valid date; ignored`);
+    } else if (t.getTime() <= effectiveDate.getTime()) {
+      warnings.push('terminationDate is not after effectiveDate; ignored');
+    } else {
+      terminationDate = t;
+    }
+  }
+
+  const parsed: ParsedDealRow = {
+    name,
+    effectiveDate,
+    warnings,
+  };
+  if (terminationDate) parsed.terminationDate = terminationDate;
+
+  const externalDealId = get(idx.externalDealId);
+  if (externalDealId) parsed.externalDealId = externalDealId;
+
+  const categoryRaw = get(idx.category);
+  if (categoryRaw) {
+    const cat = normalizeEnum(categoryRaw, DealCategoryDto);
+    if (cat) parsed.category = cat;
+    else warnings.push(`Unknown category '${categoryRaw}'; ignored`);
+  }
+
+  const dealOwner = get(idx.dealOwner);
+  if (dealOwner) parsed.dealOwner = dealOwner;
+
+  const currencyRaw = get(idx.currency).toUpperCase();
+  if (currencyRaw) {
+    const cur = normalizeEnum(currencyRaw, DealCurrencyDto);
+    if (cur) parsed.currency = cur;
+    else warnings.push(`Unknown currency '${currencyRaw}'; ignored`);
+  }
+
+  const statusRaw = get(idx.status);
+  if (statusRaw) {
+    const s = normalizeEnum(statusRaw, DealStatusDto);
+    if (s) parsed.status = s;
+    else warnings.push(`Unknown status '${statusRaw}'; ignored`);
+  }
+
+  const description = get(idx.description);
+  if (description) parsed.description = description;
+
+  const notes = get(idx.notes);
+  if (notes) parsed.notes = notes;
+
+  return parsed;
+}
+
+function normalizeEnum<T extends Record<string, string>>(raw: string, e: T): T[keyof T] | null {
+  const upper = raw.replace(/[\s-]/g, '_').toUpperCase();
+  return (Object.values(e) as string[]).includes(upper) ? (upper as T[keyof T]) : null;
+}
+
+/**
+ * Common column map for both create and update paths. Caller adds
+ * `userId` on the create path (the update path doesn't need it).
+ * Typed as `DealUncheckedUpdateInput` — Prisma's Create input widens
+ * from Update as long as the required fields are supplied, so the
+ * caller's spread of `{ userId }` satisfies the Create branch.
+ */
+function buildDealPersistData(
+  parsed: ParsedDealRow,
+  isCreate: boolean,
+): Prisma.DealUncheckedUpdateInput {
+  const data: Prisma.DealUncheckedUpdateInput = {
+    name: parsed.name,
+    effectiveDate: parsed.effectiveDate,
+    status: (parsed.status as DealStatus) ?? (isCreate ? DealStatus.DRAFT : undefined),
+    currency: (parsed.currency as Currency) ?? (isCreate ? Currency.USD : undefined),
+  };
+  if (parsed.category !== undefined) data.category = parsed.category as DealCategory;
+  if (parsed.dealOwner !== undefined) data.dealOwner = parsed.dealOwner;
+  if (parsed.terminationDate !== undefined) data.terminationDate = parsed.terminationDate;
+  if (parsed.description !== undefined) data.description = parsed.description;
+  if (parsed.notes !== undefined) data.notes = parsed.notes;
+  if (parsed.externalDealId !== undefined) data.externalDealId = parsed.externalDealId;
+  return data;
+}
+
+/**
+ * RFC 4180-lite CSV row splitter — handles double-quoted fields with
+ * embedded commas and `""` escapes. Same shape as the participants
+ * importer so admins can reuse Excel exports without normalizing.
+ */
+function splitCsvRow(line: string): string[] {
+  const cells: string[] = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === ',') {
+      cells.push(cur);
+      cur = '';
+    } else if (ch === '"' && cur.length === 0) {
+      inQuotes = true;
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur);
+  return cells;
 }

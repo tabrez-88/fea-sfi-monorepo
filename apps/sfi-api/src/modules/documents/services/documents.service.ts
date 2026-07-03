@@ -158,12 +158,22 @@ export class DocumentsService {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
+    // Wave 5 — search + date range (Screen 3.4 toolbar). Search hits
+    // fileName case-insensitive; uploadedFrom/uploadedTo narrow by the
+    // uploaded_at column.
+    const search = query.search?.trim();
+    const uploadedAt: Prisma.DateTimeFilter = {};
+    if (query.uploadedFrom) uploadedAt.gte = new Date(query.uploadedFrom);
+    if (query.uploadedTo) uploadedAt.lte = new Date(query.uploadedTo);
+
     const where: Prisma.DocumentWhereInput = {
       ...(filter.dealId && { dealId: filter.dealId }),
       ...(filter.revenueBatchId && { revenueBatchId: filter.revenueBatchId }),
       ...(filter.settlementRunId && { settlementRunId: filter.settlementRunId }),
       ...(query.docType && { docType: query.docType }),
       ...(query.uploadedByUserId && { uploadedByUserId: query.uploadedByUserId }),
+      ...(search && { fileName: { contains: search, mode: 'insensitive' } }),
+      ...(Object.keys(uploadedAt).length > 0 && { uploadedAt }),
       ...buildArchivedFilter(query.archived),
     };
 

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,9 +8,14 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
   ApiParam,
   ApiQuery,
@@ -25,6 +31,7 @@ import {
   DealListQueryDto,
   DealResponseDto,
   DealStatusDto,
+  ImportDealsResultDto,
   UpdateDealDto,
 } from '../dto';
 import { DealsService } from '../services/deals.service';
@@ -48,6 +55,49 @@ export class DealsController {
     @Body() createDealDto: CreateDealDto,
   ): Promise<DealResponseDto> {
     return this.dealsService.create(user.id, createDealDto);
+  }
+
+  // MS-3 Wave 6 (Liang MS3-R2) — Deal Registration CSV import.
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Bulk-import deals from a CSV export (Deal Registration v1)',
+    description:
+      'Accepts a CSV with header row. Required columns: `name`, `effectiveDate`. Optional: ' +
+      '`externalDealId`, `category`, `dealOwner`, `currency`, `terminationDate`, `status`, ' +
+      '`description`, `notes`. Match strategy: when `externalDealId` is supplied, upsert on ' +
+      '`(userId, externalDealId)`; otherwise every row creates a new deal. Use `?dryRun=true` ' +
+      "for the FE Preview Import step. Use `?skipErrors=true` to keep going past failed rows.",
+  })
+  @ApiQuery({ name: 'dryRun', required: false, type: Boolean, description: 'Parse + validate only, do not persist. Defaults to false.' })
+  @ApiQuery({ name: 'skipErrors', required: false, type: Boolean, description: 'Report failed rows instead of aborting. Defaults to false.' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'CSV file (UTF-8, header row required)' },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result', type: ImportDealsResultDto })
+  @ApiResponse({ status: 400, description: 'Invalid CSV or row-level errors' })
+  async importCsv(
+    @CurrentUser() user: AuthenticatedUser,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('dryRun') dryRun?: string,
+    @Query('skipErrors') skipErrors?: string,
+  ): Promise<ImportDealsResultDto> {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('Missing CSV file upload');
+    }
+    return this.dealsService.importFromCsv(
+      user.id,
+      file.buffer,
+      skipErrors === 'true',
+      dryRun === 'true',
+    );
   }
 
   @Get()

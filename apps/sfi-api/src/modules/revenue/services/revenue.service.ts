@@ -166,9 +166,34 @@ export class RevenueService {
     // inside `RevenueBatch.metadata` JSON, so we use Prisma's `path`
     // equality. AND-combined with `dealId`. Empty filter = no narrowing.
     // `status` matches the top-level column and drives Screen 3.1 filter tabs.
+    //
+    // Wave 5 — search + date range (Screen 3.1 toolbar). Search hits
+    // batchNumber OR source (case-insensitive contains). Period bounds
+    // are half-open so a batch whose window overlaps the filter window
+    // is included.
+    const search = query.search?.trim();
+    const searchFilter: Prisma.RevenueBatchWhereInput | undefined = search
+      ? {
+          OR: [
+            { batchNumber: { contains: search, mode: 'insensitive' } },
+            { source: { contains: search, mode: 'insensitive' } },
+          ],
+        }
+      : undefined;
+
+    const periodFilter: Prisma.RevenueBatchWhereInput = {};
+    if (query.periodFrom) {
+      periodFilter.periodStart = { gte: new Date(query.periodFrom) };
+    }
+    if (query.periodTo) {
+      periodFilter.periodEnd = { lte: new Date(query.periodTo) };
+    }
+
     const where: Prisma.RevenueBatchWhereInput = {
       dealId,
       ...(status ? { status } : {}),
+      ...(searchFilter ?? {}),
+      ...periodFilter,
       ...buildMetadataPathFilters(query),
     };
 

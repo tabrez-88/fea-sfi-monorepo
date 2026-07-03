@@ -346,3 +346,81 @@ export class DealCountsResponseDto {
   @ApiProperty({ description: 'Deals in ARCHIVED status', example: 0 })
   archived!: number;
 }
+
+// ─── Deal CSV Import (MS-3 Wave 6 / Liang MS3-R2) ─────────────────────────
+
+/**
+ * Options body for `POST /deals/import`. Query string in real use, but
+ * shaped as a DTO for Swagger. Both flags default to `false`.
+ */
+export class ImportDealsOptionsDto {
+  @ApiPropertyOptional({
+    description:
+      'When true, rows that fail validation are skipped and reported in the response ' +
+      'instead of aborting the entire import.',
+    example: false,
+  })
+  @IsOptional()
+  skipErrors?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, parses + validates but does NOT persist. Powers the FE Preview Import ' +
+      'modal (Round 4 pattern, mirrors the participants importer).',
+    example: false,
+  })
+  @IsOptional()
+  dryRun?: boolean;
+}
+
+export enum DealImportOutcomeDto {
+  CREATED = 'CREATED',
+  UPDATED = 'UPDATED',
+  SKIPPED = 'SKIPPED',
+}
+
+export class ImportDealRowResultDto {
+  @ApiProperty({ description: '1-indexed row number (excluding header)', example: 1 })
+  row!: number;
+
+  @ApiProperty({ description: 'Whether the row was processed successfully', example: true })
+  success!: boolean;
+
+  @ApiProperty({ enum: DealImportOutcomeDto, example: DealImportOutcomeDto.CREATED })
+  outcome!: DealImportOutcomeDto;
+
+  @ApiPropertyOptional({ description: 'Parse or persistence error message when success=false.' })
+  error?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Soft warnings that didn't block the row (e.g. an unrecognized status was normalized). " +
+      'Empty / omitted on clean rows.',
+    type: [String],
+  })
+  warnings?: string[];
+
+  @ApiPropertyOptional({ description: 'ID of the created / updated deal (null on failure or dryRun).' })
+  dealId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Convenience preview of the row so the FE can render it in the results table.',
+    example: {
+      name: 'The Last Horizon',
+      category: 'FILM_AND_TV',
+      externalDealId: 'FEA-DEAL-4231',
+    },
+  })
+  deal?: Record<string, unknown> | null;
+}
+
+export class ImportDealsResultDto {
+  @ApiProperty({ description: 'Rows persisted (0 when dryRun=true).', example: 4 })
+  imported!: number;
+
+  @ApiProperty({ description: 'Rows that failed validation.', example: 0 })
+  failed!: number;
+
+  @ApiProperty({ type: [ImportDealRowResultDto] })
+  rows!: ImportDealRowResultDto[];
+}

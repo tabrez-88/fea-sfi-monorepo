@@ -128,6 +128,7 @@ model Deal {
   terminationDate  DateTime?     @map("termination_date")
   notes            String?       @db.Text // free-form notes on the deal; FE currently only collects this from the Suspend Deal modal, so service-level logic auto-clears it when status moves out of SUSPENDED
   metadata         Json?
+  externalDealId   String?       @map("external_deal_id") @db.VarChar(100) // MS-3 Wave 6 — reconciliation key for CSV imports from FEA; unique per user
   userId           String        @map("user_id")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
@@ -141,7 +142,9 @@ model Deal {
   ledgerJournals      LedgerJournal[]
   documents           Document[]
   participantBalances ParticipantBalance[] // FB-003 Run 3 — cross-phase cumulative tracking
+  perkDeliveries      PerkDelivery[]
 
+  @@unique([userId, externalDealId], name: "deals_userId_externalDealId_uidx")
   @@index([status])
   @@index([userId])
   @@map("deals")
@@ -165,6 +168,7 @@ model Participant {
   settlementAllocations    SettlementAllocation[]
   ledgerPostings           LedgerPosting[]
   participantBalances      ParticipantBalance[] // FB-003 Run 3
+  perkDeliveries           PerkDelivery[]
 
   @@index([dealId])
   @@map("participants")
@@ -328,12 +332,52 @@ model SettlementRun {
   ledgerJournals          LedgerJournal[]
   proofRecords            ProofRecord[]
   documents               Document[]
+  perkDeliveries          PerkDelivery[]
 
   @@unique([dealId, runNumber])
   @@index([dealId])
   @@index([ruleSnapshotId])
   @@index([runType])
   @@map("settlement_runs")
+}
+
+/// MS-3 Wave 6 (Liang MS3-R4) — Perk / delivery tracking per participant.
+/// One row per shipped item; carriers/tracking numbers land here so
+/// investors can see delivery status on their settlement detail view
+/// (MS5 role-gated view). Settlement run is optional because some perks
+/// are one-shot campaign rewards not tied to a specific settlement.
+model PerkDelivery {
+  id              String             @id @default(uuid())
+  dealId          String             @map("deal_id")
+  participantId   String             @map("participant_id")
+  settlementRunId String?            @map("settlement_run_id")
+  trackingNumber  String?            @map("tracking_number") @db.VarChar(255)
+  carrier         String?            @db.VarChar(100)
+  shippedAt       DateTime?          @map("shipped_at")
+  deliveredAt     DateTime?          @map("delivered_at")
+  status          PerkDeliveryStatus @default(PENDING)
+  notes           String?            @db.VarChar(500)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  deal          Deal           @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  participant   Participant    @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  settlementRun SettlementRun? @relation(fields: [settlementRunId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([participantId])
+  @@index([settlementRunId])
+  @@index([status])
+  @@map("perk_deliveries")
+}
+
+enum PerkDeliveryStatus {
+  PENDING
+  SHIPPED
+  DELIVERED
+  RETURNED
+  CANCELLED
 }
 
 model SettlementRevenueLink {

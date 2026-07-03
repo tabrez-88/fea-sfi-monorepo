@@ -266,6 +266,65 @@ describe('DocumentsService', () => {
     });
   });
 
+  // ─── listDocuments — search + date range (Wave 5, Screen 3.4 toolbar) ────
+
+  describe('listDocuments — search + date range', () => {
+    beforeEach(() => {
+      mockPrismaService.document.findMany.mockResolvedValue([]);
+      mockPrismaService.document.count.mockResolvedValue(0);
+    });
+
+    it('adds a case-insensitive fileName filter when search is supplied', async () => {
+      await service.listDocuments({ dealId: MOCK_DEAL_ID }, { search: 'contract' });
+
+      const where = mockPrismaService.document.findMany.mock.calls[0][0].where;
+      expect(where.fileName).toEqual({ contains: 'contract', mode: 'insensitive' });
+    });
+
+    it('ignores whitespace-only search input', async () => {
+      await service.listDocuments({ dealId: MOCK_DEAL_ID }, { search: '   ' });
+
+      const where = mockPrismaService.document.findMany.mock.calls[0][0].where;
+      expect(where.fileName).toBeUndefined();
+    });
+
+    it('applies uploadedFrom + uploadedTo as a single uploadedAt bound', async () => {
+      await service.listDocuments(
+        { dealId: MOCK_DEAL_ID },
+        { uploadedFrom: '2026-01-01', uploadedTo: '2026-12-31' },
+      );
+
+      const where = mockPrismaService.document.findMany.mock.calls[0][0].where;
+      expect(where.uploadedAt).toEqual({
+        gte: new Date('2026-01-01'),
+        lte: new Date('2026-12-31'),
+      });
+    });
+
+    it('omits the uploadedAt clause entirely when both bounds are absent', async () => {
+      await service.listDocuments({ dealId: MOCK_DEAL_ID }, {});
+
+      const where = mockPrismaService.document.findMany.mock.calls[0][0].where;
+      expect(where.uploadedAt).toBeUndefined();
+    });
+
+    it('composes search + docType + uploadedFrom without collision', async () => {
+      await service.listDocuments(
+        { dealId: MOCK_DEAL_ID },
+        {
+          search: 'q4',
+          docType: DocumentTypeEnum.REVENUE_REPORT,
+          uploadedFrom: '2026-06-01',
+        },
+      );
+
+      const where = mockPrismaService.document.findMany.mock.calls[0][0].where;
+      expect(where.docType).toBe(DocumentTypeEnum.REVENUE_REPORT);
+      expect(where.fileName).toEqual({ contains: 'q4', mode: 'insensitive' });
+      expect(where.uploadedAt).toEqual({ gte: new Date('2026-06-01') });
+    });
+  });
+
   // ─── listDocuments — scope ownership (MS3 verification Wave 1 gap #4) ─────
 
   describe('listDocuments — scope ownership', () => {

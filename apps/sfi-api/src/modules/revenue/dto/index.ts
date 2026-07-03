@@ -482,6 +482,35 @@ export class RevenueBatchListQueryDto extends PaginationQueryDto {
   status?: RevenueBatchStatusEnum;
 
   @ApiPropertyOptional({
+    description:
+      'Case-insensitive search on `batchNumber` OR `source`. Powers Screen 3.1 search bar. Whitespace-only strings are ignored.',
+    example: 'RB-2026',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  search?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Return only batches whose `periodStart` is on or after this ISO date. Powers Screen 3.1 date-range filter.',
+    example: '2026-01-01',
+  })
+  @IsOptional()
+  @IsDateString()
+  periodFrom?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Return only batches whose `periodEnd` is on or before this ISO date. Powers Screen 3.1 date-range filter.',
+    example: '2026-12-31',
+  })
+  @IsOptional()
+  @IsDateString()
+  periodTo?: string;
+
+  @ApiPropertyOptional({
     description: 'Filter to batches whose `territory` exactly matches this value.',
     example: 'US',
     maxLength: 100,

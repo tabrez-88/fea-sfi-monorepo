@@ -17,6 +17,16 @@ jest.mock('@prisma/client', () => ({
     ACTIVE: 'ACTIVE',
     SUSPENDED: 'SUSPENDED',
     CLOSED: 'CLOSED',
+    TERMINATED: 'TERMINATED',
+    ARCHIVED: 'ARCHIVED',
+  },
+  DealCategory: {
+    MUSIC: 'MUSIC',
+    FILM_AND_TV: 'FILM_AND_TV',
+    LIVE_EVENTS_AND_SPORTS: 'LIVE_EVENTS_AND_SPORTS',
+    GAMES_AND_INTERACTIVE_MEDIA: 'GAMES_AND_INTERACTIVE_MEDIA',
+    CREATOR_AND_CONSUMER_IP: 'CREATOR_AND_CONSUMER_IP',
+    AI_AND_FUTURE_MEDIA: 'AI_AND_FUTURE_MEDIA',
   },
   Currency: {
     USD: 'USD',
@@ -37,10 +47,15 @@ const MOCK_USER_ID = 'user-uuid-mock';
 describe('DealsService', () => {
   let service: DealsService;
 
-  const mockPrismaService = {
+  const mockPrismaService: {
+    deal: Record<string, jest.Mock>;
+    revenueBatch: Record<string, jest.Mock>;
+    $transaction: jest.Mock;
+  } = {
     deal: {
       create: jest.fn(),
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
       count: jest.fn(),
@@ -49,6 +64,8 @@ describe('DealsService', () => {
     revenueBatch: {
       aggregate: jest.fn(),
     },
+    // Runs the callback with the same mocks so tx.deal.* hits our stubs.
+    $transaction: jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(mockPrismaService)),
   };
 
   const mockAuditLogService = {
@@ -440,6 +457,135 @@ describe('DealsService', () => {
       expect(result.active).toBe(0);
       expect(result.suspended).toBe(0);
       expect(result.closed).toBe(0);
+    });
+  });
+
+  // ─── importFromCsv (MS-3 Wave 6 / Liang MS3-R2) ─────────────────────────
+
+  describe('importFromCsv', () => {
+    function buildCsv(rows: string[]): Buffer {
+      return Buffer.from(rows.join('\n'), 'utf8');
+    }
+
+    it('rejects an empty CSV with a friendly error', async () => {
+      const buffer = buildCsv(['name,effectiveDate']);
+      await expect(
+        service.importFromCsv(MOCK_USER_ID, buffer),
+      ).rejects.toThrow(/at least one data row/);
+    });
+
+    it('rejects when the header is missing required columns', async () => {
+      const buffer = buildCsv([
+        'externalDealId,category',
+        'FEA-1,MUSIC',
+      ]);
+      await expect(
+        service.importFromCsv(MOCK_USER_ID, buffer),
+      ).rejects.toThrow(/name.*effectiveDate/);
+    });
+
+    it('creates new deals when no externalDealId matches an existing row', async () => {
+      const buffer = buildCsv([
+        'name,effectiveDate,category,currency,externalDealId',
+        'The Last Horizon,2026-01-01,FILM_AND_TV,USD,FEA-DEAL-1',
+        'Album X,2026-02-15,MUSIC,EUR,FEA-DEAL-2',
+      ]);
+      mockPrismaService.deal.findFirst.mockResolvedValue(null);
+      mockPrismaService.deal.create
+        .mockResolvedValueOnce({ id: 'deal-1' })
+        .mockResolvedValueOnce({ id: 'deal-2' });
+
+      const result = await service.importFromCsv(MOCK_USER_ID, buffer);
+
+      expect(result.imported).toBe(2);
+      expect(result.failed).toBe(0);
+      expect(mockPrismaService.deal.create).toHaveBeenCalledTimes(2);
+      expect(result.rows[0].outcome).toBe('CREATED');
+      expect(result.rows[0].dealId).toBe('deal-1');
+    });
+
+    it('upserts on (userId, externalDealId) when a match exists', async () => {
+      const buffer = buildCsv([
+        'name,effectiveDate,externalDealId',
+        'Renamed Deal,2026-01-01,FEA-DEAL-1',
+      ]);
+      mockPrismaService.deal.findFirst.mockResolvedValue({ id: 'existing-deal-uuid' });
+      mockPrismaService.deal.update.mockResolvedValue({ id: 'existing-deal-uuid' });
+
+      const result = await service.importFromCsv(MOCK_USER_ID, buffer);
+
+      expect(mockPrismaService.deal.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: MOCK_USER_ID, externalDealId: 'FEA-DEAL-1' },
+        }),
+      );
+      expect(mockPrismaService.deal.update).toHaveBeenCalledTimes(1);
+      expect(mockPrismaService.deal.create).not.toHaveBeenCalled();
+      expect(result.rows[0].outcome).toBe('UPDATED');
+    });
+
+    it('honors skipErrors=true — reports bad rows, imports the good ones', async () => {
+      const buffer = buildCsv([
+        'name,effectiveDate',
+        'Valid Deal,2026-01-01',
+        ',missing name',
+        'Another Valid,2026-06-01',
+      ]);
+      mockPrismaService.deal.findFirst.mockResolvedValue(null);
+      mockPrismaService.deal.create
+        .mockResolvedValueOnce({ id: 'ok-1' })
+        .mockResolvedValueOnce({ id: 'ok-2' });
+
+      const result = await service.importFromCsv(MOCK_USER_ID, buffer, true);
+
+      expect(result.imported).toBe(2);
+      expect(result.failed).toBe(1);
+      expect(result.rows[1].success).toBe(false);
+      expect(result.rows[1].error).toMatch(/name/);
+    });
+
+    it('aborts on the first bad row when skipErrors=false', async () => {
+      const buffer = buildCsv([
+        'name,effectiveDate',
+        ',2026-01-01',
+      ]);
+      await expect(
+        service.importFromCsv(MOCK_USER_ID, buffer),
+      ).rejects.toThrow(/name/);
+      expect(mockPrismaService.deal.create).not.toHaveBeenCalled();
+    });
+
+    it('dryRun=true validates without persisting', async () => {
+      const buffer = buildCsv([
+        'name,effectiveDate',
+        'Preview Deal,2026-01-01',
+      ]);
+
+      const result = await service.importFromCsv(MOCK_USER_ID, buffer, false, true);
+
+      expect(result.imported).toBe(0);
+      expect(result.rows[0].outcome).toBe('SKIPPED');
+      expect(mockPrismaService.deal.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.deal.update).not.toHaveBeenCalled();
+    });
+
+    it('normalizes casing on category/currency/status and reports unknown values as warnings', async () => {
+      const buffer = buildCsv([
+        'name,effectiveDate,category,currency,status',
+        'Deal A,2026-01-01,music,usd,active',
+        'Deal B,2026-01-01,Unknown Category,ZZZ,Frozen',
+      ]);
+      mockPrismaService.deal.findFirst.mockResolvedValue(null);
+      mockPrismaService.deal.create
+        .mockResolvedValueOnce({ id: 'a' })
+        .mockResolvedValueOnce({ id: 'b' });
+
+      const result = await service.importFromCsv(MOCK_USER_ID, buffer);
+
+      const rowB = result.rows.find((r) => r.row === 2)!;
+      expect(rowB.warnings?.some((w) => w.includes('category'))).toBe(true);
+      expect(rowB.warnings?.some((w) => w.includes('currency'))).toBe(true);
+      expect(rowB.warnings?.some((w) => w.includes('status'))).toBe(true);
     });
   });
 });

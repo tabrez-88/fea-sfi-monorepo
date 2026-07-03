@@ -353,6 +353,65 @@ describe('RevenueService', () => {
     });
   });
 
+  // ─── listBatches — search + date range (Wave 5, Screen 3.1 toolbar) ──────
+
+  describe('listBatches — search + date range', () => {
+    beforeEach(() => {
+      mockPrismaService.revenueBatch.findMany.mockResolvedValue([]);
+      mockPrismaService.revenueBatch.count.mockResolvedValue(0);
+    });
+
+    it('hits batchNumber OR source case-insensitively when search is supplied', async () => {
+      await service.listBatches(MOCK_USER_ID, MOCK_DEAL_ID, { search: 'RB-2026' });
+
+      const where = mockPrismaService.revenueBatch.findMany.mock.calls[0][0].where;
+      expect(where.OR).toEqual([
+        { batchNumber: { contains: 'RB-2026', mode: 'insensitive' } },
+        { source: { contains: 'RB-2026', mode: 'insensitive' } },
+      ]);
+    });
+
+    it('ignores whitespace-only search input', async () => {
+      await service.listBatches(MOCK_USER_ID, MOCK_DEAL_ID, { search: '   ' });
+
+      const where = mockPrismaService.revenueBatch.findMany.mock.calls[0][0].where;
+      expect(where.OR).toBeUndefined();
+    });
+
+    it('applies periodFrom as gte on periodStart', async () => {
+      await service.listBatches(MOCK_USER_ID, MOCK_DEAL_ID, {
+        periodFrom: '2026-01-01',
+      });
+
+      const where = mockPrismaService.revenueBatch.findMany.mock.calls[0][0].where;
+      expect(where.periodStart).toEqual({ gte: new Date('2026-01-01') });
+    });
+
+    it('applies periodTo as lte on periodEnd', async () => {
+      await service.listBatches(MOCK_USER_ID, MOCK_DEAL_ID, {
+        periodTo: '2026-12-31',
+      });
+
+      const where = mockPrismaService.revenueBatch.findMany.mock.calls[0][0].where;
+      expect(where.periodEnd).toEqual({ lte: new Date('2026-12-31') });
+    });
+
+    it('combines search + status + period bounds as a single AND clause', async () => {
+      await service.listBatches(MOCK_USER_ID, MOCK_DEAL_ID, {
+        search: 'Netflix',
+        status: 'PENDING' as never,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-12-31',
+      });
+
+      const where = mockPrismaService.revenueBatch.findMany.mock.calls[0][0].where;
+      expect(where.status).toBe('PENDING');
+      expect(where.OR).toHaveLength(2);
+      expect(where.periodStart).toEqual({ gte: new Date('2026-01-01') });
+      expect(where.periodEnd).toEqual({ lte: new Date('2026-12-31') });
+    });
+  });
+
   // ─── getSummary — Screen 3.1 filter-tab counts + summary-bar amounts ─────
 
   describe('getSummary', () => {
