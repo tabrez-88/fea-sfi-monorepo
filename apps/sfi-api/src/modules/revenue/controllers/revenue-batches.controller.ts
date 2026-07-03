@@ -1,9 +1,12 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
   Body,
+  HttpCode,
+  HttpStatus,
   Param,
   Query,
   ParseUUIDPipe,
@@ -20,10 +23,15 @@ import {
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/jwt-payload';
 import {
+  BulkCreateRevenueLineItemsDto,
   CreateRevenueBatchDto,
   RevenueBatchResponseDto,
   RevenueBatchListResponseDto,
   RevenueBatchListQueryDto,
+  RevenueBatchStatusEnum,
+  RevenueBatchSummaryDto,
+  RevenueLineItemResponseDto,
+  UpdateRevenueLineItemDto,
   ValidateRevenueBatchDto,
   RejectRevenueBatchDto,
 } from '../dto';
@@ -69,6 +77,7 @@ export class RevenueBatchesController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
+  @ApiQuery({ name: 'status', required: false, enum: RevenueBatchStatusEnum, description: 'Filter by batch status (drives Screen 3.1 filter tabs)' })
   @ApiQuery({ name: 'territory', required: false, type: String, description: 'Exact-match filter on metadata.territory (e.g. US, EU, APAC)' })
   @ApiQuery({ name: 'revenueType', required: false, type: String, description: 'Exact-match filter on metadata.revenueType (e.g. Streaming, Box Office)' })
   @ApiQuery({ name: 'reportingEntity', required: false, type: String, description: 'Exact-match filter on metadata.reportingEntity (e.g. Spotify, Netflix)' })
@@ -80,6 +89,25 @@ export class RevenueBatchesController {
     @Query() query: RevenueBatchListQueryDto,
   ): Promise<RevenueBatchListResponseDto> {
     return this.revenueService.listBatches(user.id, dealId, query);
+  }
+
+  @Get('deals/:dealId/revenue-batches/summary')
+  @ApiOperation({
+    summary: 'Aggregate summary for a deal (counts + amounts per status)',
+    description:
+      'Powers Screen 3.1 filter tab counts ([Pending (1)] [Validated (1)] …) AND the ' +
+      'summary bar (Total Revenue $X · Pending: $Y · Validated: $Z · Processed: $W). ' +
+      'Single query returns both to save a round-trip. `currency` is `null` when the ' +
+      "deal's batches span multiple currencies.",
+  })
+  @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Revenue batches summary', type: RevenueBatchSummaryDto })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async getSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('dealId', ParseUUIDPipe) dealId: string,
+  ): Promise<RevenueBatchSummaryDto> {
+    return this.revenueService.getSummary(user.id, dealId);
   }
 
   @Get('revenue-batches/:id')
@@ -120,5 +148,64 @@ export class RevenueBatchesController {
     @Body() rejectDto: RejectRevenueBatchDto,
   ): Promise<RevenueBatchResponseDto> {
     return this.revenueService.rejectBatch(user.id, id, rejectDto);
+  }
+
+  // ─── MS-3 Wave 3 (Liang MS3-R1) — Revenue Line Items ───────────────────
+
+  @Post('revenue-batches/:id/line-items')
+  @ApiOperation({
+    summary: 'Bulk-add line items to a revenue batch',
+    description:
+      'Runs inside a single transaction. Every row inherits the parent batch currency ' +
+      'unless it supplies one, in which case it must match. Batch must be PENDING.',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 201, description: 'Line items created', type: [RevenueLineItemResponseDto] })
+  @ApiResponse({ status: 400, description: 'Invalid input or batch is not PENDING' })
+  @ApiResponse({ status: 404, description: 'Revenue batch not found' })
+  async addLineItems(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: BulkCreateRevenueLineItemsDto,
+  ): Promise<RevenueLineItemResponseDto[]> {
+    return this.revenueService.addLineItems(user.id, id, dto);
+  }
+
+  @Patch('revenue-batches/:id/line-items/:lineItemId')
+  @ApiOperation({
+    summary: 'Update a line item on a revenue batch',
+    description: 'Batch must be PENDING. All fields optional; currency (if supplied) must match batch currency.',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiParam({ name: 'lineItemId', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Line item updated', type: RevenueLineItemResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid input or batch is not PENDING' })
+  @ApiResponse({ status: 404, description: 'Batch or line item not found' })
+  async updateLineItem(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineItemId', ParseUUIDPipe) lineItemId: string,
+    @Body() dto: UpdateRevenueLineItemDto,
+  ): Promise<RevenueLineItemResponseDto> {
+    return this.revenueService.updateLineItem(user.id, id, lineItemId, dto);
+  }
+
+  @Delete('revenue-batches/:id/line-items/:lineItemId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete a line item from a revenue batch',
+    description: 'Batch must be PENDING.',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiParam({ name: 'lineItemId', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Line item deleted' })
+  @ApiResponse({ status: 400, description: 'Batch is not PENDING' })
+  @ApiResponse({ status: 404, description: 'Batch or line item not found' })
+  async deleteLineItem(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineItemId', ParseUUIDPipe) lineItemId: string,
+  ): Promise<{ success: true }> {
+    return this.revenueService.deleteLineItem(user.id, id, lineItemId);
   }
 }

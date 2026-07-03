@@ -81,6 +81,11 @@ enum DocumentType {
   SETTLEMENT_REPORT
   AUDIT_REPORT
   PROOF_RECORD
+  // MS-3 Wave 3 (Liang MS3-R3) — Carta-style intake taxonomy.
+  OFFERING_DOCUMENT
+  INVESTOR_AGREEMENT
+  DISCLOSURE
+  REVENUE_SHARE_TERMS
   OTHER
 }
 
@@ -257,10 +262,40 @@ model RevenueBatch {
   deal                    Deal                     @relation(fields: [dealId], references: [id], onDelete: Cascade)
   settlementRevenueLinks  SettlementRevenueLink[]
   documents               Document[]
+  lineItems               RevenueLineItem[]
 
   @@index([dealId])
   @@index([status])
   @@map("revenue_batches")
+}
+
+/// MS-3 Wave 3 (Liang MS3-R1) — first-class line items with per-row
+/// categorization. Territory / Revenue Type / Reporting Entity move
+/// FROM the batch metadata JSON INTO each line item so mixed-source
+/// batches (Netflix US Streaming + Disney+ EU Licensing in one report)
+/// slice cleanly downstream. Batch-level `metadata.lineItems` stays for
+/// backward-compat with pre-Wave-3 batches; new create calls should use
+/// this table.
+model RevenueLineItem {
+  id               String   @id @default(uuid())
+  batchId          String   @map("batch_id")
+  platformSource   String   @map("platform_source") @db.VarChar(255)
+  amount           Decimal  @db.Decimal(18, 2)
+  currency         Currency
+  territory        String?  @db.VarChar(100)
+  revenueType      String?  @map("revenue_type") @db.VarChar(100)
+  reportingEntity  String?  @map("reporting_entity") @db.VarChar(255)
+  notes            String?  @db.VarChar(500)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  batch RevenueBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([territory])
+  @@index([revenueType])
+  @@map("revenue_line_items")
 }
 
 // ===========================================

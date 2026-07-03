@@ -22,6 +22,11 @@ export enum DocumentTypeEnum {
   SETTLEMENT_REPORT = 'SETTLEMENT_REPORT',
   AUDIT_REPORT = 'AUDIT_REPORT',
   PROOF_RECORD = 'PROOF_RECORD',
+  // MS-3 Wave 3 (Liang MS3-R3) — Carta-style intake taxonomy.
+  OFFERING_DOCUMENT = 'OFFERING_DOCUMENT',
+  INVESTOR_AGREEMENT = 'INVESTOR_AGREEMENT',
+  DISCLOSURE = 'DISCLOSURE',
+  REVENUE_SHARE_TERMS = 'REVENUE_SHARE_TERMS',
   OTHER = 'OTHER',
 }
 
@@ -119,6 +124,43 @@ export class ContextualUploadDocumentDto {
 // Document Response DTO
 // ============================================
 
+/**
+ * Scope the document is attached to. `DEAL` means the document was
+ * uploaded at the deal level (no batch/run link). `BATCH` / `RUN` mean
+ * the document is scoped to a specific revenue batch or settlement run.
+ */
+export enum DocumentLinkedToTypeEnum {
+  DEAL = 'DEAL',
+  BATCH = 'BATCH',
+  RUN = 'RUN',
+}
+
+/**
+ * Human-readable "Linked To" label surfaced on Screen 3.4 (Documents
+ * List). Batches show their `batchNumber` ("RB-2026-004"), runs show
+ * "Run #N". Deal-level docs get the constant label "Deal".
+ */
+export class DocumentLinkedToDto {
+  @ApiProperty({
+    enum: DocumentLinkedToTypeEnum,
+    description: 'Which scope the document is attached to.',
+  })
+  type!: DocumentLinkedToTypeEnum;
+
+  @ApiProperty({
+    description: 'Display label for Screen 3.4 "Linked To" column.',
+    example: 'RB-2026-004',
+  })
+  label!: string;
+
+  @ApiPropertyOptional({
+    description:
+      "ID of the linked batch or run. `null` when `type: 'DEAL'`. Enables the FE to render the label as a link to the target's detail page.",
+    example: '550e8400-e29b-41d4-a716-446655440050',
+  })
+  id?: string | null;
+}
+
 export class DocumentResponseDto {
   @ApiProperty({
     description: 'Unique identifier for the document',
@@ -143,6 +185,15 @@ export class DocumentResponseDto {
     example: null,
   })
   settlementRunId?: string | null;
+
+  @ApiProperty({
+    description:
+      'Human-readable scope descriptor for Screen 3.4 "Linked To" column. ' +
+      'Encapsulates the `type / label / id` triplet so the FE renders one field ' +
+      'instead of resolving batch#/run# via extra API calls.',
+    type: () => DocumentLinkedToDto,
+  })
+  linkedTo!: DocumentLinkedToDto;
 
   @ApiProperty({
     description: 'Type of document',

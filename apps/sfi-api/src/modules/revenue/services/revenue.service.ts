@@ -9,10 +9,17 @@ import { RevenueBatchStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
 import {
+  BulkCreateRevenueLineItemsDto,
   CreateRevenueBatchDto,
+  CreateRevenueLineItemDto,
+  CurrencyEnum,
   RevenueBatchResponseDto,
   RevenueBatchListResponseDto,
   RevenueBatchListQueryDto,
+  RevenueBatchStatusEnum,
+  RevenueBatchSummaryDto,
+  RevenueLineItemResponseDto,
+  UpdateRevenueLineItemDto,
   ValidateRevenueBatchDto,
   RejectRevenueBatchDto,
 } from '../dto';
@@ -62,6 +69,19 @@ export class RevenueService {
       throw new BadRequestException('periodStart must be before periodEnd');
     }
 
+    // MS-3 Wave 3 (Liang MS3-R1) — first-class line items. When supplied,
+    // every row must inherit or match the batch currency (mixed currencies
+    // inside one batch are rejected in v1 — the design spec's summary bar
+    // + downstream reporting assume a single currency per batch).
+    const lineItems = createDto.lineItems ?? [];
+    for (const [i, row] of lineItems.entries()) {
+      if (row.currency && row.currency !== createDto.currency) {
+        throw new BadRequestException(
+          `lineItems[${i}].currency (${row.currency}) does not match batch currency (${createDto.currency}).`,
+        );
+      }
+    }
+
     const batchCount = await this.prisma.revenueBatch.count();
     const year = new Date().getFullYear();
     const batchNumber = `RB-${year}-${String(batchCount + 1).padStart(3, '0')}`;
@@ -84,9 +104,23 @@ export class RevenueService {
           revenueType: createDto.revenueType,
           reportingEntity: createDto.reportingEntity,
         }),
+        ...(lineItems.length > 0 && {
+          lineItems: {
+            create: lineItems.map((row) => ({
+              platformSource: row.platformSource,
+              amount: new Prisma.Decimal(row.amount),
+              currency: row.currency ?? createDto.currency,
+              territory: row.territory,
+              revenueType: row.revenueType,
+              reportingEntity: row.reportingEntity,
+              notes: row.notes,
+            })),
+          },
+        }),
       },
       include: {
         _count: { select: { settlementRevenueLinks: true } },
+        lineItems: true,
       },
     });
 
@@ -125,14 +159,16 @@ export class RevenueService {
 
     await this.assertDealOwner(dealId, userId);
 
-    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
+    const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', status } = query;
     const skip = (page - 1) * limit;
 
     // Categorization filters (Run 5 / Round 4 Comment 24) — the values live
     // inside `RevenueBatch.metadata` JSON, so we use Prisma's `path`
     // equality. AND-combined with `dealId`. Empty filter = no narrowing.
+    // `status` matches the top-level column and drives Screen 3.1 filter tabs.
     const where: Prisma.RevenueBatchWhereInput = {
       dealId,
+      ...(status ? { status } : {}),
       ...buildMetadataPathFilters(query),
     };
 
@@ -144,6 +180,7 @@ export class RevenueService {
         orderBy: { [sortBy]: sortOrder },
         include: {
           _count: { select: { settlementRevenueLinks: true } },
+          lineItems: true,
         },
       }),
       this.prisma.revenueBatch.count({ where }),
@@ -162,7 +199,12 @@ export class RevenueService {
 
     const batch = await this.prisma.revenueBatch.findUnique({
       where: { id },
-      include: { _count: { select: { settlementRevenueLinks: true } } },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+        // MS-3 Wave 3: Screen 3.2 (Detail) renders the line items panel
+        // from this array. List responses stay lean without them.
+        lineItems: { orderBy: { createdAt: 'asc' } },
+      },
     });
 
     if (!batch) {
@@ -204,7 +246,10 @@ export class RevenueService {
             }
           : (batch.metadata as Prisma.InputJsonValue) ?? undefined,
       },
-      include: { _count: { select: { settlementRevenueLinks: true } } },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+        lineItems: { orderBy: { createdAt: 'asc' } },
+      },
     });
 
     this.logger.log(`Revenue batch validated: ${id}`);
@@ -256,7 +301,10 @@ export class RevenueService {
           rejectedAt: new Date().toISOString(),
         },
       },
-      include: { _count: { select: { settlementRevenueLinks: true } } },
+      include: {
+        _count: { select: { settlementRevenueLinks: true } },
+        lineItems: { orderBy: { createdAt: 'asc' } },
+      },
     });
 
     this.logger.log(`Revenue batch rejected: ${id}`);
@@ -277,6 +325,242 @@ export class RevenueService {
     });
 
     return RevenueBatchMapper.toResponse(updated);
+  }
+
+  /**
+   * Aggregate summary for Screen 3.1 (Revenue Batches List).
+   *
+   * Returns both filter-tab counts and summary-bar amounts in one
+   * round-trip so the FE doesn't need two calls. Uses a single
+   * `groupBy status` query — cheap even at high batch counts because
+   * Prisma pushes both `_count` and `_sum` down into a single SQL
+   * aggregate.
+   *
+   * `currency` is populated when every batch on the deal shares the same
+   * currency (the common case). When batches span multiple currencies,
+   * `currency: null` — the FE can hide the aggregate total or fall back
+   * to the raw list for a per-currency breakdown.
+   */
+  async getSummary(userId: string, dealId: string): Promise<RevenueBatchSummaryDto> {
+    this.logger.log(`Building revenue-batches summary for deal: ${dealId}`);
+
+    await this.assertDealOwner(dealId, userId);
+
+    const [groupedByStatus, groupedByCurrency] = await Promise.all([
+      this.prisma.revenueBatch.groupBy({
+        by: ['status'],
+        where: { dealId },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.revenueBatch.groupBy({
+        by: ['currency'],
+        where: { dealId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    // Seed all 4 statuses with zeros so the FE always gets a complete
+    // shape (no null-check needed on the "Rejected" tab / summary strip).
+    const byStatus: Record<
+      RevenueBatchStatusEnum,
+      { count: number; amount: number }
+    > = {
+      [RevenueBatchStatusEnum.PENDING]: { count: 0, amount: 0 },
+      [RevenueBatchStatusEnum.VALIDATED]: { count: 0, amount: 0 },
+      [RevenueBatchStatusEnum.PROCESSED]: { count: 0, amount: 0 },
+      [RevenueBatchStatusEnum.REJECTED]: { count: 0, amount: 0 },
+    };
+
+    let totalCount = 0;
+    let totalAmount = 0;
+    for (const row of groupedByStatus) {
+      const status = row.status as RevenueBatchStatusEnum;
+      const count = row._count._all;
+      const amount = row._sum.totalAmount ? Number(row._sum.totalAmount) : 0;
+      byStatus[status] = { count, amount };
+      totalCount += count;
+      totalAmount += amount;
+    }
+
+    // Single-currency detection. When all batches share a currency, surface
+    // it; when mixed, return null so the FE can show "Mixed" or per-currency.
+    const currency =
+      groupedByCurrency.length === 1
+        ? (groupedByCurrency[0]!.currency as CurrencyEnum)
+        : null;
+
+    return { totalCount, totalAmount, currency, byStatus };
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // MS-3 Wave 3 (Liang MS3-R1) — RevenueLineItem CRUD
+  // ────────────────────────────────────────────────────────────────
+
+  /**
+   * Bulk-add line items to an existing batch. Owner-scoped, refuses to
+   * touch PROCESSED batches (their totals feed a finalized settlement
+   * and must stay locked), validates every row's currency matches the
+   * batch currency, runs the inserts inside the same transaction as an
+   * updated batch `updatedAt` so cache invalidation reads consistent.
+   */
+  async addLineItems(
+    userId: string,
+    batchId: string,
+    dto: BulkCreateRevenueLineItemsDto,
+  ): Promise<RevenueLineItemResponseDto[]> {
+    await this.assertBatchOwner(batchId, userId);
+
+    const batch = await this.prisma.revenueBatch.findUnique({
+      where: { id: batchId },
+      select: { id: true, currency: true, status: true, dealId: true },
+    });
+    if (!batch) throw new NotFoundException(`Revenue batch with ID ${batchId} not found`);
+
+    this.assertBatchMutable(batch.status, 'add line items to');
+    this.assertLineItemCurrencies(dto.lineItems, batch.currency as CurrencyEnum);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const rows = await Promise.all(
+        dto.lineItems.map((row) =>
+          tx.revenueLineItem.create({
+            data: {
+              batchId,
+              platformSource: row.platformSource,
+              amount: new Prisma.Decimal(row.amount),
+              currency: (row.currency ?? batch.currency) as CurrencyEnum,
+              territory: row.territory,
+              revenueType: row.revenueType,
+              reportingEntity: row.reportingEntity,
+              notes: row.notes,
+            },
+          }),
+        ),
+      );
+      // Bump the batch's updatedAt so downstream caches (list view,
+      // detail view) invalidate together.
+      await tx.revenueBatch.update({
+        where: { id: batchId },
+        data: { updatedAt: new Date() },
+      });
+      return rows;
+    });
+
+    await this.auditLog.create({
+      actor: userId,
+      action: 'LINE_ITEMS_ADDED',
+      entityType: 'RevenueBatch',
+      entityId: batchId,
+      dealId: batch.dealId,
+      metadata: { count: created.length },
+    });
+
+    return created.map(RevenueBatchMapper.lineItemToResponse);
+  }
+
+  async updateLineItem(
+    userId: string,
+    batchId: string,
+    lineItemId: string,
+    dto: UpdateRevenueLineItemDto,
+  ): Promise<RevenueLineItemResponseDto> {
+    await this.assertBatchOwner(batchId, userId);
+
+    const batch = await this.prisma.revenueBatch.findUnique({
+      where: { id: batchId },
+      select: { id: true, currency: true, status: true, dealId: true },
+    });
+    if (!batch) throw new NotFoundException(`Revenue batch with ID ${batchId} not found`);
+
+    this.assertBatchMutable(batch.status, 'update line items on');
+
+    const existing = await this.prisma.revenueLineItem.findUnique({
+      where: { id: lineItemId },
+      select: { id: true, batchId: true },
+    });
+    if (existing?.batchId !== batchId) {
+      throw new NotFoundException(`Line item ${lineItemId} not found on batch ${batchId}`);
+    }
+
+    if (dto.currency && dto.currency !== batch.currency) {
+      throw new BadRequestException(
+        `lineItem.currency (${dto.currency}) does not match batch currency (${batch.currency}).`,
+      );
+    }
+
+    const updated = await this.prisma.revenueLineItem.update({
+      where: { id: lineItemId },
+      data: {
+        ...(dto.platformSource !== undefined && { platformSource: dto.platformSource }),
+        ...(dto.amount !== undefined && { amount: new Prisma.Decimal(dto.amount) }),
+        ...(dto.currency !== undefined && { currency: dto.currency }),
+        ...(dto.territory !== undefined && { territory: dto.territory }),
+        ...(dto.revenueType !== undefined && { revenueType: dto.revenueType }),
+        ...(dto.reportingEntity !== undefined && { reportingEntity: dto.reportingEntity }),
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+      },
+    });
+
+    return RevenueBatchMapper.lineItemToResponse(updated);
+  }
+
+  async deleteLineItem(
+    userId: string,
+    batchId: string,
+    lineItemId: string,
+  ): Promise<{ success: true }> {
+    await this.assertBatchOwner(batchId, userId);
+
+    const batch = await this.prisma.revenueBatch.findUnique({
+      where: { id: batchId },
+      select: { id: true, status: true },
+    });
+    if (!batch) throw new NotFoundException(`Revenue batch with ID ${batchId} not found`);
+
+    this.assertBatchMutable(batch.status, 'delete line items from');
+
+    const existing = await this.prisma.revenueLineItem.findUnique({
+      where: { id: lineItemId },
+      select: { id: true, batchId: true },
+    });
+    if (existing?.batchId !== batchId) {
+      throw new NotFoundException(`Line item ${lineItemId} not found on batch ${batchId}`);
+    }
+
+    await this.prisma.revenueLineItem.delete({ where: { id: lineItemId } });
+    return { success: true };
+  }
+
+  /**
+   * Common guard: line items can only be mutated on PENDING batches.
+   * VALIDATED / PROCESSED / REJECTED batches are locked because their
+   * totals may already be consumed by a settlement run or an admin
+   * decision.
+   */
+  private assertBatchMutable(status: RevenueBatchStatus, action: string): void {
+    if (status !== RevenueBatchStatus.PENDING) {
+      throw new BadRequestException(
+        `Cannot ${action} a ${status} batch. Line items are only editable while the batch is PENDING.`,
+      );
+    }
+  }
+
+  /**
+   * Reject any line item whose explicit currency disagrees with the
+   * parent batch. When the row omits currency it inherits the batch's,
+   * which is always safe.
+   */
+  private assertLineItemCurrencies(
+    rows: ReadonlyArray<CreateRevenueLineItemDto>,
+    batchCurrency: CurrencyEnum,
+  ): void {
+    for (const [i, row] of rows.entries()) {
+      if (row.currency && row.currency !== batchCurrency) {
+        throw new BadRequestException(
+          `lineItems[${i}].currency (${row.currency}) does not match batch currency (${batchCurrency}).`,
+        );
+      }
+    }
   }
 
   async getValidatedBatches(userId: string, dealId: string): Promise<RevenueBatchResponseDto[]> {

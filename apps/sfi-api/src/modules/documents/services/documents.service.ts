@@ -111,7 +111,11 @@ export class DocumentsService {
         mimeType: file.mimetype,
         uploadedByUserId: userId,
       },
-      include: { uploadedBy: USER_JOIN_SELECT, archivedBy: USER_JOIN_SELECT },
+      include: {
+        uploadedBy: USER_JOIN_SELECT,
+        archivedBy: USER_JOIN_SELECT,
+        ...LINKED_SCOPE_INCLUDE,
+      },
     });
 
     await this.auditLog.create({
@@ -140,7 +144,17 @@ export class DocumentsService {
   async listDocuments(
     filter: DocumentFilter,
     query: DocumentListQueryDto,
+    userId?: string,
   ): Promise<DocumentListResponseDto> {
+    // Owner-scope the query when userId is supplied. Prevents authenticated
+    // users from listing documents on deals / batches / runs they don't own.
+    // Called with userId from the 3 scoped controller routes; the unscoped
+    // "getDocument" byId route continues to skip this until we add per-doc
+    // ownership auditing.
+    if (userId !== undefined) {
+      await this.assertScopeOwnership(filter, userId);
+    }
+
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
@@ -159,7 +173,11 @@ export class DocumentsService {
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
-        include: { uploadedBy: USER_JOIN_SELECT, archivedBy: USER_JOIN_SELECT },
+        include: {
+          uploadedBy: USER_JOIN_SELECT,
+          archivedBy: USER_JOIN_SELECT,
+          ...LINKED_SCOPE_INCLUDE,
+        },
       }),
       this.prisma.document.count({ where }),
     ]);
@@ -181,7 +199,11 @@ export class DocumentsService {
   async getDocument(id: string): Promise<DocumentResponseDto> {
     const row = await this.prisma.document.findUnique({
       where: { id },
-      include: { uploadedBy: USER_JOIN_SELECT, archivedBy: USER_JOIN_SELECT },
+      include: {
+        uploadedBy: USER_JOIN_SELECT,
+        archivedBy: USER_JOIN_SELECT,
+        ...LINKED_SCOPE_INCLUDE,
+      },
     });
     if (!row) throw new NotFoundException(`Document with ID ${id} not found`);
     return this.toResponse(row as DocumentWithJoins);
@@ -202,6 +224,23 @@ export class DocumentsService {
       throw new ConflictException(`Document ${id} is already archived`);
     }
 
+    // MS-3 Wave 4 gap #8 — documents attached to a FINALIZED settlement
+    // run are part of the run's evidentiary record and must stay
+    // available for audit. The design spec (Screen 3.4) tells the FE to
+    // hide the delete icon in this case; the BE guard is defense-in-depth
+    // so a hand-crafted DELETE request still gets refused.
+    if (existing.settlementRunId) {
+      const run = await this.prisma.settlementRun.findUnique({
+        where: { id: existing.settlementRunId },
+        select: { status: true },
+      });
+      if (run?.status === 'FINALIZED') {
+        throw new ConflictException(
+          `Document ${id} is linked to a finalized settlement run and cannot be archived.`,
+        );
+      }
+    }
+
     const updated = await this.prisma.document.update({
       where: { id },
       data: {
@@ -209,7 +248,11 @@ export class DocumentsService {
         archivedByUserId: userId,
         archivedReason: dto.reason ?? null,
       },
-      include: { uploadedBy: USER_JOIN_SELECT, archivedBy: USER_JOIN_SELECT },
+      include: {
+        uploadedBy: USER_JOIN_SELECT,
+        archivedBy: USER_JOIN_SELECT,
+        ...LINKED_SCOPE_INCLUDE,
+      },
     });
 
     await this.auditLog.create({
@@ -241,7 +284,11 @@ export class DocumentsService {
         archivedByUserId: null,
         archivedReason: null,
       },
-      include: { uploadedBy: USER_JOIN_SELECT, archivedBy: USER_JOIN_SELECT },
+      include: {
+        uploadedBy: USER_JOIN_SELECT,
+        archivedBy: USER_JOIN_SELECT,
+        ...LINKED_SCOPE_INCLUDE,
+      },
     });
 
     await this.auditLog.create({
@@ -316,7 +363,65 @@ export class DocumentsService {
    * Deal/Batch/Run (which would fail at insert with a hard FK error
    * anyway; the explicit check just returns a friendlier 404).
    */
+  /**
+   * Verify the caller owns the scope (deal / revenue batch / settlement
+   * run) they're listing documents against. Prevents cross-user data
+   * leaks between authenticated users. Returns a friendly 404 (not 403)
+   * so scope existence isn't leaked to non-owners.
+   *
+   * Delegates to `assertLinkedEntitiesValid`-style checks + a userId
+   * intersection at the Deal layer, which is where every entity chains
+   * back to.
+   */
+  private async assertScopeOwnership(
+    filter: DocumentFilter,
+    userId: string,
+  ): Promise<void> {
+    if (filter.dealId) {
+      const deal = await this.prisma.deal.findUnique({
+        where: { id: filter.dealId },
+        select: { id: true, userId: true },
+      });
+      if (deal?.userId !== userId) {
+        throw new NotFoundException(`Deal with ID ${filter.dealId} not found`);
+      }
+      return;
+    }
+    if (filter.revenueBatchId) {
+      const batch = await this.prisma.revenueBatch.findUnique({
+        where: { id: filter.revenueBatchId },
+        select: { id: true, deal: { select: { userId: true } } },
+      });
+      if (batch?.deal.userId !== userId) {
+        throw new NotFoundException(
+          `Revenue batch with ID ${filter.revenueBatchId} not found`,
+        );
+      }
+      return;
+    }
+    if (filter.settlementRunId) {
+      const run = await this.prisma.settlementRun.findUnique({
+        where: { id: filter.settlementRunId },
+        select: { id: true, deal: { select: { userId: true } } },
+      });
+      if (run?.deal.userId !== userId) {
+        throw new NotFoundException(
+          `Settlement run with ID ${filter.settlementRunId} not found`,
+        );
+      }
+    }
+  }
+
   private async assertLinkedEntitiesValid(dto: UploadDocumentDto): Promise<void> {
+    // Screen 3.5 "Link To" dropdown is single-select: a document points at
+    // EITHER a revenue batch OR a settlement run, never both. Reject the
+    // ambiguous combination up front so callers get a friendly 400 instead
+    // of a confusing double-linked row downstream.
+    if (dto.revenueBatchId && dto.settlementRunId) {
+      throw new BadRequestException(
+        'revenueBatchId and settlementRunId are mutually exclusive on a single document upload.',
+      );
+    }
     if (dto.dealId) {
       const deal = await this.prisma.deal.findUnique({ where: { id: dto.dealId }, select: { id: true } });
       if (!deal) throw new NotFoundException(`Deal with ID ${dto.dealId} not found`);
@@ -350,6 +455,14 @@ export class DocumentsService {
 // a consistent shape. avatarUrl is included for the FE's hover-card.
 const USER_JOIN_SELECT = {
   select: { id: true, name: true, avatarUrl: true },
+} as const;
+
+// MS-3 Wave 4 gap #7 — every document fetch also loads batchNumber /
+// runNumber so `DocumentMapper.buildLinkedTo` can render Screen 3.4's
+// "Linked To" column without an N+1 client fetch.
+const LINKED_SCOPE_INCLUDE = {
+  revenueBatch: { select: { batchNumber: true } },
+  settlementRun: { select: { runNumber: true } },
 } as const;
 
 /**

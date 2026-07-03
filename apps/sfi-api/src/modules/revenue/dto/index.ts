@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsNumber,
@@ -8,6 +11,7 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 
 import { PaginationQueryDto } from '../../deals/dto';
@@ -134,6 +138,192 @@ export class CreateRevenueBatchDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description:
+      'MS-3 Wave 3 (Liang MS3-R1) — first-class line items with per-row categorization. ' +
+      'When supplied, they are persisted into the `revenue_line_items` table in the same ' +
+      'transaction as the batch (atomic create-with-lines). Prefer this over `metadata.lineItems` ' +
+      'for new batches; the JSON form stays for backward compat.',
+    type: () => [CreateRevenueLineItemDto],
+    maxItems: 500,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => CreateRevenueLineItemDto)
+  lineItems?: CreateRevenueLineItemDto[];
+}
+
+/**
+ * Payload for a single line item on a Create Revenue Batch call, or for
+ * the `POST /revenue-batches/:id/line-items` bulk-add endpoint. Currency
+ * defaults to the parent batch's currency when omitted.
+ */
+export class CreateRevenueLineItemDto {
+  @ApiProperty({
+    description: 'Platform / source label (e.g. "Netflix", "Disney+", "Spotify")',
+    example: 'Netflix',
+    maxLength: 255,
+  })
+  @IsString()
+  @MaxLength(255)
+  platformSource!: string;
+
+  @ApiProperty({
+    description: 'Amount for this line item (positive number, ≤ 18 digits, 2dp).',
+    example: 30000000,
+    minimum: 0,
+  })
+  @IsNumber()
+  @Min(0)
+  amount!: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Line-item currency. When omitted the line inherits the parent batch currency; ' +
+      'when supplied it must match the parent batch currency (mixed currencies inside ' +
+      'a single batch are rejected in v1).',
+    enum: CurrencyEnum,
+    example: CurrencyEnum.USD,
+  })
+  @IsOptional()
+  @IsEnum(CurrencyEnum)
+  currency?: CurrencyEnum;
+
+  @ApiPropertyOptional({
+    description: 'Geographic / market territory (US, EU, APAC, etc.)',
+    example: 'US',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  territory?: string;
+
+  @ApiPropertyOptional({
+    description: 'Revenue stream type (Streaming, Licensing, Sync, etc.)',
+    example: 'Streaming',
+    maxLength: 100,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  revenueType?: string;
+
+  @ApiPropertyOptional({
+    description: 'Upstream reporting entity / payor for this line',
+    example: 'Netflix',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  reportingEntity?: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional free-text note (≤ 500 chars)',
+    maxLength: 500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+/** Payload for `PATCH /revenue-batches/:id/line-items/:lineItemId` (all fields optional). */
+export class UpdateRevenueLineItemDto {
+  @ApiPropertyOptional({ example: 'Netflix', maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  platformSource?: string;
+
+  @ApiPropertyOptional({ example: 30000000, minimum: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @ApiPropertyOptional({ enum: CurrencyEnum })
+  @IsOptional()
+  @IsEnum(CurrencyEnum)
+  currency?: CurrencyEnum;
+
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  territory?: string;
+
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  revenueType?: string;
+
+  @ApiPropertyOptional({ maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  reportingEntity?: string;
+
+  @ApiPropertyOptional({ maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+/** Payload for `POST /revenue-batches/:id/line-items` — bulk create. */
+export class BulkCreateRevenueLineItemsDto {
+  @ApiProperty({
+    description: 'Line items to attach to the batch (transactional insert).',
+    type: () => [CreateRevenueLineItemDto],
+    maxItems: 500,
+  })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => CreateRevenueLineItemDto)
+  lineItems!: CreateRevenueLineItemDto[];
+}
+
+/** Response shape for a single line item. */
+export class RevenueLineItemResponseDto {
+  @ApiProperty({ example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })
+  id!: string;
+
+  @ApiProperty({ example: 'batch-uuid' })
+  batchId!: string;
+
+  @ApiProperty({ example: 'Netflix' })
+  platformSource!: string;
+
+  @ApiProperty({ example: 30000000 })
+  amount!: number;
+
+  @ApiProperty({ enum: CurrencyEnum, example: CurrencyEnum.USD })
+  currency!: CurrencyEnum;
+
+  @ApiPropertyOptional({ example: 'US' })
+  territory?: string | null;
+
+  @ApiPropertyOptional({ example: 'Streaming' })
+  revenueType?: string | null;
+
+  @ApiPropertyOptional({ example: 'Netflix' })
+  reportingEntity?: string | null;
+
+  @ApiPropertyOptional({ example: null })
+  notes?: string | null;
+
+  @ApiProperty({ example: '2026-06-24T10:30:00.000Z' })
+  createdAt!: string;
+
+  @ApiProperty({ example: '2026-06-24T10:30:00.000Z' })
+  updatedAt!: string;
 }
 
 // ============================================
@@ -234,6 +424,16 @@ export class RevenueBatchResponseDto {
   })
   settlementRunCount?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'First-class line items on the batch (MS-3 Wave 3 / Liang MS3-R1). Empty array ' +
+      'when no rows have been added via the `revenue_line_items` table. Pre-Wave-3 batches ' +
+      'that stored line items only in `metadata.lineItems` will show an empty array here — ' +
+      'read the JSON form for those.',
+    type: () => [RevenueLineItemResponseDto],
+  })
+  lineItems?: RevenueLineItemResponseDto[];
+
   @ApiProperty({ example: '2024-01-15T10:30:00.000Z' })
   createdAt!: string;
 
@@ -267,8 +467,20 @@ export class RevenueBatchListResponseDto {
  * `revenueType`, `reportingEntity`) match the stored values inside
  * `RevenueBatch.metadata` JSON via Prisma's `path` query. Free-form — no
  * closed enum, since the underlying fields are user-defined comboboxes.
+ *
+ * `status` matches the top-level enum column and drives the filter tabs
+ * on Screen 3.1 (Revenue Batches List).
  */
 export class RevenueBatchListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    enum: RevenueBatchStatusEnum,
+    description:
+      'Filter to batches with this status. Powers the Screen 3.1 filter tabs (All / Pending / Validated / Processed / Rejected).',
+  })
+  @IsOptional()
+  @IsEnum(RevenueBatchStatusEnum)
+  status?: RevenueBatchStatusEnum;
+
   @ApiPropertyOptional({
     description: 'Filter to batches whose `territory` exactly matches this value.',
     example: 'US',
@@ -298,6 +510,70 @@ export class RevenueBatchListQueryDto extends PaginationQueryDto {
   @IsString()
   @MaxLength(255)
   reportingEntity?: string;
+}
+
+// ============================================
+// Summary DTO — powers Screen 3.1 filter tab counts + summary bar
+// ============================================
+
+/**
+ * Per-status slice on the summary response. `count` powers filter tab
+ * badges (`[Pending (1)]`), `amount` powers the summary strip
+ * (`Pending: $50M`).
+ */
+export class RevenueBatchStatusSummaryDto {
+  @ApiProperty({ description: 'Number of batches in this status', example: 2 })
+  count!: number;
+
+  @ApiProperty({
+    description: 'Sum of totalAmount for batches in this status',
+    example: 100000000,
+  })
+  amount!: number;
+}
+
+/**
+ * Aggregate summary for a deal's revenue batches. Single response covers
+ * both the filter tab counts (Screen 3.1 tabs) and the summary bar
+ * (Total Revenue + per-status amount strip).
+ *
+ * `currency` is the shared currency across all batches; `null` when
+ * batches span multiple currencies (the FE can show "Mixed" and either
+ * hide the total or request the /revenue-batches list for a per-currency
+ * breakdown).
+ */
+export class RevenueBatchSummaryDto {
+  @ApiProperty({
+    description: 'Total number of batches on the deal (all statuses)',
+    example: 4,
+  })
+  totalCount!: number;
+
+  @ApiProperty({
+    description: 'Sum of totalAmount across every batch on the deal',
+    example: 200000000,
+  })
+  totalAmount!: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Shared currency across all batches. `null` when batches span multiple currencies.',
+    enum: CurrencyEnum,
+    example: CurrencyEnum.USD,
+  })
+  currency!: CurrencyEnum | null;
+
+  @ApiProperty({
+    description: 'Per-status count + amount slices. All 4 statuses are always present, zero-filled.',
+    type: () => Object,
+    example: {
+      PENDING: { count: 1, amount: 50000000 },
+      VALIDATED: { count: 1, amount: 75000000 },
+      PROCESSED: { count: 2, amount: 100000000 },
+      REJECTED: { count: 0, amount: 0 },
+    },
+  })
+  byStatus!: Record<RevenueBatchStatusEnum, RevenueBatchStatusSummaryDto>;
 }
 
 // ============================================

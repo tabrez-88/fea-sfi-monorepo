@@ -191,38 +191,48 @@ export class DocumentsController {
     description:
       'Default filter hides archived rows (`archivedAt IS NULL`). ' +
       'Use `?archived=true` for archived only, `?archived=all` for both. ' +
-      'Additional filters: `?docType=` and `?uploadedByUserId=`.',
+      'Additional filters: `?docType=` and `?uploadedByUserId=`. Scope is ' +
+      'owner-checked — non-owners get a 404 (indistinguishable from missing).',
   })
   @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'List of documents', type: DocumentListResponseDto })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async listDealDocuments(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('dealId', ParseUUIDPipe) dealId: string,
     @Query() query: DocumentListQueryDto,
   ): Promise<DocumentListResponseDto> {
-    return this.documentsService.listDocuments({ dealId }, query);
+    return this.documentsService.listDocuments({ dealId }, query, user.id);
   }
 
   @Get('revenue-batches/:revenueBatchId/documents')
-  @ApiOperation({ summary: 'List documents for a revenue batch' })
+  @ApiOperation({
+    summary: 'List documents for a revenue batch',
+    description: 'Owner-checked — non-owners get a 404.',
+  })
   @ApiParam({ name: 'revenueBatchId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'List of documents', type: DocumentListResponseDto })
   async listRevenueBatchDocuments(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('revenueBatchId', ParseUUIDPipe) revenueBatchId: string,
     @Query() query: DocumentListQueryDto,
   ): Promise<DocumentListResponseDto> {
-    return this.documentsService.listDocuments({ revenueBatchId }, query);
+    return this.documentsService.listDocuments({ revenueBatchId }, query, user.id);
   }
 
   @Get('settlement-runs/:settlementRunId/documents')
-  @ApiOperation({ summary: 'List documents for a settlement run' })
+  @ApiOperation({
+    summary: 'List documents for a settlement run',
+    description: 'Owner-checked — non-owners get a 404.',
+  })
   @ApiParam({ name: 'settlementRunId', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'List of documents', type: DocumentListResponseDto })
   async listSettlementRunDocuments(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('settlementRunId', ParseUUIDPipe) settlementRunId: string,
     @Query() query: DocumentListQueryDto,
   ): Promise<DocumentListResponseDto> {
-    return this.documentsService.listDocuments({ settlementRunId }, query);
+    return this.documentsService.listDocuments({ settlementRunId }, query, user.id);
   }
 
   // ──────────────────────────────────────────────────────────────────

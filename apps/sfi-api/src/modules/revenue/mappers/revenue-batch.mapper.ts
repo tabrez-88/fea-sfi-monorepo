@@ -1,9 +1,15 @@
-import { Prisma, RevenueBatch } from '@prisma/client';
+import { Prisma, RevenueBatch, RevenueLineItem } from '@prisma/client';
 
-import { RevenueBatchResponseDto, CurrencyEnum, RevenueBatchStatusEnum } from '../dto';
+import {
+  RevenueBatchResponseDto,
+  CurrencyEnum,
+  RevenueBatchStatusEnum,
+  RevenueLineItemResponseDto,
+} from '../dto';
 
 type RevenueBatchWithSettlements = RevenueBatch & {
   _count?: { settlementRevenueLinks: number };
+  lineItems?: RevenueLineItem[];
 };
 
 /**
@@ -62,8 +68,25 @@ export class RevenueBatchMapper {
       metadata: cleanMetadata,
       isSettled: settlementCount > 0,
       settlementRunCount: settlementCount,
+      lineItems: batch.lineItems?.map(RevenueBatchMapper.lineItemToResponse) ?? [],
       createdAt: batch.createdAt.toISOString(),
       updatedAt: batch.updatedAt.toISOString(),
+    };
+  }
+
+  static lineItemToResponse(row: RevenueLineItem): RevenueLineItemResponseDto {
+    return {
+      id: row.id,
+      batchId: row.batchId,
+      platformSource: row.platformSource,
+      amount: Number(row.amount),
+      currency: row.currency as CurrencyEnum,
+      territory: row.territory,
+      revenueType: row.revenueType,
+      reportingEntity: row.reportingEntity,
+      notes: row.notes,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
     };
   }
 

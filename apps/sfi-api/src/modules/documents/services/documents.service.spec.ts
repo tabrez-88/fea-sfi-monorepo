@@ -201,6 +201,21 @@ describe('DocumentsService', () => {
         }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    // MS3 verification Wave 1 gap #6 — Screen 3.5 "Link To" dropdown is
+    // single-select. Reject documents that try to point at both a batch
+    // and a run in one create call.
+    it('rejects when both revenueBatchId and settlementRunId are supplied', async () => {
+      await expect(
+        service.uploadDocument(MOCK_USER_ID, buildMulterFile(), {
+          docType: DocumentTypeEnum.REVENUE_REPORT,
+          revenueBatchId: 'batch-uuid-1',
+          settlementRunId: 'run-uuid-1',
+        }),
+      ).rejects.toThrow('mutually exclusive');
+      // No storage upload should happen when the guard trips first.
+      expect(mockStorage.upload).not.toHaveBeenCalled();
+    });
   });
 
   // ─── listDocuments — archived filter (Round 4 #21) ───────────────────────
@@ -248,6 +263,74 @@ describe('DocumentsService', () => {
         uploadedByUserId: MOCK_USER_ID,
         archivedAt: null, // default
       });
+    });
+  });
+
+  // ─── listDocuments — scope ownership (MS3 verification Wave 1 gap #4) ─────
+
+  describe('listDocuments — scope ownership', () => {
+    beforeEach(() => {
+      mockPrismaService.document.findMany.mockResolvedValue([]);
+      mockPrismaService.document.count.mockResolvedValue(0);
+    });
+
+    it('skips the ownership check when userId is not passed (back-compat)', async () => {
+      await service.listDocuments({ dealId: MOCK_DEAL_ID }, {});
+      expect(mockPrismaService.deal.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('accepts the query when the caller owns the deal', async () => {
+      mockPrismaService.deal.findUnique.mockResolvedValue({
+        id: MOCK_DEAL_ID,
+        userId: MOCK_USER_ID,
+      });
+
+      await expect(
+        service.listDocuments({ dealId: MOCK_DEAL_ID }, {}, MOCK_USER_ID),
+      ).resolves.toBeDefined();
+    });
+
+    it('rejects with 404 when the caller does not own the deal', async () => {
+      mockPrismaService.deal.findUnique.mockResolvedValue({
+        id: MOCK_DEAL_ID,
+        userId: 'other-user-uuid',
+      });
+
+      await expect(
+        service.listDocuments({ dealId: MOCK_DEAL_ID }, {}, MOCK_USER_ID),
+      ).rejects.toThrow(NotFoundException);
+      // No downstream findMany when the ownership check trips first.
+      expect(mockPrismaService.document.findMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 404 when the revenue batch belongs to another user', async () => {
+      mockPrismaService.revenueBatch.findUnique.mockResolvedValue({
+        id: 'batch-uuid-1',
+        deal: { userId: 'other-user-uuid' },
+      });
+
+      await expect(
+        service.listDocuments({ revenueBatchId: 'batch-uuid-1' }, {}, MOCK_USER_ID),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects with 404 when the settlement run belongs to another user', async () => {
+      mockPrismaService.settlementRun.findUnique.mockResolvedValue({
+        id: 'run-uuid-1',
+        deal: { userId: 'other-user-uuid' },
+      });
+
+      await expect(
+        service.listDocuments({ settlementRunId: 'run-uuid-1' }, {}, MOCK_USER_ID),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('rejects with 404 when the referenced scope does not exist at all', async () => {
+      mockPrismaService.revenueBatch.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.listDocuments({ revenueBatchId: 'missing-batch' }, {}, MOCK_USER_ID),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -306,6 +389,121 @@ describe('DocumentsService', () => {
       await expect(
         service.archiveDocument(MOCK_USER_ID, 'missing', {}),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    // MS-3 Wave 4 gap #8 — docs linked to a FINALIZED settlement run are
+    // part of the run's evidentiary record and can't be archived.
+    it('rejects with 409 when document is linked to a FINALIZED settlement run', async () => {
+      mockPrismaService.document.findUnique.mockResolvedValue(
+        buildDocRow({ settlementRunId: 'run-uuid-1' }),
+      );
+      mockPrismaService.settlementRun.findUnique.mockResolvedValue({
+        status: 'FINALIZED',
+      });
+
+      await expect(
+        service.archiveDocument(MOCK_USER_ID, 'doc-uuid-1', {}),
+      ).rejects.toThrow(ConflictException);
+      expect(mockPrismaService.document.update).not.toHaveBeenCalled();
+    });
+
+    it('allows archiving when the linked settlement run is DRAFT / PREVIEWED', async () => {
+      mockPrismaService.document.findUnique.mockResolvedValue(
+        buildDocRow({ settlementRunId: 'run-uuid-1' }),
+      );
+      mockPrismaService.settlementRun.findUnique.mockResolvedValue({
+        status: 'PREVIEWED',
+      });
+      mockPrismaService.document.update.mockResolvedValue(
+        buildDocRow({ archivedAt: new Date(), archivedByUserId: MOCK_USER_ID }),
+      );
+
+      await expect(
+        service.archiveDocument(MOCK_USER_ID, 'doc-uuid-1', {}),
+      ).resolves.toBeDefined();
+      expect(mockPrismaService.document.update).toHaveBeenCalled();
+    });
+
+    it('allows archiving deal-scope + revenue-batch-scope docs without touching the run guard', async () => {
+      // No settlementRunId means the guard short-circuits — the
+      // settlementRun.findUnique mock should never fire.
+      mockPrismaService.document.findUnique.mockResolvedValue(buildDocRow());
+      mockPrismaService.document.update.mockResolvedValue(
+        buildDocRow({ archivedAt: new Date(), archivedByUserId: MOCK_USER_ID }),
+      );
+
+      await service.archiveDocument(MOCK_USER_ID, 'doc-uuid-1', {});
+      expect(mockPrismaService.settlementRun.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── linkedTo label (MS-3 Wave 4 gap #7) ─────────────────────────────────
+
+  describe('linkedTo mapping via response', () => {
+    it('surfaces batchNumber as the label when document is scoped to a batch', async () => {
+      mockPrismaService.document.findUnique.mockResolvedValue(
+        buildDocRow({
+          dealId: null,
+          revenueBatchId: 'batch-uuid-9',
+          revenueBatch: { batchNumber: 'RB-2026-004' },
+        }),
+      );
+
+      const result = await service.getDocument('doc-uuid-1');
+
+      expect(result.linkedTo).toEqual({
+        type: 'BATCH',
+        label: 'RB-2026-004',
+        id: 'batch-uuid-9',
+      });
+    });
+
+    it('surfaces "Run #N" as the label when document is scoped to a run', async () => {
+      mockPrismaService.document.findUnique.mockResolvedValue(
+        buildDocRow({
+          dealId: null,
+          settlementRunId: 'run-uuid-42',
+          settlementRun: { runNumber: 7 },
+        }),
+      );
+
+      const result = await service.getDocument('doc-uuid-1');
+
+      expect(result.linkedTo).toEqual({
+        type: 'RUN',
+        label: 'Run #7',
+        id: 'run-uuid-42',
+      });
+    });
+
+    it('falls back to "Deal" label for deal-scoped documents', async () => {
+      mockPrismaService.document.findUnique.mockResolvedValue(buildDocRow());
+
+      const result = await service.getDocument('doc-uuid-1');
+
+      expect(result.linkedTo).toEqual({
+        type: 'DEAL',
+        label: 'Deal',
+        id: MOCK_DEAL_ID,
+      });
+    });
+
+    it('falls back to a friendly label when the join happens to be missing', async () => {
+      // Defensive: if a caller ever forgets the LINKED_SCOPE_INCLUDE
+      // spread on a new query, the mapper still renders something usable.
+      mockPrismaService.document.findUnique.mockResolvedValue(
+        buildDocRow({
+          dealId: null,
+          revenueBatchId: 'batch-uuid-9',
+          revenueBatch: undefined,
+        }),
+      );
+
+      const result = await service.getDocument('doc-uuid-1');
+
+      expect(result.linkedTo.type).toBe('BATCH');
+      expect(result.linkedTo.label).toBe('Revenue Batch');
+      expect(result.linkedTo.id).toBe('batch-uuid-9');
     });
   });
 

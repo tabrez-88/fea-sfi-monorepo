@@ -13,7 +13,12 @@
 
 import { Document } from '@prisma/client';
 
-import { DocumentResponseDto, DocumentTypeEnum } from '../dto';
+import {
+  DocumentLinkedToDto,
+  DocumentLinkedToTypeEnum,
+  DocumentResponseDto,
+  DocumentTypeEnum,
+} from '../dto';
 
 export interface DocumentMapperUserJoin {
   id: string;
@@ -21,16 +26,32 @@ export interface DocumentMapperUserJoin {
   avatarUrl: string | null;
 }
 
+/**
+ * Optional joins the mapper reads to compute the `linkedTo` label.
+ * Both must be `select`-loaded on the outer Prisma query when scope
+ * documents are being returned. Missing / undefined means the document
+ * falls back to a `DEAL`-scope label.
+ */
+export interface DocumentLinkedBatchJoin {
+  batchNumber: string;
+}
+export interface DocumentLinkedRunJoin {
+  runNumber: number;
+}
+
 export interface DocumentWithJoins extends Document {
   uploadedBy?: DocumentMapperUserJoin | null;
   archivedBy?: DocumentMapperUserJoin | null;
+  revenueBatch?: DocumentLinkedBatchJoin | null;
+  settlementRun?: DocumentLinkedRunJoin | null;
 }
 
 export class DocumentMapper {
   /**
    * Build a response DTO from a fetched Prisma row.
    *
-   * @param row          The fetched document with optional user joins
+   * @param row          The fetched document with optional user +
+   *                     revenue-batch + settlement-run joins
    * @param previewUrl   Pre-generated preview URL (caller fetches via
    *                     `IFileStorage.getPreviewUrl()`). Passed in so
    *                     the mapper stays free of NestJS deps.
@@ -41,6 +62,7 @@ export class DocumentMapper {
       dealId: row.dealId,
       revenueBatchId: row.revenueBatchId,
       settlementRunId: row.settlementRunId,
+      linkedTo: DocumentMapper.buildLinkedTo(row),
       docType: row.docType as DocumentTypeEnum,
       fileName: row.fileName,
       storageUrl: previewUrl,
@@ -67,6 +89,36 @@ export class DocumentMapper {
       metadata: row.metadata as Record<string, unknown> | null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * MS-3 Wave 4 gap #7 — resolve the "Linked To" column label.
+   *
+   * A document is linked to at most one of {batch, run} (enforced by
+   * the create-time mutual-exclusion guard in Wave 1). Priority when
+   * both IDs somehow present: batch wins over run over deal, matching
+   * the Prisma `include` order in the service.
+   */
+  private static buildLinkedTo(row: DocumentWithJoins): DocumentLinkedToDto {
+    if (row.revenueBatchId) {
+      return {
+        type: DocumentLinkedToTypeEnum.BATCH,
+        label: row.revenueBatch?.batchNumber ?? 'Revenue Batch',
+        id: row.revenueBatchId,
+      };
+    }
+    if (row.settlementRunId) {
+      return {
+        type: DocumentLinkedToTypeEnum.RUN,
+        label: row.settlementRun ? `Run #${row.settlementRun.runNumber}` : 'Settlement Run',
+        id: row.settlementRunId,
+      };
+    }
+    return {
+      type: DocumentLinkedToTypeEnum.DEAL,
+      label: 'Deal',
+      id: row.dealId,
     };
   }
 }
