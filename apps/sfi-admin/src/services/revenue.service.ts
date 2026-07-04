@@ -2,6 +2,7 @@ import { API_ENDPOINTS } from '@/constants/api';
 import { apiClient } from '@/lib/axios';
 import type { PaginatedResponse } from '@/types/api.types';
 import type {
+  CreateRevenueBatchInput,
   RevenueBatch,
   RevenueBatchListParams,
   RevenueBatchSummary,
@@ -50,6 +51,17 @@ export const revenueService = {
     const { data } = await apiClient.patch<RevenueBatch>(
       API_ENDPOINTS.REVENUE.REJECT(id),
       { rejectionReason },
+    );
+    return data;
+  },
+
+  async create(
+    dealId: string,
+    input: CreateRevenueBatchInput,
+  ): Promise<RevenueBatch> {
+    const { data } = await apiClient.post<RevenueBatch>(
+      API_ENDPOINTS.REVENUE.CREATE(dealId),
+      input,
     );
     return data;
   },

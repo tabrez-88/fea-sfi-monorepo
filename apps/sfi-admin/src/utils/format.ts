@@ -18,13 +18,28 @@ const USD_COMPACT = new Intl.NumberFormat('en-US', {
 
 const NUMBER = new Intl.NumberFormat('en-US');
 
+const CURRENCY_FORMATTERS = new Map<string, Intl.NumberFormat>();
+function getCurrencyFormatter(currency: string): Intl.NumberFormat {
+  const existing = CURRENCY_FORMATTERS.get(currency);
+  if (existing) return existing;
+  const created = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  });
+  CURRENCY_FORMATTERS.set(currency, created);
+  return created;
+}
+
 export function formatCurrency(
   value: number | string | null | undefined,
+  currency?: string | null,
 ): string {
   if (value === null || value === undefined) return '-';
   const n = typeof value === 'string' ? Number(value) : value;
   if (Number.isNaN(n)) return '-';
-  return USD.format(n);
+  if (!currency || currency === 'USD') return USD.format(n);
+  return getCurrencyFormatter(currency).format(n);
 }
 
 export function formatCurrencyCompact(

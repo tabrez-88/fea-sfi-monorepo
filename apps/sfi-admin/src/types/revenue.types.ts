@@ -62,3 +62,26 @@ export type RevenueBatchListParams = Readonly<{
   revenueType?: string;
   reportingEntity?: string;
 }>;
+
+/** Payload for `POST /deals/:id/revenue-batches` — matches BE `CreateRevenueBatchDto`. */
+export type CreateRevenueBatchInput = Readonly<{
+  periodStart: string;
+  periodEnd: string;
+  totalAmount: number;
+  currency: Currency;
+  source?: string;
+  territory?: string;
+  revenueType?: string;
+  reportingEntity?: string;
+  lineItems?: ReadonlyArray<CreateRevenueLineItemInput>;
+}>;
+
+export type CreateRevenueLineItemInput = Readonly<{
+  platformSource: string;
+  amount: number;
+  currency?: Currency;
+  territory?: string;
+  revenueType?: string;
+  reportingEntity?: string;
+  notes?: string;
+}>;
