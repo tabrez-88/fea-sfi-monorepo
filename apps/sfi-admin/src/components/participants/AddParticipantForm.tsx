@@ -572,9 +572,9 @@ function InvestmentDetailsCard({
             <Input
               id="units-held"
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
               min={0}
-              step="1"
+              step="any"
               value={units}
               onChange={(e) => onUnitsChange(e.target.value)}
               placeholder="500"

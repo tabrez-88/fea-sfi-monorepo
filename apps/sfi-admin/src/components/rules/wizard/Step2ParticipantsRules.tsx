@@ -1142,6 +1142,18 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
     return p !== undefined && p.behaviorType !== ParticipantBehavior.RECOUPMENT;
   });
 
+  // Liang 07/14 (Deal 05): CSV-imported participants default to
+  // Recoupment, so externals she expected in the post-recoup split were
+  // silently missing from Tier 2 and it read as "can't bring everything
+  // back in phase 2". Name the excluded targets instead of hiding them.
+  const excludedFromTier2 = selectedTargets
+    .filter((id) => id !== POOL_TARGET_ID)
+    .map((id) => props.participants.find((x) => x.id === id))
+    .filter(
+      (p): p is Participant =>
+        p !== undefined && p.behaviorType === ParticipantBehavior.RECOUPMENT,
+    );
+
   return (
     <SectionCard
       title="Waterfall Tiers"
@@ -1196,6 +1208,17 @@ function DistributionBodySection(props: DistributionBodySectionProps) {
         emptyHint={`No profit-share targets selected. Pick ${poolLabel} or a Profit Share / Flat Fee participant in Allocation Targets above to define a Tier 2 split.`}
         showRunningTotal
         layout="table"
+        footer={
+          excludedFromTier2.length > 0 ? (
+            <Banner tone="info">
+              {excludedFromTier2.map((p) => p.name).join(', ')}{' '}
+              {excludedFromTier2.length === 1 ? 'is' : 'are'} not shown here
+              because their behavior is Recoupment (capital back in Tier 1,
+              then done). To give them a post-recoup share, edit the
+              participant and switch their behavior to Revenue Share.
+            </Banner>
+          ) : undefined
+        }
       />
     </SectionCard>
   );

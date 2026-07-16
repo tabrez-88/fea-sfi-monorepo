@@ -9,7 +9,7 @@ import { useParticipants } from '@/hooks/participants/useParticipants';
 import { cn } from '@/lib/utils';
 import { ParticipantBehavior, type Participant } from '@/types/participant.types';
 import { formatDate } from '@/utils/date';
-import { formatCurrency, formatNumber } from '@/utils/format';
+import { formatCurrency, formatNumber, formatUnits } from '@/utils/format';
 
 import {
   POOL_TARGET_ID,
@@ -414,7 +414,6 @@ function ParticipantTermsCard({ step2, participants }: ParticipantTermsProps) {
     [step2, participants],
   );
   const poolIsTarget = step2.selectedTargets.includes(POOL_TARGET_ID);
-  const tier1PoolValue = numericValue(step2.tier1Rows[POOL_TARGET_ID]);
   const tier2PoolValue = numericValue(step2.tier2Rows[POOL_TARGET_ID]);
   const recoupPoolValue = numericValue(step2.recoupRows[POOL_TARGET_ID]);
 
@@ -430,11 +429,11 @@ function ParticipantTermsCard({ step2, participants }: ParticipantTermsProps) {
             <PoolTermsRow
               expanded={poolExpanded}
               onToggle={() => setPoolExpanded((p) => !p)}
-              tier1Pct={tier1PoolValue}
               tier2Pct={tier2PoolValue}
               recoupPct={recoupPoolValue}
               mode={step2.mode}
               members={poolMembers}
+              exitConditions={step2.exitConditions}
             />
           )}
         </div>
@@ -533,33 +532,51 @@ function ParticipantTermsRow({ row }: Readonly<{ row: ParticipantTermRow }>) {
 type PoolTermsRowProps = Readonly<{
   expanded: boolean;
   onToggle: () => void;
-  tier1Pct: number | null;
   tier2Pct: number | null;
   recoupPct: number | null;
   mode: WizardStep2Data['mode'];
   members: ReadonlyArray<Participant>;
+  exitConditions: WizardStep2Data['exitConditions'];
 }>;
+
+/**
+ * Resolve the pool's Tier 1 recoup cap as a percentage. In waterfall
+ * mode the cap comes from the Hard Cap Multiplier exit condition
+ * (1.25 → 125%), defaulting to 100% (plain capital recoup) when the
+ * checkbox is off. Liang 07/14: she set 1.25 and the table showed 100%
+ * because this cell used to render the Tier 1 *allocation* instead.
+ */
+function poolTier1CapPct(
+  exitConditions: WizardStep2Data['exitConditions'],
+): number {
+  if (exitConditions.hardCapEnabled) {
+    const m = Number(exitConditions.hardCapMultiplier);
+    if (Number.isFinite(m) && m > 0) return m * 100;
+  }
+  return 100;
+}
 
 function PoolTermsRow({
   expanded,
   onToggle,
-  tier1Pct,
   tier2Pct,
   recoupPct,
   mode,
   members,
+  exitConditions,
 }: PoolTermsRowProps) {
+  const capPct = poolTier1CapPct(exitConditions);
   const tier1Display =
     mode === 'waterfall'
-      ? tier1Pct !== null
-        ? `${formatNumber(tier1Pct)}%`
-        : '-'
+      ? `${formatNumber(capPct)}%`
       : recoupPct !== null
         ? `${formatNumber(recoupPct)}%`
         : '-';
   const tier2Display = mode === 'waterfall' && tier2Pct !== null
     ? `${formatNumber(tier2Pct)}%`
     : '-';
+  const exitLabel =
+    mode === 'waterfall' ? `Hard recoup ${formatNumber(capPct)}% reached` : null;
   return (
     <>
       <button
@@ -589,7 +606,9 @@ function PoolTermsRow({
         <span>{tier2Display}</span>
         <span>-</span>
       </button>
-      {expanded && <IndividualInvestorsSubtable members={members} />}
+      {expanded && (
+        <IndividualInvestorsSubtable members={members} exitLabel={exitLabel} />
+      )}
     </>
   );
 }
@@ -598,7 +617,11 @@ function PoolTermsRow({
 
 function IndividualInvestorsSubtable({
   members,
-}: Readonly<{ members: ReadonlyArray<Participant> }>) {
+  exitLabel,
+}: Readonly<{
+  members: ReadonlyArray<Participant>;
+  exitLabel: string | null;
+}>) {
   return (
     <div className="border-b border-grey-100 px-3 py-3">
       <div className="flex flex-col gap-2 rounded-[8px] border border-border bg-white p-3">
@@ -626,11 +649,11 @@ function IndividualInvestorsSubtable({
                   className="grid grid-cols-[1.2fr_0.6fr_0.8fr_0.8fr_0.8fr_1fr] items-center gap-x-3 border-b border-grey-100 px-3 py-2 text-[12px] text-foreground"
                 >
                   <span className="truncate">{m.name}</span>
-                  <span>{m.units !== null ? formatNumber(m.units) : '-'}</span>
+                  <span>{m.units !== null ? formatUnits(m.units) : '-'}</span>
                   <span>{formatCurrency(m.investmentAmount)}</span>
                   <span>-</span>
                   <span>-</span>
-                  <span>-</span>
+                  <span className="truncate">{exitLabel ?? '-'}</span>
                 </div>
               ))
             )}
@@ -665,7 +688,7 @@ function InvestorPoolConfigCard({ step2, participants }: InvestorPoolConfigProps
         <SummaryRow label="Investor Valid" value={String(poolMembers.length)} />
         <SummaryRow
           label="Total Units"
-          value={`${formatNumber(totalUnits)} Shares`}
+          value={`${formatUnits(totalUnits)} Shares`}
         />
         <SummaryRow
           label="Pool Revenue Source"

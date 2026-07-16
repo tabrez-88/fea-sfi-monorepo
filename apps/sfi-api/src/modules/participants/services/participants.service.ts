@@ -602,7 +602,7 @@ export class ParticipantsService {
       const investmentAmount = this.parseOptionalNumber(investmentRaw, 'investmentAmount', warnings);
       if (investmentAmount !== undefined) investment.investmentAmount = investmentAmount;
 
-      const units = this.parseOptionalInt(unitsRaw, 'units', warnings);
+      const units = this.parseOptionalUnits(unitsRaw, 'units', warnings);
       if (units !== undefined) investment.units = units;
 
       const pricePerUnit = this.parseOptionalNumber(priceRaw, 'pricePerUnit', warnings);
@@ -660,14 +660,21 @@ export class ParticipantsService {
     return parsed;
   }
 
-  private parseOptionalInt(raw: string | undefined, field: string, warnings: string[]): number | undefined {
+  /**
+   * Units historically had to be whole numbers, but Liang's Deal 06 pack
+   * (2026-07-14) splits 100 units three ways as 33.3333 / 33.3333 / 33.3334,
+   * so fractional units are allowed up to 4 decimal places. Anything finer
+   * is rounded to 4dp rather than rejected — CSV exports from spreadsheets
+   * often carry float noise (33.33330000000001).
+   */
+  private parseOptionalUnits(raw: string | undefined, field: string, warnings: string[]): number | undefined {
     if (raw === undefined || raw === '') return undefined;
     const parsed = Number(raw);
-    if (!Number.isInteger(parsed) || parsed < 0) {
-      warnings.push(`${field} could not be parsed as a non-negative integer ("${raw}") — field skipped`);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      warnings.push(`${field} could not be parsed as a non-negative number ("${raw}") — field skipped`);
       return undefined;
     }
-    return parsed;
+    return Math.round(parsed * 10_000) / 10_000;
   }
 
   private parseOptionalBoolean(raw: string | undefined, field: string, warnings: string[]): boolean | undefined {

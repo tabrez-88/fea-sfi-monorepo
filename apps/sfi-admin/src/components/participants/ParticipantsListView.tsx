@@ -6,6 +6,7 @@ import {
   ChevronDown,
   Download,
   MoreHorizontal,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -42,7 +43,7 @@ import { getApiErrorMessage } from '@/lib/axios';
 import { cn } from '@/lib/utils';
 import { ParticipantBehavior, type Participant } from '@/types/participant.types';
 import { formatDate } from '@/utils/date';
-import { formatCurrency, formatNumber } from '@/utils/format';
+import { formatCurrency, formatNumber, formatUnits } from '@/utils/format';
 
 type BehaviorFilter = 'ALL' | 'RECOUPMENT' | 'DEDUCTIONS' | 'PROFIT';
 type SortField = 'name' | 'createdAt';
@@ -734,7 +735,7 @@ function ParticipantRow({
       </BodyCell>
       <BodyCell>
         <span className="text-[14px] text-foreground">
-          {p.units === null ? '-' : formatNumber(p.units)}
+          {p.units === null ? '-' : formatUnits(p.units)}
         </span>
       </BodyCell>
       <BodyCell>
@@ -744,7 +745,11 @@ function ParticipantRow({
         <span className="text-[14px] text-neutral">{formatDate(p.createdAt)}</span>
       </BodyCell>
       <BodyCell className="justify-center px-0">
-        <RowActionsMenu participant={p} onRequestDelete={onRequestDelete} />
+        <RowActionsMenu
+          participant={p}
+          dealId={dealId}
+          onRequestDelete={onRequestDelete}
+        />
       </BodyCell>
     </div>
   );
@@ -752,10 +757,17 @@ function ParticipantRow({
 
 type RowActionsMenuProps = Readonly<{
   participant: Participant;
+  dealId: string;
   onRequestDelete: (participant: Participant) => void;
 }>;
 
-function RowActionsMenu({ participant, onRequestDelete }: RowActionsMenuProps) {
+/**
+ * Per-row kebab. Edit routes to the participant detail page where every
+ * field (including behavior) is editable — Liang 07/14: imported pool
+ * investors looked locked to Recoupment because this menu only offered
+ * Delete and the name-link path wasn't discoverable.
+ */
+function RowActionsMenu({ participant, dealId, onRequestDelete }: RowActionsMenuProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -770,6 +782,12 @@ function RowActionsMenu({ participant, onRequestDelete }: RowActionsMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem asChild>
+          <Link href={ROUTES.DEALS.PARTICIPANT_DETAIL(dealId, participant.id)}>
+            <Pencil className="size-4" aria-hidden />
+            Edit
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => onRequestDelete(participant)}
           className="text-danger focus:bg-danger/10 focus:text-danger"

@@ -22,7 +22,7 @@ import { useCreateParticipant } from '@/hooks/participants/useCreateParticipant'
 import { getApiErrorMessage } from '@/lib/axios';
 import { Currency } from '@/types/deal.types';
 import { ParticipantBehavior } from '@/types/participant.types';
-import { formatCurrency, formatNumber } from '@/utils/format';
+import { formatCurrency, formatUnits } from '@/utils/format';
 
 import {
   downloadPoolCsvTemplate,
@@ -100,7 +100,7 @@ export function InvestorPoolManagementCard({
       })
       .catch(() => {
         if (!cancelled) {
-          setParsed({ rows: [], errors: ['Could not read the file.'] });
+          setParsed({ rows: [], errors: ['Could not read the file.'], notices: [] });
         }
       });
     return () => {
@@ -304,7 +304,7 @@ function PoolCsvPreviewTable({ parsed }: Readonly<{ parsed: PoolCsvParseResult }
           {totalUnits > 0 && (
             <span className="font-normal text-neutral">
               {' '}
-              · {formatNumber(totalUnits)} units · {formatCurrency(totalInvested)} total
+              · {formatUnits(totalUnits)} units · {formatCurrency(totalInvested)} total
             </span>
           )}
         </p>
@@ -318,6 +318,13 @@ function PoolCsvPreviewTable({ parsed }: Readonly<{ parsed: PoolCsvParseResult }
             ))}
           </ul>
         </Banner>
+      )}
+      {parsed.notices.length > 0 && (
+        <ul className="space-y-0.5 text-[13px] leading-[18px] text-neutral">
+          {parsed.notices.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
       )}
       {parsed.rows.length > 0 && (
         <div className="overflow-hidden rounded-[8px] border border-border">
@@ -334,7 +341,7 @@ function PoolCsvPreviewTable({ parsed }: Readonly<{ parsed: PoolCsvParseResult }
               >
                 <span className="truncate">{row.name}</span>
                 <span>{formatCurrency(row.investmentAmount)}</span>
-                <span>{formatNumber(row.units)}</span>
+                <span>{formatUnits(row.units)}</span>
               </div>
             ))}
           </div>

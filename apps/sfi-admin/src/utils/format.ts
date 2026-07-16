@@ -56,6 +56,18 @@ export function formatNumber(value: number | null | undefined): string {
   return NUMBER.format(value);
 }
 
+const UNITS = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 });
+
+/**
+ * Pool units formatter. Units allow fractions up to 4 decimal places
+ * (Liang 07/14 — 33.3333 units), and the default `formatNumber` caps at
+ * 3 fraction digits which silently rendered 33.3333 as 33.333.
+ */
+export function formatUnits(value: number | null | undefined): string {
+  if (value === null || value === undefined) return '-';
+  return UNITS.format(value);
+}
+
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;
   return `${str.slice(0, maxLength)}…`;

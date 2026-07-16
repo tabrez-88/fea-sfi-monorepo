@@ -16,7 +16,21 @@ export interface PoolCsvRow {
 export interface PoolCsvParseResult {
   rows: PoolCsvRow[];
   errors: string[];
+  /**
+   * Non-error information about rows the parser intentionally ignored
+   * (e.g. a "Total" summary row from a spreadsheet export). Rendered as
+   * neutral text, not as a failure.
+   */
+  notices: string[];
 }
+
+/**
+ * Spreadsheet exports (Numbers / Excel) often carry a trailing summary
+ * row ("Total", "Grand Total", "Sum"). Importing it as an investor
+ * silently doubles every pool number (Liang hit this on Deal 06), so
+ * rows whose name matches are skipped with a notice.
+ */
+const SUMMARY_ROW_NAME = /^(sub\s*)?total$|^grand\s+total$|^sum$/i;
 
 /**
  * Client-side CSV parser for the investor pool import. Tolerant of:
@@ -33,15 +47,16 @@ export interface PoolCsvParseResult {
  */
 export function parsePoolCsv(text: string): PoolCsvParseResult {
   const errors: string[] = [];
+  const notices: string[] = [];
   // Strip a leading BOM (U+FEFF) before trimming. Excel writes one when
   // saving CSV on Windows, and a BOM left in the first header cell
   // would break the header-name lookup below.
   const noBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const stripped = noBom.trim();
-  if (!stripped) return { rows: [], errors: ['File is empty.'] };
+  if (!stripped) return { rows: [], errors: ['File is empty.'], notices };
 
   const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return { rows: [], errors: ['File is empty.'] };
+  if (lines.length === 0) return { rows: [], errors: ['File is empty.'], notices };
 
   const header = tokenizeCsvLine(lines[0]!).map((h) => h.trim().toLowerCase());
   const nameIdx = findHeaderIndex(header, [
@@ -73,40 +88,68 @@ export function parsePoolCsv(text: string): PoolCsvParseResult {
     errors.push(
       'CSV header must include Name, Investment Amount, and Units columns. Recognized variants: Name / Legal Name / Full Name; Investment Amount / Amount / Invested; Units / Units Held.',
     );
-    return { rows: [], errors };
+    return { rows: [], errors, notices };
   }
 
   const rows: PoolCsvRow[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = tokenizeCsvLine(lines[i]!).map((c) => c.trim());
-    const name = cells[nameIdx] ?? '';
-    const investedRaw = cells[investedIdx] ?? '';
-    const unitsRaw = cells[unitsIdx] ?? '';
-    const priceRaw = priceIdx >= 0 ? (cells[priceIdx] ?? '') : '';
-    if (!name) {
-      errors.push(`Row ${i + 1}: name is required.`);
-      continue;
-    }
-    const investmentAmount = Number(investedRaw.replace(/[$£€¥,]/g, ''));
-    const units = Number(unitsRaw.replace(/[,%]/g, ''));
-    const pricePerUnit = priceRaw
-      ? Number(priceRaw.replace(/[$£€¥,]/g, ''))
-      : NaN;
-    if (!Number.isFinite(investmentAmount) || investmentAmount < 0) {
-      errors.push(`Row ${i + 1}: investment amount "${investedRaw}" is invalid.`);
-      continue;
-    }
-    if (!Number.isFinite(units) || units < 0) {
-      errors.push(`Row ${i + 1}: units "${unitsRaw}" is invalid.`);
-      continue;
-    }
-    const row: PoolCsvRow = { name, investmentAmount, units };
-    if (Number.isFinite(pricePerUnit) && pricePerUnit >= 0) {
-      row.pricePerUnit = pricePerUnit;
-    }
-    rows.push(row);
+    const outcome = parsePoolRow(cells, i + 1, { nameIdx, investedIdx, unitsIdx, priceIdx });
+    if (outcome.row) rows.push(outcome.row);
+    if (outcome.error) errors.push(outcome.error);
+    if (outcome.notice) notices.push(outcome.notice);
   }
-  return { rows, errors };
+  return { rows, errors, notices };
+}
+
+type PoolColumnIndexes = Readonly<{
+  nameIdx: number;
+  investedIdx: number;
+  unitsIdx: number;
+  priceIdx: number;
+}>;
+
+type PoolRowOutcome = Readonly<{
+  row?: PoolCsvRow;
+  error?: string;
+  notice?: string;
+}>;
+
+function parsePoolRow(
+  cells: string[],
+  rowNum: number,
+  { nameIdx, investedIdx, unitsIdx, priceIdx }: PoolColumnIndexes,
+): PoolRowOutcome {
+  const name = cells[nameIdx] ?? '';
+  const investedRaw = cells[investedIdx] ?? '';
+  const unitsRaw = cells[unitsIdx] ?? '';
+  const priceRaw = priceIdx >= 0 ? (cells[priceIdx] ?? '') : '';
+
+  if (!name) {
+    return { error: `Row ${rowNum}: name is required.` };
+  }
+  if (SUMMARY_ROW_NAME.test(name)) {
+    return { notice: `Row ${rowNum}: skipped summary row ("${name}").` };
+  }
+
+  const investmentAmount = Number(investedRaw.replace(/[$£€¥,]/g, ''));
+  const units = Number(unitsRaw.replace(/[,%]/g, ''));
+  const pricePerUnit = priceRaw
+    ? Number(priceRaw.replace(/[$£€¥,]/g, ''))
+    : Number.NaN;
+
+  if (!Number.isFinite(investmentAmount) || investmentAmount < 0) {
+    return { error: `Row ${rowNum}: investment amount "${investedRaw}" is invalid.` };
+  }
+  if (!Number.isFinite(units) || units < 0) {
+    return { error: `Row ${rowNum}: units "${unitsRaw}" is invalid.` };
+  }
+
+  const row: PoolCsvRow = { name, investmentAmount, units };
+  if (Number.isFinite(pricePerUnit) && pricePerUnit >= 0) {
+    row.pricePerUnit = pricePerUnit;
+  }
+  return { row };
 }
 
 /** Find the first header index whose label matches any of the given patterns. */

@@ -3,7 +3,6 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
-  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -88,11 +87,13 @@ export class CreateParticipantDto {
 
   @ApiPropertyOptional({
     description:
-      'Units / shares held by this participant. Primary weighting input for the pool resolver when present.',
+      'Units / shares held by this participant. Primary weighting input for the pool resolver when present. ' +
+      'Fractional units are allowed up to 4 decimal places (Liang 07/14 — e.g. 33.3333) so ' +
+      'equal three-way splits of 100 units survive a CSV round-trip.',
     minimum: 0,
   })
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   units?: number;
 
@@ -162,9 +163,12 @@ export class UpdateParticipantDto {
   @Min(0)
   investmentAmount?: number;
 
-  @ApiPropertyOptional({ description: 'Units / shares held by this participant', minimum: 0 })
+  @ApiPropertyOptional({
+    description: 'Units / shares held by this participant (fractional up to 4dp allowed)',
+    minimum: 0,
+  })
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0)
   units?: number;
 
