@@ -2,9 +2,11 @@ import { API_ENDPOINTS } from '@/constants/api';
 import { apiClient } from '@/lib/axios';
 import type { ListParams, PaginatedResponse } from '@/types/api.types';
 import type {
+  BulkActionResult,
   BulkImportResult,
   CreateParticipantInput,
   Participant,
+  ParticipantBehavior,
   UpdateParticipantInput,
 } from '@/types/participant.types';
 
@@ -88,6 +90,29 @@ export const participantsService = {
 
   async remove(id: string): Promise<void> {
     await apiClient.delete(API_ENDPOINTS.PARTICIPANTS.DETAIL(id));
+  },
+
+  async bulkRemove(
+    dealId: string,
+    participantIds: ReadonlyArray<string>,
+  ): Promise<BulkActionResult> {
+    const { data } = await apiClient.post<BulkActionResult>(
+      API_ENDPOINTS.PARTICIPANTS.BULK_DELETE(dealId),
+      { participantIds },
+    );
+    return data;
+  },
+
+  async bulkSetBehavior(
+    dealId: string,
+    participantIds: ReadonlyArray<string>,
+    behaviorType: ParticipantBehavior,
+  ): Promise<BulkActionResult> {
+    const { data } = await apiClient.patch<BulkActionResult>(
+      API_ENDPOINTS.PARTICIPANTS.BULK_BEHAVIOR(dealId),
+      { participantIds, behaviorType },
+    );
+    return data;
   },
 
   async importCsv(

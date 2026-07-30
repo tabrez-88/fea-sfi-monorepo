@@ -26,6 +26,10 @@ export const API_ENDPOINTS = {
     CREATE: (dealId: string) => `${BASE}/deals/${dealId}/participants`,
     ROLES: (dealId: string) => `${BASE}/deals/${dealId}/participants/roles`,
     IMPORT: (dealId: string) => `${BASE}/deals/${dealId}/participants/import`,
+    BULK_DELETE: (dealId: string) =>
+      `${BASE}/deals/${dealId}/participants/bulk-delete`,
+    BULK_BEHAVIOR: (dealId: string) =>
+      `${BASE}/deals/${dealId}/participants/bulk-behavior`,
     DETAIL: (id: string) => `${BASE}/participants/${id}`,
   },
   RULES: {

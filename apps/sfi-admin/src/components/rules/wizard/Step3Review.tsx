@@ -80,7 +80,7 @@ export function Step3Review({
         mode={step2.mode}
       />
 
-      <RuleSummaryCard step2={step2} participants={participants} />
+      <RuleSummaryCard step2={step2} />
 
       <ProfitSplitCard step2={step2} participants={participants} />
 
@@ -189,15 +189,17 @@ function ReviewSectionCard({ title, children }: ReviewSectionCardProps) {
 
 type RuleSummaryProps = Readonly<{
   step2: WizardStep2Data;
-  participants: ReadonlyArray<Participant>;
 }>;
 
-function RuleSummaryCard({ step2, participants }: RuleSummaryProps) {
+function RuleSummaryCard({ step2 }: RuleSummaryProps) {
+  // The Investor Pool counts as ONE participant here, however many members
+  // it holds. Liang 07/30, confirming the count she wants: "I want to see 4
+  // participants. Investor pool members are under participant - investors
+  // pool." The members stay discoverable by expanding the pool row in the
+  // Participant Terms table below, so this number matches what the Profit
+  // Split and Participant Terms tables show rather than the raw payload row
+  // count (which used to read 7 for her 4-participant deal).
   const totalParticipants = useMemo(() => {
-    // "Total Participants" on the summary card = every participant that
-    // will appear somewhere in the snapshot payload. Mirrors the union
-    // built by `buildParticipantInputs` in the payload assembler so the
-    // tile and the wire payload always agree.
     const ids = new Set<string>();
     for (const row of step2.deductions) {
       if (row.included && row.participantId) ids.add(row.participantId);
@@ -205,13 +207,11 @@ function RuleSummaryCard({ step2, participants }: RuleSummaryProps) {
     for (const id of step2.selectedTargets) {
       if (id !== POOL_TARGET_ID) ids.add(id);
     }
-    if (step2.selectedTargets.includes(POOL_TARGET_ID)) {
-      for (const p of participants) {
-        if (p.poolMember === true) ids.add(p.id);
-      }
-    }
-    return ids.size;
-  }, [step2.deductions, step2.selectedTargets, participants]);
+    // Pool members are deliberately NOT unioned in — the pool itself is the
+    // single participant, its members are a level below.
+    const poolIsTarget = step2.selectedTargets.includes(POOL_TARGET_ID);
+    return ids.size + (poolIsTarget ? 1 : 0);
+  }, [step2.deductions, step2.selectedTargets]);
 
   const deductionSummary = useMemo(() => {
     if (!step2.deductionsEnabled) return { value: '-', desc: 'Disabled' };
@@ -255,7 +255,13 @@ function RuleSummaryCard({ step2, participants }: RuleSummaryProps) {
   return (
     <ReviewSectionCard title="Rule Summary">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatTile title="Total Participants" value={String(totalParticipants)} />
+        <StatTile
+          title="Total Participants"
+          value={String(totalParticipants)}
+          {...(step2.selectedTargets.includes(POOL_TARGET_ID)
+            ? { desc: 'Investor Pool counts as 1' }
+            : {})}
+        />
         <StatTile
           title="Total Deductions"
           value={deductionSummary.value}

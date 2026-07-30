@@ -87,7 +87,15 @@ export class ParticipantsService {
       poolMember: dto.poolMember,
     };
 
-    const existing = await this.findExistingForUpsert(this.prisma, dealId, dto.email, dto.externalId);
+    const existing = await this.findExistingForUpsert(
+      this.prisma,
+      dealId,
+      dto.email,
+      dto.externalId,
+      // Name matching only applies when the caller is upserting a pool
+      // member; see `findExistingForUpsert` for why it stays that narrow.
+      dto.matchByName && dto.poolMember === true ? dto.name : undefined,
+    );
 
     let participant: Participant;
     let action: 'CREATED' | 'UPDATED';
@@ -281,6 +289,105 @@ export class ParticipantsService {
         email: existing.email,
       },
     });
+  }
+
+  /**
+   * Delete many participants in one call. Liang 07/27: a 100+ investor pool
+   * can't be cleared one row at a time.
+   *
+   * Ownership is enforced once on the deal, then the id list is narrowed to
+   * rows that actually belong to that deal — ids from another deal are
+   * reported as `skipped` rather than throwing, so a stale UI selection
+   * degrades gracefully instead of failing the whole batch. One audit-log
+   * row per deleted participant keeps the trail per-entity (same pattern as
+   * the perk-delivery bulk import).
+   */
+  async removeMany(
+    userId: string,
+    dealId: string,
+    participantIds: string[],
+  ): Promise<{ affected: number; skipped: string[] }> {
+    await this.dealsService.assertDealOwner(dealId, userId);
+
+    const owned = await this.prisma.participant.findMany({
+      where: { dealId, id: { in: participantIds } },
+    });
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const skipped = participantIds.filter((id) => !ownedIds.has(id));
+
+    if (owned.length === 0) return { affected: 0, skipped };
+
+    this.logger.log(`Bulk deleting ${owned.length} participants on deal ${dealId}`);
+    await this.prisma.participant.deleteMany({
+      where: { dealId, id: { in: [...ownedIds] } },
+    });
+
+    for (const p of owned) {
+      await this.auditLog.create({
+        actor: userId,
+        action: 'DELETED',
+        entityType: 'Participant',
+        entityId: p.id,
+        dealId,
+        metadata: {
+          name: p.name,
+          roleName: p.roleName,
+          behaviorType: p.behaviorType,
+          email: p.email,
+          bulk: true,
+        },
+      });
+    }
+
+    return { affected: owned.length, skipped };
+  }
+
+  /**
+   * Apply one behavior to many participants. Counterpart to `removeMany` for
+   * the "imported 200 investors as Recoupment, need them all on Revenue
+   * Share" case (Liang 07/27).
+   */
+  async updateBehaviorMany(
+    userId: string,
+    dealId: string,
+    participantIds: string[],
+    behaviorType: ParticipantBehavior,
+  ): Promise<{ affected: number; skipped: string[] }> {
+    await this.dealsService.assertDealOwner(dealId, userId);
+
+    const owned = await this.prisma.participant.findMany({
+      where: { dealId, id: { in: participantIds } },
+    });
+    const ownedIds = new Set(owned.map((p) => p.id));
+    const skipped = participantIds.filter((id) => !ownedIds.has(id));
+
+    if (owned.length === 0) return { affected: 0, skipped };
+
+    this.logger.log(
+      `Bulk setting behavior=${behaviorType} on ${owned.length} participants (deal ${dealId})`,
+    );
+    await this.prisma.participant.updateMany({
+      where: { dealId, id: { in: [...ownedIds] } },
+      data: { behaviorType },
+    });
+
+    for (const p of owned) {
+      await this.auditLog.create({
+        actor: userId,
+        action: 'UPDATED',
+        entityType: 'Participant',
+        entityId: p.id,
+        dealId,
+        metadata: {
+          name: p.name,
+          behaviorTypeBefore: p.behaviorType,
+          behaviorTypeAfter: behaviorType,
+          bulk: true,
+        },
+      });
+    }
+
+    return { affected: owned.length, skipped };
   }
 
   /**
@@ -822,11 +929,29 @@ export class ParticipantsService {
    * Accepts either the base `PrismaService` (for single-row callers) or a
    * `Prisma.TransactionClient` (for the bulk-import transaction).
    */
+  /**
+   * Resolve an existing row for upsert. Match order: email, then externalId,
+   * then (only when the caller passes `poolMemberName`) a case-insensitive
+   * name match scoped to existing pool members.
+   *
+   * The name fallback exists for the Investor Pool CSV path: that template is
+   * `Name, Investment Amount, Units` with no email or externalId, so without
+   * it every re-import created a fresh duplicate member (Liang 07/27 ended up
+   * with Investor A and B twice).
+   *
+   * It is opt-in AND pool-scoped on purpose. Two real people can share a
+   * name, so widening name matching to all participants would let a pool CSV
+   * row named e.g. "Publisher" silently absorb an unrelated solo Revenue
+   * Share participant and reset their behavior. Restricting the match to rows
+   * already flagged `metadata.poolMember = true` keeps re-imports idempotent
+   * without ever converting a non-pool participant.
+   */
   private async findExistingForUpsert(
     client: Pick<PrismaService, 'participant'> | Prisma.TransactionClient,
     dealId: string,
     email: string | undefined,
     externalId: string | undefined,
+    poolMemberName?: string,
   ): Promise<Participant | null> {
     if (email) {
       const byEmail = await client.participant.findFirst({ where: { dealId, email } });
@@ -835,6 +960,16 @@ export class ParticipantsService {
     if (externalId) {
       const byExt = await client.participant.findFirst({ where: { dealId, externalId } });
       if (byExt) return byExt;
+    }
+    if (poolMemberName) {
+      const byName = await client.participant.findFirst({
+        where: {
+          dealId,
+          name: { equals: poolMemberName, mode: 'insensitive' },
+          metadata: { path: ['poolMember'], equals: true },
+        },
+      });
+      if (byName) return byName;
     }
     return null;
   }

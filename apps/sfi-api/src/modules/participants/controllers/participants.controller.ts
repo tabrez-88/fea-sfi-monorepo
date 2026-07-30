@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Patch,
   Post,
   Body,
   Param,
@@ -26,13 +27,17 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { ParticipantBehavior } from '@prisma/client';
 import { Response } from 'express';
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/jwt-payload';
 import { PaginationQueryDto } from '../../deals/dto';
 import {
+  BulkActionResultDto,
   BulkImportResultDto,
+  BulkParticipantIdsDto,
+  BulkUpdateBehaviorDto,
   CreateParticipantDto,
   ParticipantResponseDto,
 } from '../dto';
@@ -147,6 +152,54 @@ export class ParticipantsController {
       throw new Error('No file uploaded');
     }
     return this.participantsService.importFromCsv(user.id, dealId, file.buffer, skipErrors, dryRun);
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete many participants in one call',
+    description:
+      'Takes a list of participant IDs scoped to the path `dealId`. IDs that do not ' +
+      'belong to this deal come back in `skipped` instead of failing the batch, so a ' +
+      'stale UI selection degrades gracefully. Emits one audit-log row per deletion. ' +
+      'POST (not DELETE) because request bodies on DELETE are poorly supported by proxies.',
+  })
+  @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Bulk delete result', type: BulkActionResultDto })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async bulkDelete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('dealId', ParseUUIDPipe) dealId: string,
+    @Body() dto: BulkParticipantIdsDto,
+  ): Promise<BulkActionResultDto> {
+    return this.participantsService.removeMany(user.id, dealId, dto.participantIds);
+  }
+
+  @Patch('bulk-behavior')
+  @ApiOperation({
+    summary: 'Set one behavior on many participants',
+    description:
+      'Applies `behaviorType` to every listed participant. Used after a pool CSV import ' +
+      'when all members need a different default than the one they came in with. Same ' +
+      '`skipped` semantics as bulk-delete; emits one audit-log row per change recording ' +
+      'the before / after behavior.',
+  })
+  @ApiParam({ name: 'dealId', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Bulk update result', type: BulkActionResultDto })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  async bulkBehavior(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('dealId', ParseUUIDPipe) dealId: string,
+    @Body() dto: BulkUpdateBehaviorDto,
+  ): Promise<BulkActionResultDto> {
+    return this.participantsService.updateBehaviorMany(
+      user.id,
+      dealId,
+      dto.participantIds,
+      dto.behaviorType as unknown as ParticipantBehavior,
+    );
   }
 
   @Get('export')

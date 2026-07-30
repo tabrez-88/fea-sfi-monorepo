@@ -17,8 +17,17 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { PARTICIPANT_BEHAVIOR_LABEL } from '@/constants/ui';
 import { useDeal } from '@/hooks/deals/useDeal';
 import { useCreateParticipant } from '@/hooks/participants/useCreateParticipant';
+import { useParticipants } from '@/hooks/participants/useParticipants';
 import { getApiErrorMessage } from '@/lib/axios';
 import { Currency } from '@/types/deal.types';
 import { ParticipantBehavior } from '@/types/participant.types';
@@ -55,6 +64,19 @@ type PoolImportStatus =
     };
 
 /**
+ * Behaviors offered as the import-wide default. Pool members are almost
+ * always Recoupment, but Revenue Share covers the "Revenue Share Pool"
+ * pattern (investors buy units, pool takes a % with no recoup cap) and
+ * Fixed Payment covers flat-fee investor arrangements. Fee Deduction is
+ * excluded: a pool member never takes a fee off the top.
+ */
+const POOL_IMPORT_BEHAVIORS: ReadonlyArray<ParticipantBehavior> = [
+  ParticipantBehavior.RECOUPMENT,
+  ParticipantBehavior.NET_PROFIT_SHARE,
+  ParticipantBehavior.FLAT_FEE,
+];
+
+/**
  * Investor Pool management UI. Drag-drop CSV + per-row create via the
  * existing participants endpoint (defaults `behaviorType: RECOUPMENT,
  * poolMember: true, roleName: 'Investor'`) plus a single-investor
@@ -81,8 +103,35 @@ export function InvestorPoolManagementCard({
     kind: 'idle',
   });
   const [addInvestorOpen, setAddInvestorOpen] = useState(false);
+  // Behavior applied to every row of the import. Recoupment stays the
+  // default (the common investor-pool case) but Liang 07/27 needed to set
+  // it per import rather than editing 200 rows one at a time afterwards.
+  const [importBehavior, setImportBehavior] = useState<ParticipantBehavior>(
+    ParticipantBehavior.RECOUPMENT,
+  );
 
   const createMutation = useCreateParticipant(dealId);
+  // Existing members, used to tell the admin up front how many rows will
+  // update in place vs create new. The BE upserts pool rows by name, so a
+  // re-import is safe — this just makes that visible before they commit.
+  const { data: existingData } = useParticipants(dealId, { limit: 200 });
+  const existingNames = useMemo(() => {
+    const set = new Set<string>();
+    // Pool members only — matches the BE's pool-scoped name upsert, so the
+    // preview count can't claim an update that won't happen.
+    for (const p of existingData?.data ?? []) {
+      if (p.poolMember === true) set.add(p.name.trim().toLowerCase());
+    }
+    return set;
+  }, [existingData]);
+
+  const importSplit = useMemo(() => {
+    let updating = 0;
+    for (const row of parsed?.rows ?? []) {
+      if (existingNames.has(row.name.trim().toLowerCase())) updating += 1;
+    }
+    return { updating, creating: (parsed?.rows.length ?? 0) - updating };
+  }, [parsed, existingNames]);
 
   // Parse client-side on file pick so the admin sees a preview before
   // confirming. The actual POSTs only run on Confirm Import.
@@ -124,8 +173,11 @@ export function InvestorPoolManagementCard({
         await createMutation.mutateAsync({
           name: row.name,
           roleName: 'Investor',
-          behaviorType: ParticipantBehavior.RECOUPMENT,
+          behaviorType: importBehavior,
           poolMember: true,
+          // Upsert on name: the pool template has no email / externalId, so
+          // without this a re-import duplicates every member.
+          matchByName: true,
           investmentAmount: row.investmentAmount,
           units: row.units,
           ...(pricePerUnit !== undefined ? { pricePerUnit } : {}),
@@ -207,39 +259,77 @@ export function InvestorPoolManagementCard({
       {parsed && <PoolCsvPreviewTable parsed={parsed} />}
 
       {hasParsedRows && importStatus.kind !== 'done' && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-border bg-grey-50/40 px-3 py-3">
-          <p className="text-[13px] text-foreground">
-            {importing ? (
-              <>
-                Importing {importStatus.done} of {importStatus.total}
-                ...
-              </>
-            ) : (
-              <>
-                Ready to import {parsed!.rows.length}{' '}
-                {parsed!.rows.length === 1 ? 'investor' : 'investors'} as pool
-                members.
-              </>
-            )}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void handleConfirmImport()}
-            disabled={!canConfirm}
-          >
-            {importing ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-                Importing...
-              </>
-            ) : (
-              <>
-                <Plus className="size-4" aria-hidden strokeWidth={1.75} />
-                Confirm Import ({parsed!.rows.length})
-              </>
-            )}
-          </Button>
+        <div className="flex flex-col gap-3 rounded-[8px] border border-border bg-grey-50/40 px-3 py-3">
+          <div className="flex flex-col gap-1.5 sm:max-w-[320px]">
+            <Label htmlFor="pool-import-behavior">Default Behavior</Label>
+            <Select
+              value={importBehavior}
+              onValueChange={(v) => setImportBehavior(v as ParticipantBehavior)}
+              disabled={importing}
+            >
+              <SelectTrigger
+                id="pool-import-behavior"
+                size="sm"
+                aria-label="Default behavior for imported investors"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {POOL_IMPORT_BEHAVIORS.map((b) => (
+                  <SelectItem key={b} value={b}>
+                    {PARTICIPANT_BEHAVIOR_LABEL[b]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[12px] leading-[16px] text-neutral">
+              Applied to every investor in this import. You can still change any
+              of them individually afterwards.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            <p className="text-[13px] text-foreground">
+              {importing ? (
+                <>
+                  Importing {importStatus.done} of {importStatus.total}
+                  ...
+                </>
+              ) : (
+                <>
+                  Ready to import {parsed!.rows.length}{' '}
+                  {parsed!.rows.length === 1 ? 'investor' : 'investors'} as pool
+                  members.
+                  {importSplit.updating > 0 && (
+                    <span className="text-neutral">
+                      {' '}
+                      {importSplit.creating} new,{' '}
+                      {importSplit.updating} already in the pool and will be
+                      updated in place.
+                    </span>
+                  )}
+                </>
+              )}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void handleConfirmImport()}
+              disabled={!canConfirm}
+            >
+              {importing ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Plus className="size-4" aria-hidden strokeWidth={1.75} />
+                  Confirm Import ({parsed!.rows.length})
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       )}
 

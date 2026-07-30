@@ -1,11 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
   MinLength,
@@ -114,6 +118,19 @@ export class CreateParticipantDto {
   @IsOptional()
   @IsBoolean()
   poolMember?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Opt into name-based upsert matching. Only honoured together with ' +
+      '`poolMember: true`, and only matches existing pool members — the default ' +
+      'match keys are email then externalId, and the Investor Pool CSV template ' +
+      'carries neither, so re-importing the same file created duplicate members ' +
+      '(Liang 07/27). Scoped to the pool so a CSV row can never absorb an ' +
+      'unrelated solo participant that happens to share a name.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  matchByName?: boolean;
 
   @ApiPropertyOptional({ description: 'Additional metadata' })
   @IsOptional()
@@ -277,4 +294,48 @@ export class BulkImportResultDto {
 
   @ApiProperty({ description: 'Per-row results', type: [ImportParticipantRowResultDto] })
   rows!: ImportParticipantRowResultDto[];
+}
+
+// ============================================
+// Bulk actions (Liang 07/27 — pools of 100+ investors can't be
+// managed one row at a time)
+// ============================================
+
+/**
+ * Shared id-list payload for the bulk endpoints. Capped at 500 to bound
+ * the transaction size; the UI selects within one page so real requests
+ * stay far below that.
+ */
+export class BulkParticipantIdsDto {
+  @ApiProperty({
+    description: 'Participant IDs to act on. All must belong to the path `dealId`.',
+    type: [String],
+    maxItems: 500,
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(500)
+  @IsUUID('4', { each: true })
+  participantIds!: string[];
+}
+
+export class BulkUpdateBehaviorDto extends BulkParticipantIdsDto {
+  @ApiProperty({
+    description: 'Behavior to apply to every selected participant',
+    enum: ParticipantBehaviorDto,
+  })
+  @IsEnum(ParticipantBehaviorDto)
+  behaviorType!: ParticipantBehaviorDto;
+}
+
+export class BulkActionResultDto {
+  @ApiProperty({ description: 'Number of participants affected' })
+  affected!: number;
+
+  @ApiProperty({
+    description:
+      'IDs that were skipped because they do not belong to this deal (or no longer exist).',
+    type: [String],
+  })
+  skipped!: string[];
 }

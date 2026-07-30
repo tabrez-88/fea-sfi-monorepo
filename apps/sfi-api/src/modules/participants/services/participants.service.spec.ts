@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ParticipantBehavior } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
@@ -69,7 +70,9 @@ describe('ParticipantsService', () => {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       delete: jest.fn(),
+      deleteMany: jest.fn(),
       count: jest.fn(),
     },
     $transaction: jest.fn(),
@@ -217,6 +220,121 @@ describe('ParticipantsService', () => {
         where: { dealId: MOCK_DEAL_ID, externalId: 'EXT-1' },
       });
       expect(mockPrismaService.participant.create).not.toHaveBeenCalled();
+    });
+
+    it('upserts a pool member by name when matchByName is set (pool CSV re-import)', async () => {
+      const existing = buildParticipantRow({ id: 'pool-1', name: 'Investor A' });
+      mockPrismaService.participant.findFirst.mockResolvedValueOnce(existing);
+      mockPrismaService.participant.update.mockResolvedValue(existing);
+
+      await service.create(MOCK_USER_ID, MOCK_DEAL_ID, {
+        name: 'Investor A',
+        roleName: 'Investor',
+        behaviorType: ParticipantBehaviorDto.RECOUPMENT,
+        poolMember: true,
+        matchByName: true,
+        units: 40,
+        investmentAmount: 20000,
+      });
+
+      expect(mockPrismaService.participant.findFirst).toHaveBeenCalledWith({
+        where: {
+          dealId: MOCK_DEAL_ID,
+          name: { equals: 'Investor A', mode: 'insensitive' },
+          metadata: { path: ['poolMember'], equals: true },
+        },
+      });
+      expect(mockPrismaService.participant.update).toHaveBeenCalled();
+      expect(mockPrismaService.participant.create).not.toHaveBeenCalled();
+    });
+
+    it('ignores matchByName when the row is not a pool member', async () => {
+      mockPrismaService.participant.findFirst.mockResolvedValue(null);
+      mockPrismaService.participant.create.mockResolvedValue(
+        buildParticipantRow({ id: 'solo-1', name: 'Publisher' }),
+      );
+
+      await service.create(MOCK_USER_ID, MOCK_DEAL_ID, {
+        name: 'Publisher',
+        roleName: 'Publisher',
+        behaviorType: ParticipantBehaviorDto.NET_PROFIT_SHARE,
+        matchByName: true,
+        poolMember: false,
+      });
+
+      // No name lookup at all: a non-pool upsert must not be able to absorb
+      // an existing participant that merely shares a name.
+      expect(mockPrismaService.participant.findFirst).not.toHaveBeenCalled();
+      expect(mockPrismaService.participant.create).toHaveBeenCalled();
+    });
+  });
+
+  // ─── Bulk actions (Liang 07/27) ─────────────────────────────────────────────
+
+  describe('removeMany', () => {
+    it('deletes only rows belonging to the deal and reports the rest as skipped', async () => {
+      const owned = [
+        buildParticipantRow({ id: 'p-1', name: 'Investor A' }),
+        buildParticipantRow({ id: 'p-2', name: 'Investor B' }),
+      ];
+      mockPrismaService.participant.findMany.mockResolvedValue(owned);
+      mockPrismaService.participant.deleteMany.mockResolvedValue({ count: 2 });
+
+      const result = await service.removeMany(MOCK_USER_ID, MOCK_DEAL_ID, [
+        'p-1',
+        'p-2',
+        'other-deal-row',
+      ]);
+
+      expect(result.affected).toBe(2);
+      expect(result.skipped).toEqual(['other-deal-row']);
+      expect(mockPrismaService.participant.deleteMany).toHaveBeenCalledWith({
+        where: { dealId: MOCK_DEAL_ID, id: { in: ['p-1', 'p-2'] } },
+      });
+      // One audit row per deletion, not one for the batch.
+      expect(mockAuditLogService.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('is a no-op when none of the ids belong to the deal', async () => {
+      mockPrismaService.participant.findMany.mockResolvedValue([]);
+
+      const result = await service.removeMany(MOCK_USER_ID, MOCK_DEAL_ID, ['nope']);
+
+      expect(result).toEqual({ affected: 0, skipped: ['nope'] });
+      expect(mockPrismaService.participant.deleteMany).not.toHaveBeenCalled();
+      expect(mockAuditLogService.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateBehaviorMany', () => {
+    it('applies the behavior to owned rows and audits the before / after value', async () => {
+      const owned = [
+        buildParticipantRow({ id: 'p-1', behaviorType: ParticipantBehavior.RECOUPMENT }),
+      ];
+      mockPrismaService.participant.findMany.mockResolvedValue(owned);
+      mockPrismaService.participant.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.updateBehaviorMany(
+        MOCK_USER_ID,
+        MOCK_DEAL_ID,
+        ['p-1'],
+        ParticipantBehavior.NET_PROFIT_SHARE,
+      );
+
+      expect(result.affected).toBe(1);
+      expect(mockPrismaService.participant.updateMany).toHaveBeenCalledWith({
+        where: { dealId: MOCK_DEAL_ID, id: { in: ['p-1'] } },
+        data: { behaviorType: ParticipantBehavior.NET_PROFIT_SHARE },
+      });
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'UPDATED',
+          metadata: expect.objectContaining({
+            behaviorTypeBefore: ParticipantBehavior.RECOUPMENT,
+            behaviorTypeAfter: ParticipantBehavior.NET_PROFIT_SHARE,
+          }),
+        }),
+      );
     });
   });
 

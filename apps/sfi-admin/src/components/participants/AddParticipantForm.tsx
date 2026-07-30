@@ -171,9 +171,13 @@ export function AddParticipantForm({
   const [behaviorType, setBehaviorType] = useState<ParticipantBehavior>(
     initialValues?.behaviorType ?? ParticipantBehavior.FEE_DEDUCTION,
   );
-  // Default pool checkbox: ON when first-time creating (matches the Figma).
-  // For edit mode, honor the stored value (false if explicitly unchecked).
-  const [poolMember, setPoolMember] = useState(initialValues?.poolMember ?? true);
+  // Default pool checkbox: OFF when first-time creating. It used to default
+  // ON, which silently turned every manually added investor-ish participant
+  // into a pool member — Liang 07/27 created a participant named "FEA
+  // Investor Pool 20%" as the pool container and it became pool member #4,
+  // double-counting her units (100 → 200). Pool membership is now opt-in.
+  // For edit mode, honor the stored value.
+  const [poolMember, setPoolMember] = useState(initialValues?.poolMember ?? false);
   const [investmentAmount, setInvestmentAmount] = useState(
     initialValues?.investmentAmount == null ? '' : String(initialValues.investmentAmount),
   );
@@ -360,6 +364,7 @@ export function AddParticipantForm({
 
         {showInvestmentCard && (
           <InvestmentDetailsCard
+            name={name}
             poolMember={poolMember}
             onPoolMemberChange={setPoolMember}
             investmentAmount={investmentAmount}
@@ -513,7 +518,17 @@ type InvestmentDetailsCardProps = Readonly<{
   currencySymbol: string;
   /** Formats numeric amounts in the parent deal's currency + locale. */
   formatMoney: (n: number) => string;
+  /** Participant name, used to warn when it looks like the pool container. */
+  name: string;
 }>;
+
+/**
+ * Names that suggest the admin is trying to create the pool itself as a
+ * participant row. The pool is a synthetic allocation target, not a DB
+ * row — Liang 07/27 created "FEA Investor Pool 20%" and it became pool
+ * member #4, doubling her unit total.
+ */
+const POOL_CONTAINER_NAME = /\bpool\b/i;
 
 function InvestmentDetailsCard({
   poolMember,
@@ -530,11 +545,13 @@ function InvestmentDetailsCard({
   errors,
   currencySymbol,
   formatMoney,
+  name,
 }: InvestmentDetailsCardProps) {
   const investmentNum = Number(investmentAmount);
   const unitsNum = Number(units);
   const showComputed =
     computedPrice !== null && Number.isFinite(investmentNum) && Number.isFinite(unitsNum);
+  const looksLikePoolContainer = poolMember && POOL_CONTAINER_NAME.test(name);
 
   return (
     <div className="flex flex-col gap-4 rounded-[8px] border border-border bg-white">
@@ -548,6 +565,15 @@ function InvestmentDetailsCard({
           Uncheck for participants who receive a fixed % share
           independently (Studio, Director, Publisher, Creator SPV, etc.).
         </p>
+        {looksLikePoolContainer && (
+          <Banner tone="warning" className="mt-1">
+            This name looks like the Investor Pool itself. You don&apos;t need a
+            participant row for the pool: it appears automatically once you add
+            pool members, and its share is set on the Investor Pool row in the
+            rule snapshot. Adding it here counts it as an extra member and
+            doubles the pool&apos;s units.
+          </Banner>
+        )}
       </div>
 
       <div className="flex flex-col gap-4 px-4 pb-4 sm:px-5">

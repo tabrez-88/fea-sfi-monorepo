@@ -27,6 +27,7 @@ import { ParticipantBehaviorBadge } from '@/components/participants/ParticipantB
 import { InvestorPoolManagementCard } from '@/components/participants/pool/InvestorPoolManagementCard';
 import { RoleNameChip } from '@/components/participants/RoleNameChip';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,9 +35,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
-import { DEFAULT_PAGE_SIZE } from '@/constants/ui';
+import { DEFAULT_PAGE_SIZE, PARTICIPANT_BEHAVIOR_LABEL } from '@/constants/ui';
+import { useBulkDeleteParticipants } from '@/hooks/participants/useBulkDeleteParticipants';
+import { useBulkSetBehavior } from '@/hooks/participants/useBulkSetBehavior';
 import { useDeleteParticipant } from '@/hooks/participants/useDeleteParticipant';
 import { useParticipants } from '@/hooks/participants/useParticipants';
 import { getApiErrorMessage } from '@/lib/axios';
@@ -52,15 +62,27 @@ type SortOrder = 'asc' | 'desc';
 const SKELETON_ROWS = ['s1', 's2', 's3', 's4', 's5'] as const;
 
 /**
- * Column template: 9 columns sized to fit comfortably at the 960px
+ * Behaviors offered in the bulk Change Behavior control. Full set (unlike
+ * the pool import, which excludes Fee Deduction) since a selection can mix
+ * pool members and solo participants.
+ */
+const BULK_BEHAVIOR_OPTIONS: ReadonlyArray<ParticipantBehavior> = [
+  ParticipantBehavior.RECOUPMENT,
+  ParticipantBehavior.NET_PROFIT_SHARE,
+  ParticipantBehavior.FEE_DEDUCTION,
+  ParticipantBehavior.FLAT_FEE,
+];
+
+/**
+ * Column template: 10 columns sized to fit comfortably at the 1000px
  * minimum width inside the horizontal scroll container.
- *   Name · Behavior · Role · Email · Investment · Units · Price/Unit · Added · ⋮ (kebab actions)
+ *   ☐ · Name · Behavior · Role · Email · Investment · Units · Price/Unit · Added · ⋮
  *
- * The final column is fixed-width at 56px for the kebab button so it
- * doesn't compete with the data columns for breathing room.
+ * First column is a fixed 40px selection checkbox; the final one is a
+ * fixed 56px kebab button. Neither competes with the data columns.
  */
 const GRID_COLS =
-  'grid grid-cols-[minmax(140px,1.5fr)_minmax(120px,1fr)_minmax(110px,1fr)_minmax(140px,1.5fr)_minmax(90px,0.9fr)_minmax(70px,0.7fr)_minmax(90px,0.9fr)_minmax(100px,1fr)_56px]';
+  'grid grid-cols-[40px_minmax(140px,1.5fr)_minmax(120px,1fr)_minmax(110px,1fr)_minmax(140px,1.5fr)_minmax(90px,0.9fr)_minmax(70px,0.7fr)_minmax(90px,0.9fr)_minmax(100px,1fr)_56px]';
 
 type ParticipantsListViewProps = Readonly<{
   dealId: string;
@@ -87,7 +109,13 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [importOpen, setImportOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Participant | null>(null);
+  // Multi-select for the bulk actions. Liang 07/27: a 100+ investor pool
+  // can't be edited or cleared one row at a time.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const deleteMutation = useDeleteParticipant(dealId);
+  const bulkDeleteMutation = useBulkDeleteParticipants(dealId);
+  const bulkBehaviorMutation = useBulkSetBehavior(dealId);
 
   async function handleConfirmDelete() {
     if (!pendingDelete) return;
@@ -98,6 +126,63 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
     } catch (err) {
       toast.error(
         getApiErrorMessage(err, 'Failed to delete participant. Please try again.'),
+      );
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Select or clear a whole group at once (all visible rows, or the pool). */
+  function setGroupSelected(ids: ReadonlyArray<string>, selected: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (selected) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const result = await bulkDeleteMutation.mutateAsync(ids);
+      toast.success(
+        `Deleted ${result.affected} participant${result.affected === 1 ? '' : 's'}.`,
+      );
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Bulk delete failed. Please try again.'));
+    }
+  }
+
+  async function handleBulkBehavior(behaviorType: ParticipantBehavior) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    try {
+      const result = await bulkBehaviorMutation.mutateAsync({
+        participantIds: ids,
+        behaviorType,
+      });
+      toast.success(
+        `Set ${PARTICIPANT_BEHAVIOR_LABEL[behaviorType]} on ${result.affected} participant${
+          result.affected === 1 ? '' : 's'
+        }.`,
+      );
+      setSelectedIds(new Set());
+    } catch (err) {
+      toast.error(
+        getApiErrorMessage(err, 'Bulk behavior change failed. Please try again.'),
       );
     }
   }
@@ -171,6 +256,21 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
     });
   }, [allParticipants, behaviorFilter]);
 
+  const visibleIds = useMemo(
+    () => visibleParticipants.map((p) => p.id),
+    [visibleParticipants],
+  );
+
+  // Tri-state for the header checkbox: all visible rows selected, none, or
+  // some. Radix renders the dash glyph for 'indeterminate'.
+  const selectAllState = useMemo<boolean | 'indeterminate'>(() => {
+    if (visibleIds.length === 0) return false;
+    const selectedVisible = visibleIds.filter((id) => selectedIds.has(id)).length;
+    if (selectedVisible === 0) return false;
+    if (selectedVisible === visibleIds.length) return true;
+    return 'indeterminate';
+  }, [visibleIds, selectedIds]);
+
   return (
     <div className="flex flex-col gap-6">
       <BackLink href={ROUTES.DEALS.DETAIL(dealId)} label="Overview" />
@@ -224,7 +324,7 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
       <InvestorPoolManagementCard
         dealId={dealId}
         title="Investor Pool"
-        description="Drop a CSV or add investors manually. Members are created with Recoupment behavior and Part of Investor Pool checked so they appear under the pool group below and are ready to use in any rule snapshot."
+        description="Add the individual investors here and the pool assembles itself. There is no separate participant row for the pool: it shows up as one allocation target in every rule snapshot, where you set its share. Members added here are available to all snapshots on this deal."
       />
 
       {/* Single bordered card holds the sub-header, filter pills, and table. */}
@@ -259,6 +359,16 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
           />
         )}
 
+        {selectedIds.size > 0 && (
+          <BulkActionBar
+            count={selectedIds.size}
+            isPending={bulkDeleteMutation.isPending || bulkBehaviorMutation.isPending}
+            onClear={() => setSelectedIds(new Set())}
+            onSetBehavior={(b) => void handleBulkBehavior(b)}
+            onDelete={() => setBulkDeleteOpen(true)}
+          />
+        )}
+
         {isEmpty ? (
           <EmptyState
             icon={Users}
@@ -268,9 +378,22 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
           />
         ) : (
           <div className="overflow-x-auto">
-            <div className="min-w-[960px]">
+            <div className="min-w-[1000px]">
               {/* Header row */}
               <div className={cn(GRID_COLS, 'border-b border-grey-200 bg-grey-50')}>
+                <HeaderCell className="justify-center px-0">
+                  <Checkbox
+                    checked={selectAllState}
+                    onCheckedChange={(next) =>
+                      setGroupSelected(visibleIds, next === true)
+                    }
+                    aria-label={
+                      selectAllState === true
+                        ? 'Clear selection'
+                        : 'Select all participants on this page'
+                    }
+                  />
+                </HeaderCell>
                 <HeaderCell>
                   <SortButton
                     field="name"
@@ -309,6 +432,9 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
                 onRetry={handleRetry}
                 dealId={dealId}
                 onRequestDelete={setPendingDelete}
+                selectedIds={selectedIds}
+                onToggleSelected={toggleSelected}
+                onSetGroupSelected={setGroupSelected}
               />
             </div>
           </div>
@@ -351,6 +477,100 @@ export function ParticipantsListView({ dealId }: ParticipantsListViewProps) {
         isPending={deleteMutation.isPending}
         onConfirm={() => void handleConfirmDelete()}
       />
+
+      <ConfirmDeleteDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedIds.size} participant${selectedIds.size === 1 ? '' : 's'}?`}
+        description={
+          <>
+            This will permanently remove{' '}
+            <span className="font-semibold text-foreground">
+              {selectedIds.size} selected participant
+              {selectedIds.size === 1 ? '' : 's'}
+            </span>{' '}
+            from this deal. Each removal is recorded in the audit log but cannot
+            be undone.
+          </>
+        }
+        isPending={bulkDeleteMutation.isPending}
+        onConfirm={() => void handleBulkDelete()}
+      />
+    </div>
+  );
+}
+
+/* ─── Bulk action bar ───────────────────────────────────────────────────── */
+
+type BulkActionBarProps = Readonly<{
+  count: number;
+  isPending: boolean;
+  onClear: () => void;
+  onSetBehavior: (behavior: ParticipantBehavior) => void;
+  onDelete: () => void;
+}>;
+
+/**
+ * Appears once at least one row is selected. Holds the two bulk operations
+ * Liang asked for: change behavior for the whole selection (so a 200-member
+ * pool import doesn't need 200 individual edits) and delete the selection.
+ */
+function BulkActionBar({
+  count,
+  isPending,
+  onClear,
+  onSetBehavior,
+  onDelete,
+}: BulkActionBarProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-[8px] border border-foreground/20 bg-grey-50 px-3 py-2.5">
+      <span className="text-[14px] font-semibold text-foreground">
+        {formatNumber(count)} selected
+      </span>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value=""
+          onValueChange={(v) => onSetBehavior(v as ParticipantBehavior)}
+          disabled={isPending}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-auto min-w-[190px]"
+            aria-label="Change behavior for selected participants"
+          >
+            <SelectValue placeholder="Change Behavior..." />
+          </SelectTrigger>
+          <SelectContent>
+            {BULK_BEHAVIOR_OPTIONS.map((b) => (
+              <SelectItem key={b} value={b}>
+                {PARTICIPANT_BEHAVIOR_LABEL[b]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={onDelete}
+          disabled={isPending}
+        >
+          <Trash2 className="size-4" aria-hidden />
+          Delete Selected
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onClear}
+          disabled={isPending}
+        >
+          Clear
+        </Button>
+      </div>
     </div>
   );
 }
@@ -411,9 +631,12 @@ function BehaviorFilterPills({ counts, activeFilter, onFilterChange }: BehaviorF
   );
 }
 
-function HeaderCell({ children }: Readonly<{ children: ReactNode }>) {
+function HeaderCell({
+  children,
+  className,
+}: Readonly<{ children: ReactNode; className?: string }>) {
   return (
-    <div className="flex items-center px-[10px] py-[14px]">
+    <div className={cn('flex items-center px-[10px] py-[14px]', className)}>
       <span className="text-[14px] font-bold leading-[20px] tracking-[0.028px] text-foreground">
         {children}
       </span>
@@ -472,6 +695,9 @@ type ParticipantRowsProps = Readonly<{
   onRetry: () => void;
   dealId: string;
   onRequestDelete: (participant: Participant) => void;
+  selectedIds: ReadonlySet<string>;
+  onToggleSelected: (id: string) => void;
+  onSetGroupSelected: (ids: ReadonlyArray<string>, selected: boolean) => void;
 }>;
 
 /**
@@ -489,6 +715,9 @@ function ParticipantRows({
   onRetry,
   dealId,
   onRequestDelete,
+  selectedIds,
+  onToggleSelected,
+  onSetGroupSelected,
 }: ParticipantRowsProps) {
   const [poolCollapsed, setPoolCollapsed] = useState(false);
   const [poolExpandedFull, setPoolExpandedFull] = useState(false);
@@ -538,6 +767,8 @@ function ParticipantRows({
             isLast={idx === participants.length - 1}
             dealId={dealId}
             onRequestDelete={onRequestDelete}
+            selected={selectedIds.has(p.id)}
+            onToggleSelected={onToggleSelected}
           />
         ))}
       </>
@@ -558,6 +789,17 @@ function ParticipantRows({
   // members and counts as the last row inside the pool group.
   const showPoolToggleLink = poolMembersVisible && poolOverPreview;
 
+  // Group checkbox covers EVERY pool member, not just the previewed 5 —
+  // "select the pool" has to mean the whole pool even when collapsed.
+  const poolIds = poolMembers.map((p) => p.id);
+  const selectedPoolCount = poolIds.filter((id) => selectedIds.has(id)).length;
+  let poolSelectState: boolean | 'indeterminate' = false;
+  if (selectedPoolCount === poolIds.length && poolIds.length > 0) {
+    poolSelectState = true;
+  } else if (selectedPoolCount > 0) {
+    poolSelectState = 'indeterminate';
+  }
+
   return (
     <>
       <PoolGroupHeader
@@ -566,6 +808,8 @@ function ParticipantRows({
         totalInvested={totalInvested}
         collapsed={poolCollapsed}
         onToggle={() => setPoolCollapsed((prev) => !prev)}
+        selectState={poolSelectState}
+        onSelectAllChange={(next) => onSetGroupSelected(poolIds, next)}
         // Drop the bottom border when the pool group is fully collapsed AND
         // there are no non-pool rows below: avoids a stray divider line.
         hasFollowing={poolMembersVisible || showOtherRowsAfter}
@@ -584,6 +828,8 @@ function ParticipantRows({
               tinted
               dealId={dealId}
               onRequestDelete={onRequestDelete}
+              selected={selectedIds.has(p.id)}
+              onToggleSelected={onToggleSelected}
             />
           );
         })}
@@ -602,6 +848,8 @@ function ParticipantRows({
           isLast={idx === others.length - 1}
           dealId={dealId}
           onRequestDelete={onRequestDelete}
+          selected={selectedIds.has(p.id)}
+          onToggleSelected={onToggleSelected}
         />
       ))}
     </>
@@ -650,8 +898,18 @@ type PoolGroupHeaderProps = Readonly<{
   collapsed: boolean;
   onToggle: () => void;
   hasFollowing: boolean;
+  selectState: boolean | 'indeterminate';
+  onSelectAllChange: (selected: boolean) => void;
 }>;
 
+/**
+ * Investor Pool group header. The checkbox selects every member of the pool
+ * (not only the previewed five) so "delete the whole pool" is one click —
+ * Liang 07/27 could not clear a 100-member pool row by row.
+ *
+ * Checkbox sits OUTSIDE the collapse button: nesting an interactive control
+ * inside a `<button>` is invalid HTML and swallows the click.
+ */
 function PoolGroupHeader({
   memberCount,
   totalUnits,
@@ -659,34 +917,53 @@ function PoolGroupHeader({
   collapsed,
   onToggle,
   hasFollowing,
+  selectState,
+  onSelectAllChange,
 }: PoolGroupHeaderProps) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={!collapsed}
-      aria-label={collapsed ? 'Expand Investor Pool' : 'Collapse Investor Pool'}
+    <div
       className={cn(
-        'flex w-full items-center gap-2 bg-grey-50 px-[10px] py-[10px] text-left transition-colors',
-        'hover:bg-grey-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground/20',
+        'flex w-full items-center bg-grey-50 transition-colors',
         hasFollowing && 'border-b border-grey-100',
       )}
     >
-      <ChevronDown
-        aria-hidden
-        strokeWidth={2}
+      <div className="flex w-[40px] shrink-0 items-center justify-center py-[10px]">
+        <Checkbox
+          checked={selectState}
+          onCheckedChange={(next) => onSelectAllChange(next === true)}
+          aria-label={
+            selectState === true
+              ? 'Clear Investor Pool selection'
+              : `Select all ${memberCount} Investor Pool members`
+          }
+        />
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? 'Expand Investor Pool' : 'Collapse Investor Pool'}
         className={cn(
-          'size-4 text-foreground transition-transform duration-200',
-          collapsed && '-rotate-90',
+          'flex flex-1 items-center gap-2 py-[10px] pr-[10px] text-left transition-colors',
+          'hover:bg-grey-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-foreground/20',
         )}
-      />
-      <span className="text-[14px] font-semibold text-foreground">Investor Pool</span>
-      <span className="text-[14px] text-neutral">
-        ({formatNumber(memberCount)} Members | {formatNumber(totalUnits)} Units
-        {' | '}
-        {formatCurrency(totalInvested)} Total)
-      </span>
-    </button>
+      >
+        <ChevronDown
+          aria-hidden
+          strokeWidth={2}
+          className={cn(
+            'size-4 text-foreground transition-transform duration-200',
+            collapsed && '-rotate-90',
+          )}
+        />
+        <span className="text-[14px] font-semibold text-foreground">Investor Pool</span>
+        <span className="text-[14px] text-neutral">
+          ({formatNumber(memberCount)} Members | {formatUnits(totalUnits)} Units
+          {' | '}
+          {formatCurrency(totalInvested)} Total)
+        </span>
+      </button>
+    </div>
   );
 }
 
@@ -696,6 +973,8 @@ type ParticipantRowProps = Readonly<{
   tinted?: boolean;
   dealId: string;
   onRequestDelete: (participant: Participant) => void;
+  selected: boolean;
+  onToggleSelected: (id: string) => void;
 }>;
 
 function ParticipantRow({
@@ -704,15 +983,25 @@ function ParticipantRow({
   tinted = false,
   dealId,
   onRequestDelete,
+  selected,
+  onToggleSelected,
 }: ParticipantRowProps) {
   return (
     <div
       className={cn(
         GRID_COLS,
         tinted ? 'bg-grey-50/60' : 'bg-white',
+        selected && 'bg-grey-100',
         isLast ? '' : 'border-b border-grey-100',
       )}
     >
+      <BodyCell className="justify-center px-0">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={() => onToggleSelected(p.id)}
+          aria-label={`Select ${p.name}`}
+        />
+      </BodyCell>
       <BodyCell>
         <Link
           href={ROUTES.DEALS.PARTICIPANT_DETAIL(dealId, p.id)}
@@ -803,6 +1092,9 @@ function RowActionsMenu({ participant, dealId, onRequestDelete }: RowActionsMenu
 function RowSkeleton() {
   return (
     <div className={cn(GRID_COLS, 'border-b border-grey-100')}>
+      <BodyCell className="justify-center px-0">
+        <Skeleton className="size-4 rounded-[4px]" />
+      </BodyCell>
       <BodyCell>
         <Skeleton className="h-4 w-32" />
       </BodyCell>

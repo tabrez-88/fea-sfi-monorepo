@@ -36,10 +36,27 @@ export interface CreateParticipantInput {
   units?: number;
   pricePerUnit?: number;
   poolMember?: boolean;
+  /**
+   * Opt into `(dealId, name)` upsert matching. Set by the Investor Pool CSV
+   * import, whose template has no email / externalId to match on — without it
+   * a re-import duplicates every member.
+   */
+  matchByName?: boolean;
   metadata?: Record<string, unknown>;
 }
 
 export type UpdateParticipantInput = Partial<CreateParticipantInput>;
+
+/**
+ * Result of `POST .../participants/bulk-delete` and
+ * `PATCH .../participants/bulk-behavior`. `skipped` holds ids the server
+ * refused because they belong to another deal (or no longer exist), so a
+ * stale selection reports partial success instead of failing outright.
+ */
+export interface BulkActionResult {
+  affected: number;
+  skipped: string[];
+}
 
 /**
  * Per-row outcome the BE returns inside `BulkImportResult.rows[]`. Mirrors
