@@ -422,6 +422,17 @@ function ParticipantTermsCard({ step2, participants }: ParticipantTermsProps) {
   const poolIsTarget = step2.selectedTargets.includes(POOL_TARGET_ID);
   const tier2PoolValue = numericValue(step2.tier2Rows[POOL_TARGET_ID]);
   const recoupPoolValue = numericValue(step2.recoupRows[POOL_TARGET_ID]);
+  // Pool's Profit % resolved exactly like every solo row's (see
+  // `buildParticipantTermRows`): splits in revenue_share mode, Tier 2 in
+  // waterfall, nothing in recoup. Liang 07/27 circled this cell — it was
+  // hardcoded to "-" while the Profit Split chart directly above it showed
+  // the pool taking 20%.
+  const poolProfitRaw =
+    step2.mode === 'revenue_share'
+      ? step2.splitRows[POOL_TARGET_ID]
+      : step2.mode === 'waterfall'
+        ? step2.tier2Rows[POOL_TARGET_ID]
+        : undefined;
 
   return (
     <ReviewSectionCard title="Participant Terms">
@@ -437,6 +448,7 @@ function ParticipantTermsCard({ step2, participants }: ParticipantTermsProps) {
               onToggle={() => setPoolExpanded((p) => !p)}
               tier2Pct={tier2PoolValue}
               recoupPct={recoupPoolValue}
+              profitPct={poolProfitRaw}
               mode={step2.mode}
               members={poolMembers}
               exitConditions={step2.exitConditions}
@@ -540,6 +552,8 @@ type PoolTermsRowProps = Readonly<{
   onToggle: () => void;
   tier2Pct: number | null;
   recoupPct: number | null;
+  /** Raw split value for the pool; formatted with the same helper as solo rows. */
+  profitPct: string | undefined;
   mode: WizardStep2Data['mode'];
   members: ReadonlyArray<Participant>;
   exitConditions: WizardStep2Data['exitConditions'];
@@ -567,6 +581,7 @@ function PoolTermsRow({
   onToggle,
   tier2Pct,
   recoupPct,
+  profitPct,
   mode,
   members,
   exitConditions,
@@ -610,7 +625,7 @@ function PoolTermsRow({
         <span>-</span>
         <span>{tier1Display}</span>
         <span>{tier2Display}</span>
-        <span>-</span>
+        <span>{formatPercent(profitPct)}</span>
       </button>
       {expanded && (
         <IndividualInvestorsSubtable members={members} exitLabel={exitLabel} />
