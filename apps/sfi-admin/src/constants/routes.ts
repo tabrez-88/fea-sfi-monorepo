@@ -24,6 +24,7 @@ export const ROUTES = {
     RULES_NEW: (id: string) => `/deals/${id}/rules/new`,
     REVENUE: (id: string) => `/deals/${id}/revenue`,
     SETTLEMENT: (id: string) => `/deals/${id}/settlement`,
+    SETTLEMENT_NEW: (id: string) => `/deals/${id}/settlement/new`,
     DOCUMENTS: (id: string) => `/deals/${id}/documents`,
     REPORTS: (id: string) => `/deals/${id}/reports`,
     PROOF: (id: string) => `/deals/${id}/proof`,
@@ -48,6 +49,8 @@ export const ROUTES = {
     LIST: '/settlements',
     RUNS: '/settlements/runs',
     RUN_DETAIL: (id: string) => `/settlements/runs/${id}`,
+    RUN_CORRECT: (id: string) => `/settlements/runs/${id}/correct`,
+    RUN_COMPARE: (id: string) => `/settlements/runs/${id}/compare`,
   },
 
   PENDING_REVIEWS: '/pending-reviews',

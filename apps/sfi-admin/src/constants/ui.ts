@@ -6,6 +6,7 @@ import type { DealCategory, DealStatus } from '@/types/deal.types';
 import type { DocumentType } from '@/types/document.types';
 import type { ParticipantBehavior } from '@/types/participant.types';
 import type { RuleSnapshotStatus } from '@/types/rule-snapshot.types';
+import type { SettlementRunType } from '@/types/settlement.types';
 
 /** Badge/pill tone: maps an API status enum to a `Badge` variant. */
 export type StatusTone =
@@ -101,10 +102,29 @@ export const REVENUE_BATCH_STATUS_LABEL: Record<RevenueBatchStatus, string> = {
 
 export const SETTLEMENT_RUN_STATUS_TONE: Record<SettlementRunStatus, StatusTone> = {
   DRAFT: 'neutral',
-  PREVIEWED: 'neutral',
+  PREVIEWED: 'warning',
   FINALIZED: 'success',
   CANCELLED: 'danger',
   VOIDED: 'danger',
+};
+
+export const SETTLEMENT_RUN_STATUS_LABEL: Record<SettlementRunStatus, string> = {
+  DRAFT: 'Draft',
+  PREVIEWED: 'Previewed',
+  FINALIZED: 'Finalized',
+  CANCELLED: 'Cancelled',
+  VOIDED: 'Voided',
+};
+
+/** Screen 4.3: CORRECTION runs get the purple-ish (info) pill per design. */
+export const SETTLEMENT_RUN_TYPE_TONE: Record<SettlementRunType, StatusTone> = {
+  NORMAL: 'neutral',
+  CORRECTION: 'info',
+};
+
+export const SETTLEMENT_RUN_TYPE_LABEL: Record<SettlementRunType, string> = {
+  NORMAL: 'Normal',
+  CORRECTION: 'Correction',
 };
 
 export const PARTICIPANT_BEHAVIOR_TONE: Record<ParticipantBehavior, StatusTone> = {

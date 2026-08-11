@@ -57,10 +57,13 @@ export const API_ENDPOINTS = {
     DELETE: (id: string) => `${BASE}/documents/${id}`,
   },
   SETTLEMENT: {
+    /** GET lists, POST creates. */
     RUNS: (dealId: string) => `${BASE}/deals/${dealId}/settlement-runs`,
     RUN_DETAIL: (id: string) => `${BASE}/settlement-runs/${id}`,
     PREVIEW: (id: string) => `${BASE}/settlement-runs/${id}/preview`,
     FINALIZE: (id: string) => `${BASE}/settlement-runs/${id}/finalize`,
+    CORRECTIONS: (id: string) => `${BASE}/settlement-runs/${id}/corrections`,
+    VERIFY: (id: string) => `${BASE}/settlement-runs/${id}/verify`,
   },
   DASHBOARD: {
     SUMMARY: `${BASE}/dashboard/summary`,

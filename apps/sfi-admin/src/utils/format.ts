@@ -44,11 +44,78 @@ export function formatCurrency(
 
 export function formatCurrencyCompact(
   value: number | string | null | undefined,
+  currency?: string | null,
 ): string {
   if (value === null || value === undefined) return '-';
   const n = typeof value === 'string' ? Number(value) : value;
   if (Number.isNaN(n)) return '-';
-  return USD_COMPACT.format(n);
+  if (!currency || currency === 'USD') return USD_COMPACT.format(n);
+  return getCompactFormatter(currency).format(n);
+}
+
+/** Applies the explicit +/- prefix shared by every signed formatter below. */
+function withSign(value: number, base: string): string {
+  if (value > 0) return `+${base}`;
+  if (value < 0) return `-${base}`;
+  return base;
+}
+
+const COMPACT_FORMATTERS = new Map<string, Intl.NumberFormat>();
+function getCompactFormatter(currency: string): Intl.NumberFormat {
+  const existing = COMPACT_FORMATTERS.get(currency);
+  if (existing) return existing;
+  const created = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  });
+  COMPACT_FORMATTERS.set(currency, created);
+  return created;
+}
+
+/**
+ * Explicitly signed money formatter for corrections and deltas (MS-4,
+ * Liang 07/13): a correction can subtract as well as add, so every
+ * correction amount carries a leading + or - instead of relying on
+ * context. Zero renders unsigned.
+ */
+export function formatSignedCurrency(
+  value: number | null | undefined,
+  currency?: string | null,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  return withSign(value, formatCurrency(Math.abs(value), currency));
+}
+
+/** Compact signed variant for tight cells (e.g. "+$600K"), currency-aware. */
+export function formatSignedCurrencyCompact(
+  value: number | null | undefined,
+  currency?: string | null,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  const abs = Math.abs(value);
+  const base =
+    !currency || currency === 'USD'
+      ? formatCurrencyCompact(abs)
+      : getCompactFormatter(currency).format(abs);
+  return withSign(value, base);
+}
+
+/**
+ * Signed percentage with 1dp (e.g. "+2.5%", "-1.2%"). Values that round
+ * to zero at the displayed precision render as an unsigned "0%" so a
+ * +0.01% delta never shows up as a green "+0.0%".
+ */
+export function formatSignedPercent(
+  value: number | null | undefined,
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '-';
+  const abs = Math.abs(value);
+  const digits = abs >= 100 ? 0 : 1;
+  const rounded = Number(abs.toFixed(digits));
+  if (rounded === 0) return '0%';
+  return withSign(value, `${rounded.toFixed(digits)}%`);
 }
 
 export function formatNumber(value: number | null | undefined): string {
