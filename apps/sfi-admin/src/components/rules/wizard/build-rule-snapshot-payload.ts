@@ -82,67 +82,7 @@ export function buildRuleSnapshotPayload(
       ];
     }
   } else {
-    // waterfall
-    //
-    // Tier filtering must match `DistributionBodySection` in
-    // `Step2ParticipantsRules.tsx` exactly — otherwise the wire payload
-    // could include splits the admin never saw or omit ones they
-    // configured.
-    //   Tier 1 (Recoupment Phase): Pool + RECOUPMENT solo.
-    //   Tier 2 (Post Recoup Split): Pool + non-RECOUPMENT solo
-    //     (NET_PROFIT_SHARE / FLAT_FEE / etc.). Solo RECOUPMENT is
-    //     excluded — their structural role is "get capital back in
-    //     Tier 1, then done".
-    const tier1AllowedTargets = step2.selectedTargets.filter((id) => {
-      if (id === POOL_TARGET_ID) return true;
-      const p = participants.find((x) => x.id === id);
-      return p?.behaviorType === ParticipantBehavior.RECOUPMENT;
-    });
-    const tier2AllowedTargets = step2.selectedTargets.filter((id) => {
-      if (id === POOL_TARGET_ID) return true;
-      const p = participants.find((x) => x.id === id);
-      return p !== undefined && p.behaviorType !== ParticipantBehavior.RECOUPMENT;
-    });
-    const tier1Splits = buildSplits(
-      step2.tier1Rows,
-      participants,
-      errors,
-      'Tier 1 splits',
-      tier1AllowedTargets,
-    );
-    const tier2Splits = buildSplits(
-      step2.tier2Rows,
-      participants,
-      errors,
-      'Tier 2 splits',
-      tier2AllowedTargets,
-    );
-    const tierRules: WaterfallTierRule[] = [];
-    // Exit conditions split across the two tiers:
-    //   - Hard Cap Multiplier binds to Tier 1 (recoup cap).
-    //   - Deal Term applies snapshot-wide so post-recoup splits also
-    //     stop at expiry. Without this Tier 2 would run forever once
-    //     Tier 1 capped out (Liang's Deal 04: post-recoup participation
-    //     should last 5 years then exit).
-    if (tier1Splits.length > 0) {
-      tierRules.push(
-        withExitConditions(
-          { tier: 1, splits: tier1Splits },
-          step2.exitConditions,
-          step1.effectiveFrom,
-        ),
-      );
-    }
-    if (tier2Splits.length > 0) {
-      tierRules.push(
-        withTermOnly(
-          { tier: 2, splits: tier2Splits },
-          step2.exitConditions,
-          step1.effectiveFrom,
-        ),
-      );
-    }
-    if (tierRules.length > 0) tiers = tierRules;
+    tiers = buildWaterfallTiers(step1, step2, participants, errors);
   }
 
   if (errors.length > 0) return { ok: false, errors };
@@ -175,6 +115,92 @@ export function buildRuleSnapshotPayload(
 // ──────────────────────────────────────────────────────────────────────
 // Section assemblers
 // ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Assemble the two waterfall tiers.
+ *
+ * Tier filtering must match `DistributionBodySection` in
+ * `Step2ParticipantsRules.tsx` exactly, otherwise the wire payload could
+ * include splits the admin never saw or omit ones they configured.
+ *   Tier 1 (Recoupment Phase): Pool + RECOUPMENT solo.
+ *   Tier 2 (Post Recoup Split): Pool + non-RECOUPMENT solo
+ *     (NET_PROFIT_SHARE / FLAT_FEE / etc.). Solo RECOUPMENT is excluded;
+ *     their structural role is "get capital back in Tier 1, then done".
+ *
+ * Exit conditions split across the tiers: the Hard Cap Multiplier binds to
+ * Tier 1 (recoup cap), while the Deal Term applies snapshot-wide so
+ * post-recoup splits also stop at expiry. Without that, Tier 2 would run
+ * forever once Tier 1 capped out (Liang's Deal 04: post-recoup
+ * participation should last 5 years then exit).
+ */
+function buildWaterfallTiers(
+  step1: WizardStep1Data,
+  step2: WizardStep2Data,
+  participants: ReadonlyArray<Participant>,
+  errors: string[],
+): WaterfallTierRule[] | undefined {
+  const tier1AllowedTargets = step2.selectedTargets.filter((id) => {
+    if (id === POOL_TARGET_ID) return true;
+    const p = participants.find((x) => x.id === id);
+    return p?.behaviorType === ParticipantBehavior.RECOUPMENT;
+  });
+  const tier2AllowedTargets = step2.selectedTargets.filter((id) => {
+    if (id === POOL_TARGET_ID) return true;
+    const p = participants.find((x) => x.id === id);
+    return p !== undefined && p.behaviorType !== ParticipantBehavior.RECOUPMENT;
+  });
+
+  const tier1Splits = buildSplits(
+    step2.tier1Rows,
+    participants,
+    errors,
+    'Tier 1 splits',
+    tier1AllowedTargets,
+  );
+  const tier2Splits = buildSplits(
+    step2.tier2Rows,
+    participants,
+    errors,
+    'Tier 2 splits',
+    tier2AllowedTargets,
+  );
+
+  // The engine requires waterfall snapshots to declare BOTH tiers. An empty
+  // tier is skipped below, so it would ship a 1-tier payload and come back
+  // as a bare "validation failed" from the server (Liang 08/18: she could
+  // not tell which step was at fault). Name the empty tier here instead.
+  if (tier1Splits.length === 0) {
+    errors.push(
+      'Tier 1 (Recoupment Phase) has no allocation. Waterfall mode needs both tiers filled: set the share each target recoups in Tier 1, or switch Distribution Mode to Revenue Share.',
+    );
+  }
+  if (tier2Splits.length === 0) {
+    errors.push(
+      'Tier 2 (Post Recoup Split) has no allocation. Waterfall mode needs both tiers filled: set the post-recoup profit split, or switch Distribution Mode to Recoup if there is no post-recoup phase.',
+    );
+  }
+
+  const tierRules: WaterfallTierRule[] = [];
+  if (tier1Splits.length > 0) {
+    tierRules.push(
+      withExitConditions(
+        { tier: 1, splits: tier1Splits },
+        step2.exitConditions,
+        step1.effectiveFrom,
+      ),
+    );
+  }
+  if (tier2Splits.length > 0) {
+    tierRules.push(
+      withTermOnly(
+        { tier: 2, splits: tier2Splits },
+        step2.exitConditions,
+        step1.effectiveFrom,
+      ),
+    );
+  }
+  return tierRules.length > 0 ? tierRules : undefined;
+}
 
 function buildDeductions(
   rows: ReadonlyArray<DeductionRow>,

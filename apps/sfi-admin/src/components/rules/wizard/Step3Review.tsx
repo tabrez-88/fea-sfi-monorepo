@@ -576,6 +576,27 @@ function poolTier1CapPct(
   return 100;
 }
 
+/**
+ * The pool row's behavior badge reflects its members, not a fixed label.
+ * Liang 08/18 set every pool member to Revenue Share and still saw a
+ * "Recoupment" badge here because it was hardcoded. When members disagree
+ * (or there are none yet) fall back to what the snapshot mode implies:
+ * revenue_share pays a profit share, recoup and waterfall recoup capital.
+ */
+function poolBehavior(
+  members: ReadonlyArray<Participant>,
+  mode: WizardStep2Data['mode'],
+): ParticipantBehavior {
+  const distinct = new Set(members.map((m) => m.behaviorType));
+  if (distinct.size === 1) {
+    const [only] = [...distinct];
+    if (only) return only;
+  }
+  return mode === 'revenue_share'
+    ? ParticipantBehavior.NET_PROFIT_SHARE
+    : ParticipantBehavior.RECOUPMENT;
+}
+
 function PoolTermsRow({
   expanded,
   onToggle,
@@ -620,7 +641,7 @@ function PoolTermsRow({
           </span>
         </span>
         <span>
-          <BehaviorBadge behavior={ParticipantBehavior.RECOUPMENT} label="Recoupment" />
+          <BehaviorBadge behavior={poolBehavior(members, mode)} />
         </span>
         <span>-</span>
         <span>{tier1Display}</span>

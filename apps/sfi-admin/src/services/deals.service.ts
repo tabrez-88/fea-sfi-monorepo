@@ -56,4 +56,11 @@ export const dealsService = {
     );
     return data;
   },
+
+  async remove(id: string): Promise<{ success: boolean; message: string }> {
+    const { data } = await apiClient.delete<{ success: boolean; message: string }>(
+      API_ENDPOINTS.DEALS.DELETE(id),
+    );
+    return data;
+  },
 };

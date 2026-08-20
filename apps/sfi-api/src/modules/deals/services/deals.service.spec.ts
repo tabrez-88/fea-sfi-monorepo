@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -37,6 +41,13 @@ jest.mock('@prisma/client', () => ({
     CAD: 'CAD',
     AUD: 'AUD',
   },
+  SettlementRunStatus: {
+    DRAFT: 'DRAFT',
+    PREVIEWED: 'PREVIEWED',
+    FINALIZED: 'FINALIZED',
+    CANCELLED: 'CANCELLED',
+    VOIDED: 'VOIDED',
+  },
   Prisma: {
     JsonNull: 'DbNull',
   },
@@ -58,6 +69,7 @@ describe('DealsService', () => {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      delete: jest.fn(),
       count: jest.fn(),
       groupBy: jest.fn(),
     },
@@ -586,6 +598,64 @@ describe('DealsService', () => {
       expect(rowB.warnings?.some((w) => w.includes('category'))).toBe(true);
       expect(rowB.warnings?.some((w) => w.includes('currency'))).toBe(true);
       expect(rowB.warnings?.some((w) => w.includes('status'))).toBe(true);
+    });
+  });
+
+  describe('remove', () => {
+    // These tests queue two findUnique results (owner check, then the
+    // finalized-run guard). `jest.clearAllMocks()` does not drain a
+    // `mockResolvedValueOnce` queue, so an unconsumed value would leak into
+    // the next test; reset the mock outright instead.
+    beforeEach(() => {
+      mockPrismaService.deal.findUnique.mockReset();
+      mockPrismaService.deal.delete.mockReset();
+    });
+
+    it('deletes a deal with no finalized settlement runs', async () => {
+      // assertDealOwner lookup, then the guard lookup.
+      mockPrismaService.deal.findUnique
+        .mockResolvedValueOnce({ id: 'deal-1', userId: MOCK_USER_ID })
+        .mockResolvedValueOnce({
+          name: 'Deal 01',
+          _count: { settlementRuns: 0 },
+        });
+      mockPrismaService.deal.delete.mockResolvedValue({ id: 'deal-1' });
+
+      const result = await service.remove(MOCK_USER_ID, 'deal-1');
+
+      expect(result.success).toBe(true);
+      expect(mockPrismaService.deal.delete).toHaveBeenCalledWith({
+        where: { id: 'deal-1' },
+      });
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'DELETED', entityType: 'Deal' }),
+      );
+    });
+
+    it('refuses to delete a deal that has finalized settlement runs', async () => {
+      mockPrismaService.deal.findUnique
+        .mockResolvedValueOnce({ id: 'deal-1', userId: MOCK_USER_ID })
+        .mockResolvedValueOnce({
+          name: 'Deal 01',
+          _count: { settlementRuns: 2 },
+        });
+
+      await expect(service.remove(MOCK_USER_ID, 'deal-1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(mockPrismaService.deal.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses to delete a deal owned by another user', async () => {
+      mockPrismaService.deal.findUnique.mockResolvedValueOnce({
+        id: 'deal-1',
+        userId: 'someone-else',
+      });
+
+      await expect(service.remove(MOCK_USER_ID, 'deal-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockPrismaService.deal.delete).not.toHaveBeenCalled();
     });
   });
 });

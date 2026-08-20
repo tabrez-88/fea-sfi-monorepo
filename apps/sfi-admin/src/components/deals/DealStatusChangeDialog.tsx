@@ -15,7 +15,23 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { DealStatus } from '@/types/deal.types';
 
-type DealStatusChangeVariant = 'close' | 'suspend' | 'terminate' | 'archive';
+export type DealStatusChangeVariant =
+  | 'activate'
+  | 'draft'
+  | 'close'
+  | 'suspend'
+  | 'terminate'
+  | 'archive';
+
+/** Target status -> dialog variant, for the Change Status menu. */
+export const STATUS_TO_VARIANT: Record<DealStatus, DealStatusChangeVariant> = {
+  DRAFT: 'draft',
+  ACTIVE: 'activate',
+  SUSPENDED: 'suspend',
+  CLOSED: 'close',
+  TERMINATED: 'terminate',
+  ARCHIVED: 'archive',
+};
 
 type DealStatusChangeDialogProps = Readonly<{
   variant: DealStatusChangeVariant;
@@ -42,10 +58,26 @@ const COPY: Record<
     status: DealStatus;
   }>
 > = {
+  activate: {
+    title: 'Activate Deal Confirmation',
+    description:
+      'Set this deal back to Active. Revenue can be reported, settlement runs can be executed, and participants receive allocations per the active Rule Snapshot.',
+    confirmLabel: 'Yes, Activate Deal',
+    confirmClassName: '',
+    status: 'ACTIVE',
+  },
+  draft: {
+    title: 'Move Deal to Draft',
+    description:
+      'Set this deal back to Draft so it can be reconfigured. Existing participants, rules, and revenue stay attached; the deal is simply no longer treated as in effect.',
+    confirmLabel: 'Yes, Move to Draft',
+    confirmClassName: '',
+    status: 'DRAFT',
+  },
   close: {
     title: 'Complete Deal Confirmation',
     description:
-      'Are you sure? Marking this deal Completed locks it for editing. You can still view it and any settlement history.',
+      'Are you sure? Marking this deal Completed means it ended as planned. You can still view it and any settlement history, and you can change the status again later.',
     confirmLabel: 'Yes, Complete Deal',
     confirmClassName: 'bg-danger text-white hover:bg-danger/90',
     status: 'CLOSED',
@@ -53,7 +85,7 @@ const COPY: Record<
   suspend: {
     title: 'Pause Deal Confirmation',
     description:
-      'Are you sure? The deal will be paused — participants and settlements stay read-only until you reactivate it.',
+      'Are you sure? The deal will be paused. No new settlement runs should occur while it is paused, and you can reactivate it at any time.',
     confirmLabel: 'Yes, Pause Deal',
     confirmClassName: '',
     status: 'SUSPENDED',
@@ -61,7 +93,7 @@ const COPY: Record<
   terminate: {
     title: 'Terminate Deal Confirmation',
     description:
-      'Are you sure? Terminated marks the deal as failed/cancelled. This is a final state — you can still view it but not edit.',
+      'Are you sure? Terminated means the deal ended before its planned completion (cancellation, buyout, restructuring, legal termination). You can still view it and change the status again later.',
     confirmLabel: 'Yes, Terminate Deal',
     confirmClassName: 'bg-danger text-white hover:bg-danger/90',
     status: 'TERMINATED',
@@ -69,7 +101,7 @@ const COPY: Record<
   archive: {
     title: 'Archive Deal Confirmation',
     description:
-      'Are you sure? Archived deals are hidden from the default list. You can restore by filtering by Archived.',
+      'Are you sure? Archived deals are kept as a historical record and hidden from active workflows, but stay available for audit and reporting. You can restore by filtering by Archived.',
     confirmLabel: 'Yes, Archive Deal',
     confirmClassName: '',
     status: 'ARCHIVED',
@@ -77,10 +109,14 @@ const COPY: Record<
 };
 
 /**
- * Confirmation modal for changing a deal's status to CLOSED or SUSPENDED.
- * The suspend variant also collects an optional `notes` string, mapped to the
- * backend `UpdateDealDto.notes` field. Matches Figma modals `385:10528`
- * (Close) and `385:10564` (Suspend).
+ * Confirmation modal for any deal status change. The suspend variant also
+ * collects an optional `notes` string, mapped to the backend
+ * `UpdateDealDto.notes` field. Matches Figma modals `385:10528` (Close) and
+ * `385:10564` (Suspend).
+ *
+ * Every status is reachable from every other one. Terminal states used to be
+ * one-way, which left Liang (08/18) with Completed deals she could only
+ * duplicate: no way back to Active, no way to Archive, no way to delete.
  */
 export function DealStatusChangeDialog({
   variant,

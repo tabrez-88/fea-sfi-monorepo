@@ -1,17 +1,30 @@
 'use client';
 
+import { ChevronDown, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { BackLink } from '@/components/common/BackLink';
+import { ConfirmDeleteDialog } from '@/components/common/ConfirmDeleteDialog';
 import { EmptyState } from '@/components/common/EmptyState';
 import { DealForm } from '@/components/deals/DealForm';
-import { DealStatusChangeDialog } from '@/components/deals/DealStatusChangeDialog';
+import {
+  DealStatusChangeDialog,
+  STATUS_TO_VARIANT,
+} from '@/components/deals/DealStatusChangeDialog';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ROUTES } from '@/constants/routes';
+import { DEAL_STATUS_LABEL } from '@/constants/ui';
 import { useDeal } from '@/hooks/deals/useDeal';
+import { useDeleteDeal } from '@/hooks/deals/useDeleteDeal';
 import { useDuplicateDeal } from '@/hooks/deals/useDuplicateDeal';
 import { useUpdateDeal } from '@/hooks/deals/useUpdateDeal';
 import { getApiErrorMessage } from '@/lib/axios';
@@ -25,36 +38,52 @@ type EditDealViewProps = Readonly<{
   dealId: string;
 }>;
 
-type ModalKind = 'close' | 'suspend' | null;
-
-/**
- * Deals in a terminal state (Completed / Terminated / Archived) are
- * immutable per the Round 4 product decision. The Edit form stays
- * visible (read-history use case) but every mutating action is gated.
- */
-function isImmutableStatus(status: DealStatus | undefined): boolean {
-  return (
-    status === 'CLOSED' || status === 'TERMINATED' || status === 'ARCHIVED'
-  );
-}
+/** Order the Change Status menu follows, matching the deal lifecycle. */
+const STATUS_ORDER: ReadonlyArray<DealStatus> = [
+  'DRAFT',
+  'ACTIVE',
+  'SUSPENDED',
+  'CLOSED',
+  'TERMINATED',
+  'ARCHIVED',
+];
 
 /**
  * FEA-8: full Edit Deal screen. Owns:
- *  - the back link + title + [Closed Deal] + [Suspend Deal] header row
- *    (Figma: two top-right action buttons, stacked on mobile)
+ *  - the back link + title + Change Status menu + Duplicate + Delete header row
  *  - the shared DealForm
- *  - both confirmation modals (Close + Suspend with Notes textarea)
+ *  - the status confirmation modal and the delete confirmation modal
  *
- * No delete flow. The Figma design only supports transitioning to CLOSED /
- * SUSPENDED via confirmations. Actual record deletion is admin-only and
- * lives outside the Edit screen.
+ * Status used to be limited to two buttons (Complete / Pause) and terminal
+ * states offered only Duplicate. Liang 08/18: "I only able to duplicate the
+ * deal now, can't even delete itttt" and "I need able to delete, paused,
+ * archived etc like the drop down". Every status is now reachable from
+ * every other, and deletion is available (the API refuses only when a
+ * finalized settlement run exists).
  */
 export function EditDealView({ dealId }: EditDealViewProps) {
   const router = useRouter();
   const { data: deal, isLoading, isError } = useDeal(dealId);
   const { mutateAsync: updateDeal, isPending: isSaving } = useUpdateDeal(dealId);
   const { mutateAsync: duplicateDeal, isPending: isDuplicating } = useDuplicateDeal();
-  const [modal, setModal] = useState<ModalKind>(null);
+  const { mutateAsync: deleteDeal, isPending: isDeleting } = useDeleteDeal();
+  /** Target status whose confirmation dialog is open, or null. */
+  const [pendingStatus, setPendingStatus] = useState<DealStatus | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  async function handleDelete() {
+    try {
+      const result = await deleteDeal(dealId);
+      toast.success(result.message);
+      setDeleteOpen(false);
+      router.push(ROUTES.DEALS.LIST);
+    } catch (error) {
+      // The API returns a 409 with a full explanation when the deal has
+      // finalized settlement runs; show it verbatim rather than a generic
+      // failure so the admin knows to archive instead.
+      toast.error(getApiErrorMessage(error, 'Failed to delete deal.'));
+    }
+  }
 
   async function handleDuplicate() {
     try {
@@ -86,18 +115,14 @@ export function EditDealView({ dealId }: EditDealViewProps) {
         ...(payload.notes ? { notes: payload.notes } : {}),
       };
       await updateDeal(updateInput);
-      toast.success(
-        payload.status === 'CLOSED' ? 'Deal completed' : 'Deal paused',
-      );
-      setModal(null);
+      toast.success(`Deal set to ${DEAL_STATUS_LABEL[payload.status]}`);
+      setPendingStatus(null);
       router.push(ROUTES.DEALS.DETAIL(dealId));
     } catch (error) {
       toast.error(
         getApiErrorMessage(
           error,
-          payload.status === 'CLOSED'
-            ? 'Failed to complete deal.'
-            : 'Failed to pause deal.',
+          `Failed to set the deal to ${DEAL_STATUS_LABEL[payload.status]}.`,
         ),
       );
     }
@@ -126,12 +151,7 @@ export function EditDealView({ dealId }: EditDealViewProps) {
     );
   }
 
-  // Disable the destructive buttons when the deal is already in that state.
-  // Immutable terminal states (Completed / Terminated / Archived) get the
-  // Duplicate Deal action instead of Complete/Pause.
-  const isImmutable = isImmutableStatus(deal.status);
-  const alreadySuspended = deal.status === 'SUSPENDED';
-  const busy = isSaving || isDuplicating;
+  const busy = isSaving || isDuplicating || isDeleting;
 
   return (
     <>
@@ -142,40 +162,46 @@ export function EditDealView({ dealId }: EditDealViewProps) {
           <h1 className="text-[28px] font-light leading-[34px] tracking-[-0.56px] text-foreground sm:text-[40px] sm:leading-[44px] sm:tracking-[-0.8px]">
             Edit Deal
           </h1>
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
-            {isImmutable ? (
-              // Terminal-state deal: the only meaningful action is to
-              // spawn a follow-up draft. Saves the admin from retyping
-              // name + dates + parties + category for the next season.
-              <Button
-                type="button"
-                className="sm:col-span-2"
-                disabled={busy}
-                onClick={() => {
-                  void handleDuplicate();
-                }}
-              >
-                {isDuplicating ? 'Duplicating…' : 'Duplicate Deal'}
-              </Button>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  className="bg-danger text-white hover:bg-danger/90 focus-visible:ring-danger/30"
-                  disabled={busy}
-                  onClick={() => setModal('close')}
-                >
-                  Complete Deal
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" disabled={busy} className="gap-2">
+                  Change Status
+                  <ChevronDown className="size-4" aria-hidden />
                 </Button>
-                <Button
-                  type="button"
-                  disabled={alreadySuspended || busy}
-                  onClick={() => setModal('suspend')}
-                >
-                  {alreadySuspended ? 'Paused' : 'Pause Deal'}
-                </Button>
-              </>
-            )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[220px]">
+                {STATUS_ORDER.filter((s) => s !== deal.status).map((status) => (
+                  <DropdownMenuItem
+                    key={status}
+                    onClick={() => setPendingStatus(status)}
+                  >
+                    {DEAL_STATUS_LABEL[status]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                void handleDuplicate();
+              }}
+            >
+              {isDuplicating ? 'Duplicating...' : 'Duplicate Deal'}
+            </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" aria-hidden />
+              Delete Deal
+            </Button>
           </div>
         </div>
 
@@ -192,21 +218,35 @@ export function EditDealView({ dealId }: EditDealViewProps) {
         </div>
       </div>
 
-      <DealStatusChangeDialog
-        variant="close"
-        open={modal === 'close'}
-        onOpenChange={(open) => setModal(open ? 'close' : null)}
-        dealName={deal.name}
-        isSubmitting={isSaving}
-        onConfirm={handleStatusChange}
-      />
-      <DealStatusChangeDialog
-        variant="suspend"
-        open={modal === 'suspend'}
-        onOpenChange={(open) => setModal(open ? 'suspend' : null)}
-        dealName={deal.name}
-        isSubmitting={isSaving}
-        onConfirm={handleStatusChange}
+      {pendingStatus && (
+        <DealStatusChangeDialog
+          variant={STATUS_TO_VARIANT[pendingStatus]}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPendingStatus(null);
+          }}
+          dealName={deal.name}
+          isSubmitting={isSaving}
+          onConfirm={handleStatusChange}
+        />
+      )}
+
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete this deal?"
+        description={
+          <>
+            This permanently removes{' '}
+            <span className="font-semibold text-foreground">{deal.name}</span>{' '}
+            along with its participants, rule snapshots, revenue batches, and
+            settlement runs. This cannot be undone. Deals with a finalized
+            settlement run cannot be deleted; archive those instead.
+          </>
+        }
+        confirmLabel="Delete Deal"
+        isPending={isDeleting}
+        onConfirm={() => void handleDelete()}
       />
     </>
   );

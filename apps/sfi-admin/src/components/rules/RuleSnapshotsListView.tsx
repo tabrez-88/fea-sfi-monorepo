@@ -367,9 +367,12 @@ function SnapshotRow({
       )}
     >
       <BodyCell>
-        <span className="text-[14px] font-semibold text-foreground">
+        <Link
+          href={ROUTES.DEALS.RULE_DETAIL(snapshot.dealId, snapshot.id)}
+          className="border-b border-foreground/40 text-[14px] font-semibold text-foreground transition-colors hover:border-foreground hover:text-foreground/80"
+        >
           v{snapshot.version}
-        </span>
+        </Link>
       </BodyCell>
       <BodyCell>
         <RuleSnapshotStatusBadge status={status} />

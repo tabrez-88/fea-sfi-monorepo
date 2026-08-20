@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -185,6 +186,26 @@ export class DealsController {
     @Body() updateDealDto: UpdateDealDto,
   ): Promise<DealResponseDto> {
     return this.dealsService.update(user.id, id, updateDealDto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({
+    summary: 'Delete a deal',
+    description:
+      'Permanently deletes the deal and everything scoped under it (participants, rule snapshots, revenue batches, settlement runs) via cascade. Rejected with 409 when the deal has any FINALIZED settlement run, since those carry ledger entries and proof records: archive the deal instead. Returns 404 if the deal does not belong to the authenticated user.',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Deal deleted' })
+  @ApiResponse({ status: 404, description: 'Deal not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Deal has finalized settlement runs and cannot be deleted',
+  })
+  async remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.dealsService.remove(user.id, id);
   }
 
   @Post(':id/duplicate')

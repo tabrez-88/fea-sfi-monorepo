@@ -37,9 +37,19 @@ const TEMPLATE_HEADERS = [
   'poolMember',
 ] as const;
 
+/**
+ * One sample row per `behaviorType` the importer accepts. Liang 08/18 hit
+ * "could not read" errors after typing behavior values that looked right
+ * but did not match the enum, because the template only demonstrated two
+ * of the five. Every accepted value now appears verbatim in the file she
+ * downloads, so copying a row is enough.
+ */
 const TEMPLATE_SAMPLE_ROWS: ReadonlyArray<ReadonlyArray<string>> = [
   ['Alice Chen', 'Investor', 'RECOUPMENT', 'alice@example.com', '5000', '50', '100', 'true'],
   ['Global Cinema Partners', 'Distributor', 'FEE_DEDUCTION', 'gc@cinema.com', '', '', '', ''],
+  ['Zenith Pictures', 'Creator / Rights Owner', 'NET_PROFIT_SHARE', 'zenith@example.com', '', '', '', 'false'],
+  ['Sarah Chen', 'Director', 'FLAT_FEE', 'sarah@example.com', '', '', '', 'false'],
+  ['Music Publisher', 'Publisher', 'PASS_THROUGH', 'publisher@example.com', '', '', '', 'false'],
 ];
 
 export const participantsService = {

@@ -171,10 +171,18 @@ function ImportCsvStep({ isUploading, onFileChosen, onCancel }: ImportCsvStepPro
       <div className="flex flex-col gap-4">
         {/* Dashed-border info card — plain white background, centered prose.
             Matches the Figma "Import Participants via CSV" frame `1339:54329`. */}
+        {/* Column names here must match the parser exactly. They used to
+            read "paymentBehavior", which does not exist, and Liang's files
+            were rejected for a column name the UI told her to use. */}
         <div className="flex flex-col gap-1 rounded-[8px] border border-dashed border-border bg-white px-4 py-4 text-center text-[14px] leading-[20px] text-foreground">
           <p>Upload a CSV file to bulk-add participants.</p>
-          <p>Required columns: name, paymentBehavior, roleName</p>
+          <p>Required columns: name, roleName, behaviorType</p>
           <p>Optional columns: email, investmentAmount, units, pricePerUnit, poolMember</p>
+          <p className="text-[13px] leading-[18px] text-neutral">
+            behaviorType must be one of: FEE_DEDUCTION, RECOUPMENT,
+            NET_PROFIT_SHARE, FLAT_FEE, PASS_THROUGH. The template below has a
+            sample row for each.
+          </p>
         </div>
 
         <Button

@@ -142,12 +142,31 @@ apiClient.interceptors.response.use(
  * Extract a user-facing error message from an unknown error. Prefers the
  * backend's `message` field, falls back to the provided default. Keeps
  * consumers from having to import `AxiosError` directly.
+ *
+ * Some endpoints return a generic `message` plus a detailed `errors` array
+ * (the rule-snapshot v2 validator is the notable one). Dropping that array
+ * left Liang staring at "Rule snapshot v2 validation failed" with no way
+ * to tell which tier or split was wrong, so the details are appended here.
  */
 export function getApiErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof AxiosError) {
-    const data = error.response?.data as { message?: string | string[] } | undefined;
-    if (Array.isArray(data?.message)) return data.message.join(', ');
-    if (typeof data?.message === 'string') return data.message;
+    const data = error.response?.data as
+      | { message?: string | string[]; errors?: unknown }
+      | undefined;
+
+    const base = Array.isArray(data?.message)
+      ? data.message.join(', ')
+      : typeof data?.message === 'string'
+        ? data.message
+        : null;
+
+    const details = Array.isArray(data?.errors)
+      ? data.errors.filter((e): e is string => typeof e === 'string')
+      : [];
+
+    if (base && details.length > 0) return `${base}: ${details.join('; ')}`;
+    if (details.length > 0) return details.join('; ');
+    if (base) return base;
   }
   return fallback;
 }

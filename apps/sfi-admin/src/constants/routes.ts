@@ -22,6 +22,8 @@ export const ROUTES = {
       `/deals/${id}/participants/${participantId}`,
     RULES: (id: string) => `/deals/${id}/rules`,
     RULES_NEW: (id: string) => `/deals/${id}/rules/new`,
+    RULE_DETAIL: (id: string, snapshotId: string) =>
+      `/deals/${id}/rules/${snapshotId}`,
     REVENUE: (id: string) => `/deals/${id}/revenue`,
     SETTLEMENT: (id: string) => `/deals/${id}/settlement`,
     SETTLEMENT_NEW: (id: string) => `/deals/${id}/settlement/new`,

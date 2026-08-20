@@ -149,7 +149,15 @@ export function DealsListView() {
                   label="Deal Name"
                 />
               </HeaderCell>
-              <HeaderCell>Status</HeaderCell>
+              <HeaderCell>
+                <SortButton
+                  field="status"
+                  currentField={sortBy}
+                  order={sortOrder}
+                  onSort={handleSort}
+                  label="Status"
+                />
+              </HeaderCell>
               <HeaderCell>Currency</HeaderCell>
               <HeaderCell>Participants</HeaderCell>
               <HeaderCell>

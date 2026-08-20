@@ -3,10 +3,18 @@
  * components, hooks, and services.
  */
 
+/**
+ * Money is rendered with cents ONLY when the amount actually has them, so
+ * $200,000,000 stays readable while $125,743.29 stays exact. Liang 08/18
+ * entered a revenue batch of $125,743.29 and the UI showed $125,743, which
+ * is unacceptable on a platform whose engine tracks cent remainders.
+ */
+const MONEY_DIGITS = { minimumFractionDigits: 0, maximumFractionDigits: 2 };
+
 const USD = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  maximumFractionDigits: 0,
+  ...MONEY_DIGITS,
 });
 
 const USD_COMPACT = new Intl.NumberFormat('en-US', {
@@ -25,7 +33,7 @@ function getCurrencyFormatter(currency: string): Intl.NumberFormat {
   const created = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-    maximumFractionDigits: 0,
+    ...MONEY_DIGITS,
   });
   CURRENCY_FORMATTERS.set(currency, created);
   return created;

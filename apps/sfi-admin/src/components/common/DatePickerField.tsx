@@ -188,6 +188,13 @@ export function DatePickerField({
               onChange('');
             }
           }}
+          // Same month + year dropdowns the iconOnly variant has had since
+          // Round 4. This full-width variant is the one used by the deal and
+          // revenue forms, where Liang hit the month-by-month paging again
+          // on 08/18 while setting effective and period dates years out.
+          captionLayout="dropdown"
+          startMonth={new Date(new Date().getFullYear() - 10, 0, 1)}
+          endMonth={new Date(new Date().getFullYear() + 50, 11, 31)}
           autoFocus
         />
         {value && (

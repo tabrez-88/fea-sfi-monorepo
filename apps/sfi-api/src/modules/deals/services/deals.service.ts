@@ -1,10 +1,17 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Currency, DealCategory, DealStatus, Prisma } from '@prisma/client';
+import {
+  Currency,
+  DealCategory,
+  DealStatus,
+  Prisma,
+  SettlementRunStatus,
+} from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
@@ -379,6 +386,60 @@ export class DealsService {
     });
 
     return DealMapper.toResponse(copy);
+  }
+
+  /**
+   * Permanently delete a deal and everything scoped under it (participants,
+   * rule snapshots, revenue batches, settlement runs) via the schema's
+   * cascade.
+   *
+   * Guarded: a deal with a FINALIZED settlement run is a financial record
+   * with ledger postings and a proof hash behind it, so it can never be
+   * deleted. Those are archived instead. Everything else, including the
+   * "(Copy) (Copy)" pile Liang accumulated with no way to clean it up
+   * (08/18), is fair game.
+   */
+  async remove(userId: string, id: string): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Deleting deal: ${id}`);
+
+    await this.assertDealOwner(id, userId);
+
+    const deal = await this.prisma.deal.findUnique({
+      where: { id },
+      select: {
+        name: true,
+        _count: {
+          select: {
+            settlementRuns: { where: { status: SettlementRunStatus.FINALIZED } },
+          },
+        },
+      },
+    });
+    if (!deal) {
+      throw new NotFoundException(`Deal with ID ${id} not found`);
+    }
+
+    if (deal._count.settlementRuns > 0) {
+      throw new ConflictException(
+        `Cannot delete this deal: it has ${deal._count.settlementRuns} finalized settlement ${
+          deal._count.settlementRuns === 1 ? 'run' : 'runs'
+        } with ledger entries and proof records behind them. Set the deal to Archived instead to hide it from active workflows while keeping the audit trail.`,
+      );
+    }
+
+    await this.prisma.deal.delete({ where: { id } });
+
+    await this.auditLog.create({
+      actor: userId,
+      action: 'DELETED',
+      entityType: 'Deal',
+      entityId: id,
+      dealId: id,
+      metadata: { name: deal.name },
+    });
+
+    this.logger.log(`Deal deleted: ${id}`);
+    return { success: true, message: `Deal "${deal.name}" deleted.` };
   }
 
   async exists(id: string): Promise<boolean> {

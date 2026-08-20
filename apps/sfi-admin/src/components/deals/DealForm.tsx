@@ -71,6 +71,7 @@ export function DealForm({
   isSubmitting,
   onSubmit,
 }: DealFormProps) {
+  const isEditing = initialDeal !== undefined;
   const [name, setName] = useState(initialDeal?.name ?? '');
   const [description, setDescription] = useState(initialDeal?.description ?? '');
   const [status, setStatus] = useState<DealStatus>(initialDeal?.status ?? DealStatus.DRAFT);
@@ -123,7 +124,6 @@ export function DealForm({
     // Send `dealOwner` on update even when empty so the BE can clear a
     // previously-set value (the service treats `'' → null`). On create,
     // omit when empty to keep the payload tight.
-    const isEditing = initialDeal !== undefined;
     const values: CreateDealInput & UpdateDealInput = {
       name: name.trim(),
       status,
@@ -137,7 +137,21 @@ export function DealForm({
     await onSubmit(values);
   }
 
-  const statusOptions: ReadonlyArray<DealStatus> = [DealStatus.DRAFT, DealStatus.ACTIVE];
+  // Creating a deal only ever starts it as Draft or Active. When editing,
+  // the deal's current status must also be offered, otherwise the select
+  // renders blank for anything else: Liang 08/18 opened a Completed deal
+  // and saw an empty Status field. Lifecycle transitions still run through
+  // the Change Status menu (with confirmations), so the extra option here
+  // exists to display the truth, not to bypass those dialogs.
+  const statusOptions: ReadonlyArray<DealStatus> = isEditing
+    ? [
+        ...new Set<DealStatus>([
+          DealStatus.DRAFT,
+          DealStatus.ACTIVE,
+          ...(initialDeal ? [initialDeal.status] : []),
+        ]),
+      ]
+    : [DealStatus.DRAFT, DealStatus.ACTIVE];
   const categoryOptions = Object.entries(DEAL_CATEGORY_LABEL) as ReadonlyArray<
     [DealCategory, string]
   >;
