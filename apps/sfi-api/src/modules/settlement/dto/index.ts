@@ -2,11 +2,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMinSize,
   IsArray,
+  IsEnum,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
 } from 'class-validator';
+
+import { PaginationQueryDto } from '../../deals/dto';
 
 // ============================================
 // Enums
@@ -532,6 +535,32 @@ export class ProofVerificationResponseDto {
     example: 'Settlement is DETERMINISTIC and UNTAMPERED. Hash match confirmed.',
   })
   message!: string;
+}
+
+/**
+ * Query params for `GET /deals/:dealId/settlement-runs`.
+ *
+ * Extends pagination with server-side `status` / `runType` filters. Screen
+ * 5.5 (Proof Overview) needs FINALIZED-only runs, and Screen 4.3 was
+ * over-fetching a fixed page and filtering client-side to render its status
+ * tabs.
+ */
+export class SettlementRunListQueryDto extends PaginationQueryDto {
+  @ApiPropertyOptional({
+    description: 'Filter by run status.',
+    enum: SettlementStatusEnum,
+  })
+  @IsOptional()
+  @IsEnum(SettlementStatusEnum)
+  status?: SettlementStatusEnum;
+
+  @ApiPropertyOptional({
+    description: 'Filter by run type (NORMAL or CORRECTION).',
+    enum: RunTypeEnum,
+  })
+  @IsOptional()
+  @IsEnum(RunTypeEnum)
+  runType?: RunTypeEnum;
 }
 
 export class SettlementRunListResponseDto {

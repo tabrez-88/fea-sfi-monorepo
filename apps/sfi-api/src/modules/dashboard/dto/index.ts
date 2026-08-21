@@ -57,6 +57,18 @@ export class PendingRevenueBatchDto {
   @ApiProperty({ example: 'PENDING' })
   status!: string;
 
+  @ApiProperty({
+    description: 'Start of the reporting period. Feeds the Period column on Screen 4.2.',
+    example: '2026-10-01T00:00:00.000Z',
+  })
+  periodStart!: string;
+
+  @ApiProperty({
+    description: 'End of the reporting period. Feeds the Period column on Screen 4.2.',
+    example: '2026-12-31T23:59:59.999Z',
+  })
+  periodEnd!: string;
+
   @ApiProperty({ example: '2026-01-15T10:30:00.000Z' })
   createdAt!: string;
 }
@@ -88,6 +100,13 @@ export class PendingSettlementRunDto {
 
   @ApiProperty({ example: 'PREVIEWED' })
   status!: string;
+
+  @ApiProperty({
+    description:
+      'NORMAL or CORRECTION. Feeds the Type column on Screen 4.2 so a correction awaiting finalization is distinguishable at a glance.',
+    example: 'NORMAL',
+  })
+  runType!: string;
 
   @ApiProperty({ example: '2026-01-15T10:30:00.000Z' })
   createdAt!: string;

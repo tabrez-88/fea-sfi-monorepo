@@ -39,6 +39,9 @@ export type SettlementRunListParams = Readonly<{
   limit?: number;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  /** Server-side status filter, e.g. FINALIZED for the Proof Overview. */
+  status?: SettlementRunStatus;
+  runType?: SettlementRunType;
 }>;
 
 /** Payload for `POST /deals/:id/settlement-runs`, matches BE `CreateSettlementRunDto`. */

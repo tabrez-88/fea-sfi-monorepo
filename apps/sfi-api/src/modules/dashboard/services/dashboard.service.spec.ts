@@ -118,6 +118,8 @@ describe('DashboardService', () => {
           totalAmount: 50000000,
           currency: 'USD',
           status: 'PENDING',
+          periodStart: new Date('2026-10-01T00:00:00Z'),
+          periodEnd: new Date('2026-12-31T23:59:59Z'),
           createdAt: new Date('2026-01-15T10:30:00Z'),
         },
       ]);
@@ -129,6 +131,7 @@ describe('DashboardService', () => {
           totalAllocated: 5000000,
           currency: 'USD',
           status: 'PREVIEWED',
+          runType: 'NORMAL',
           createdAt: new Date('2026-01-16T10:30:00Z'),
         },
       ]);

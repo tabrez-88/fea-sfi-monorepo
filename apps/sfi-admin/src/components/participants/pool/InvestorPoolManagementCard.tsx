@@ -114,7 +114,7 @@ export function InvestorPoolManagementCard({
   // Existing members, used to tell the admin up front how many rows will
   // update in place vs create new. The BE upserts pool rows by name, so a
   // re-import is safe — this just makes that visible before they commit.
-  const { data: existingData } = useParticipants(dealId, { limit: 200 });
+  const { data: existingData } = useParticipants(dealId, { limit: 100 });
   const existingNames = useMemo(() => {
     const set = new Set<string>();
     // Pool members only — matches the BE's pool-scoped name upsert, so the

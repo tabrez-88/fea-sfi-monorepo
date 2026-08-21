@@ -18,12 +18,12 @@ import {
 
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../auth/types/jwt-payload';
-import { PaginationQueryDto } from '../../deals/dto';
 import {
   CreateSettlementRunDto,
   SettlementRunResponseDto,
   SettlementRunDetailResponseDto,
   SettlementRunListResponseDto,
+  SettlementRunListQueryDto,
   PreviewSettlementResponseDto,
   FinalizeSettlementResponseDto,
   CreateCorrectionRunDto,
@@ -64,12 +64,24 @@ export class SettlementRunsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'sortBy', required: false, type: String, description: 'Defaults to createdAt' })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: 'Defaults to desc' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['DRAFT', 'PREVIEWED', 'FINALIZED', 'CANCELLED', 'VOIDED'],
+    description: 'Filter by run status, e.g. FINALIZED for the Proof Overview.',
+  })
+  @ApiQuery({
+    name: 'runType',
+    required: false,
+    enum: ['NORMAL', 'CORRECTION'],
+    description: 'Filter by run type.',
+  })
   @ApiResponse({ status: 200, description: 'List of settlement runs', type: SettlementRunListResponseDto })
   @ApiResponse({ status: 404, description: 'Deal not found' })
   async listRuns(
     @CurrentUser() user: AuthenticatedUser,
     @Param('dealId', ParseUUIDPipe) dealId: string,
-    @Query() query: PaginationQueryDto,
+    @Query() query: SettlementRunListQueryDto,
   ): Promise<SettlementRunListResponseDto> {
     return this.settlementService.listRuns(user.id, dealId, query);
   }

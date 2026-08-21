@@ -1,3 +1,8 @@
+// Type-only import: `settlement.types` imports SettlementRunStatus from this
+// module, so a value import would close a runtime cycle. `import type` is
+// erased at compile time, leaving only the type-level reference.
+import type { SettlementRunType } from '@/types/settlement.types';
+
 export const RevenueBatchStatus = {
   PENDING: 'PENDING',
   VALIDATED: 'VALIDATED',
@@ -34,6 +39,8 @@ export interface PendingRevenueBatch {
   totalAmount: number;
   currency: string;
   status: RevenueBatchStatus;
+  periodStart: string;
+  periodEnd: string;
   createdAt: string;
 }
 
@@ -41,11 +48,12 @@ export interface PendingSettlementRun {
   id: string;
   dealId: string;
   dealName: string;
-  runNumber: number;
+  /** Pre-formatted "Run #N"; the BE does not send a numeric runNumber here. */
   runLabel: string;
   totalAllocated: number;
   currency: string;
   status: SettlementRunStatus;
+  runType: SettlementRunType;
   createdAt: string;
 }
 

@@ -62,7 +62,7 @@ export function RuleSnapshotDetailView({
   snapshotId,
 }: RuleSnapshotDetailViewProps) {
   const { data: snapshot, isLoading, isError, refetch } = useRuleSnapshot(snapshotId);
-  const { data: participantsData } = useParticipants(dealId, { limit: 200 });
+  const { data: participantsData } = useParticipants(dealId, { limit: 100 });
 
   const participants = useMemo<ReadonlyArray<Participant>>(
     () => participantsData?.data ?? [],

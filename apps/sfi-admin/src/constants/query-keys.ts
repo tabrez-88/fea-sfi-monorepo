@@ -46,6 +46,18 @@ export const QUERY_KEYS = {
       ['settlement', 'runs', dealId, params ?? {}] as const,
     RUN_DETAIL: (id: string) => ['settlement', 'runs', id] as const,
   },
+  LEDGER: {
+    ALL: ['ledger'] as const,
+    DEAL: (dealId: string, params?: Record<string, unknown>) =>
+      ['ledger', 'deal', dealId, params ?? {}] as const,
+    JOURNAL: (id: string) => ['ledger', 'journal', id] as const,
+  },
+  REPORTS: {
+    ALL: ['reports'] as const,
+    RECOUPMENT: (dealId: string) => ['reports', 'recoupment', dealId] as const,
+    STATEMENT: (dealId: string, participantId: string) =>
+      ['reports', 'statement', dealId, participantId] as const,
+  },
   DASHBOARD: {
     SUMMARY: ['dashboard', 'summary'] as const,
     PENDING_REVIEWS: ['dashboard', 'pending-reviews'] as const,

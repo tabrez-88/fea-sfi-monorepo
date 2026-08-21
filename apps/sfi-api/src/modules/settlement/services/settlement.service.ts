@@ -8,17 +8,18 @@ import {
 import {
   SettlementRunStatus,
   RevenueBatchStatus,
+  RunType,
   Prisma,
 } from '@prisma/client';
 
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditLogService } from '../../audit-log/services/audit-log.service';
-import { PaginationQueryDto } from '../../deals/dto';
 import {
   CreateSettlementRunDto,
   SettlementRunResponseDto,
   SettlementRunDetailResponseDto,
   SettlementRunListResponseDto,
+  SettlementRunListQueryDto,
   PreviewSettlementResponseDto,
   FinalizeSettlementResponseDto,
   CreateCorrectionRunDto,
@@ -165,7 +166,7 @@ export class SettlementService {
   async listRuns(
     userId: string,
     dealId: string,
-    query: PaginationQueryDto,
+    query: SettlementRunListQueryDto,
   ): Promise<SettlementRunListResponseDto> {
     this.logger.log(`Listing settlement runs for deal: ${dealId}`);
 
@@ -174,9 +175,15 @@ export class SettlementService {
     const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = query;
     const skip = (page - 1) * limit;
 
+    const where: Prisma.SettlementRunWhereInput = {
+      dealId,
+      ...(query.status ? { status: query.status as SettlementRunStatus } : {}),
+      ...(query.runType ? { runType: query.runType as RunType } : {}),
+    };
+
     const [runs, total] = await Promise.all([
       this.prisma.settlementRun.findMany({
-        where: { dealId },
+        where,
         skip,
         take: limit,
         orderBy: { [sortBy]: sortOrder },
@@ -195,7 +202,7 @@ export class SettlementService {
           },
         },
       }),
-      this.prisma.settlementRun.count({ where: { dealId } }),
+      this.prisma.settlementRun.count({ where }),
     ]);
 
     return {

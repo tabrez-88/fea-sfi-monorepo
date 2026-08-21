@@ -65,6 +65,18 @@ export const API_ENDPOINTS = {
     CORRECTIONS: (id: string) => `${BASE}/settlement-runs/${id}/corrections`,
     VERIFY: (id: string) => `${BASE}/settlement-runs/${id}/verify`,
   },
+  LEDGER: {
+    DEAL: (dealId: string) => `${BASE}/deals/${dealId}/ledger`,
+    JOURNAL: (id: string) => `${BASE}/ledger-journals/${id}`,
+    BY_RUN: (runId: string) => `${BASE}/settlement-runs/${runId}/ledger`,
+    BY_PARTICIPANT: (participantId: string) =>
+      `${BASE}/participants/${participantId}/ledger`,
+  },
+  REPORTS: {
+    RECOUPMENT: (dealId: string) => `${BASE}/deals/${dealId}/reports/recoupment`,
+    STATEMENT: (dealId: string, participantId: string) =>
+      `${BASE}/deals/${dealId}/reports/statements/${participantId}`,
+  },
   DASHBOARD: {
     SUMMARY: `${BASE}/dashboard/summary`,
     PENDING_REVIEWS: `${BASE}/dashboard/pending-reviews`,

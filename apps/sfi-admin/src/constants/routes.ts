@@ -29,6 +29,13 @@ export const ROUTES = {
     SETTLEMENT_NEW: (id: string) => `/deals/${id}/settlement/new`,
     DOCUMENTS: (id: string) => `/deals/${id}/documents`,
     REPORTS: (id: string) => `/deals/${id}/reports`,
+    REPORTS_LEDGER: (id: string) => `/deals/${id}/reports/ledger`,
+    REPORTS_JOURNAL: (id: string, journalId: string) =>
+      `/deals/${id}/reports/ledger/${journalId}`,
+    REPORTS_RECOUPMENT: (id: string) => `/deals/${id}/reports/recoupment`,
+    REPORTS_STATEMENTS: (id: string) => `/deals/${id}/reports/statements`,
+    REPORTS_STATEMENT: (id: string, participantId: string) =>
+      `/deals/${id}/reports/statements/${participantId}`,
     PROOF: (id: string) => `/deals/${id}/proof`,
   },
 

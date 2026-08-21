@@ -32,7 +32,7 @@ export class LedgerService {
       throw new NotFoundException(`Deal with ID ${dealId} not found`);
     }
 
-    const [journals, total] = await Promise.all([
+    const [journals, total, dealTotals] = await Promise.all([
       this.prisma.ledgerJournal.findMany({
         where: { dealId },
         include: {
@@ -49,6 +49,15 @@ export class LedgerService {
         take: limit,
       }),
       this.prisma.ledgerJournal.count({ where: { dealId } }),
+      // Summary must cover the WHOLE deal, not the current page: the FE
+      // renders a "ledger is balanced" verdict from it, and a page-scoped
+      // sum would claim a property of every journal while only checking
+      // the twenty on screen.
+      this.prisma.ledgerPosting.aggregate({
+        where: { ledgerJournal: { dealId } },
+        _sum: { debitAmount: true, creditAmount: true },
+        _count: { _all: true },
+      }),
     ]);
 
     const mappedJournals = journals.map((journal) => {
@@ -75,18 +84,9 @@ export class LedgerService {
       };
     });
 
-    const summaryTotalDebits = mappedJournals.reduce(
-      (sum, j) => sum + j.totalDebit,
-      0,
-    );
-    const summaryTotalCredits = mappedJournals.reduce(
-      (sum, j) => sum + j.totalCredit,
-      0,
-    );
-    const summaryTotalPostings = mappedJournals.reduce(
-      (sum, j) => sum + j.postingCount,
-      0,
-    );
+    const summaryTotalDebits = Number(dealTotals._sum.debitAmount ?? 0);
+    const summaryTotalCredits = Number(dealTotals._sum.creditAmount ?? 0);
+    const summaryTotalPostings = dealTotals._count._all;
 
     // Determine currency from the first posting, default to USD
     const firstCurrency = journals[0]?.ledgerPostings[0]?.currency;

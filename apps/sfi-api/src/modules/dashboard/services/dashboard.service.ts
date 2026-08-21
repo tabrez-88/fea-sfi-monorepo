@@ -103,6 +103,8 @@ export class DashboardService {
         totalAmount: Number(batch.totalAmount),
         currency: batch.currency,
         status: batch.status,
+        periodStart: batch.periodStart.toISOString(),
+        periodEnd: batch.periodEnd.toISOString(),
         createdAt: batch.createdAt.toISOString(),
       }),
     );
@@ -116,6 +118,7 @@ export class DashboardService {
         totalAllocated: Number(run.totalAllocated),
         currency: run.currency,
         status: run.status,
+        runType: run.runType,
         createdAt: run.createdAt.toISOString(),
       }),
     );
