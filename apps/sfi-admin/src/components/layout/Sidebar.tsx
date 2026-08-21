@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { ROUTES } from '@/constants/routes';
+import { usePendingReviews } from '@/hooks/dashboard/usePendingReviews';
 import { cn } from '@/lib/utils';
 
 type NavItem = {
@@ -12,6 +13,8 @@ type NavItem = {
   href: string;
   icon: LucideIcon;
   matchPrefix?: boolean;
+  /** Renders the live pending-review count as a notification badge. */
+  showPendingCount?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -28,7 +31,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: Layers,
     matchPrefix: true,
   },
-  { label: 'Pending Reviews', href: ROUTES.PENDING_REVIEWS, icon: ClipboardList },
+  {
+    label: 'Pending Reviews',
+    href: ROUTES.PENDING_REVIEWS,
+    icon: ClipboardList,
+    showPendingCount: true,
+  },
 ];
 
 function isActive(pathname: string, item: NavItem): boolean {
@@ -114,24 +122,47 @@ type NavListProps = Readonly<{
  * (matches Figma "Mobile Sidebar [Active]" deal-context frame).
  */
 export function SidebarNavList({ pathname, collapsed, onItemClick }: NavListProps) {
+  // Live count for the Pending Reviews badge. Cached by React Query with a
+  // 30s stale time, so mounting this in the persistent sidebar costs one
+  // request per window rather than one per navigation.
+  const { data: pending } = usePendingReviews();
+  const pendingCount = pending?.totalCount ?? 0;
+
   return (
     <ul className="flex w-full flex-col gap-2">
       {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
         const active = isActive(pathname, item);
+        const badgeCount = item.showPendingCount ? pendingCount : 0;
         return (
           <li key={item.href}>
             <Link
               href={item.href}
               {...(onItemClick ? { onClick: onItemClick } : {})}
-              {...(collapsed ? { title: item.label, 'aria-label': item.label } : {})}
+              {...(collapsed
+                ? {
+                    title: badgeCount > 0 ? `${item.label} (${badgeCount})` : item.label,
+                    'aria-label':
+                      badgeCount > 0 ? `${item.label}, ${badgeCount} pending` : item.label,
+                  }
+                : {})}
               className={cn(
                 'flex h-[48px] items-center overflow-hidden rounded-[8px] transition-colors',
                 active ? 'bg-foreground text-background' : 'text-foreground hover:bg-grey-50',
                 collapsed ? 'justify-center px-0' : 'gap-2 px-[14px]',
               )}
             >
-              <Icon className="size-5 shrink-0" strokeWidth={2} />
+              <span className="relative flex shrink-0 items-center">
+                <Icon className="size-5 shrink-0" strokeWidth={2} />
+                {badgeCount > 0 && (
+                  <span
+                    className="absolute -right-1.5 -top-1.5 flex min-w-[16px] items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold leading-[16px] text-white"
+                    aria-hidden
+                  >
+                    {badgeCount > 99 ? '99+' : badgeCount}
+                  </span>
+                )}
+              </span>
               <span
                 className={cn(
                   'whitespace-nowrap text-[16px] font-bold leading-[20px] tracking-[-0.32px]',

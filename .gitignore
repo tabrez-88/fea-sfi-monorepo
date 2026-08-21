@@ -12,8 +12,6 @@ out
 .turbo
 
 # Environment files
-.env
-.env.local
 .env.*.local
 !.env.example
 !.env.staging
@@ -21,7 +19,6 @@ out
 
 # IDE
 .idea
-.vscode
 *.swp
 *.swo
 .DS_Store
@@ -57,3 +54,4 @@ settings.local.json
 figma-test
 
 docs
+config.bat
